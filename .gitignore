@@ -7,3 +7,4 @@ node_modules
 # SQLite dev database
 /dev.db
 /*.db
+/*.db-journal
