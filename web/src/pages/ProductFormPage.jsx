@@ -9,14 +9,22 @@ export function ProductFormPage() {
   const { token } = useAuth()
   const navigate = useNavigate()
 
-  const [form, setForm] = useState({ sku: '', name: '', unit: '', reorderLevel: 0 })
+  const [form, setForm] = useState({ sku: '', name: '', unit: '', category: '', reorderLevel: 0 })
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(isEdit)
 
   useEffect(() => {
     if (!isEdit) return
     apiFetch(`/products/${id}`, { token })
-      .then((p) => setForm({ sku: p.sku, name: p.name, unit: p.unit, reorderLevel: p.reorderLevel }))
+      .then((p) =>
+        setForm({
+          sku: p.sku,
+          name: p.name,
+          unit: p.unit,
+          category: p.category || '',
+          reorderLevel: p.reorderLevel,
+        })
+      )
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
   }, [id, isEdit, token])
@@ -59,6 +67,10 @@ export function ProductFormPage() {
         <label>
           Unit
           <input value={form.unit} onChange={(e) => handleChange('unit', e.target.value)} required />
+        </label>
+        <label>
+          Category
+          <input value={form.category} onChange={(e) => handleChange('category', e.target.value)} />
         </label>
         <label>
           Reorder level

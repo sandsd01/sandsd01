@@ -40,3 +40,57 @@ describe("POST /auth/login", () => {
     assert.equal(res.status, 400);
   });
 });
+
+describe("PATCH /auth/password", () => {
+  let token;
+
+  beforeEach(async () => {
+    await resetDb();
+    await createUser({ email: "admin@test.com", password: "adminpass1", role: "admin" });
+    const login = await request(app)
+      .post("/auth/login")
+      .send({ email: "admin@test.com", password: "adminpass1" });
+    token = login.body.token;
+  });
+
+  test("requires authentication", async () => {
+    const res = await request(app)
+      .patch("/auth/password")
+      .send({ currentPassword: "adminpass1", newPassword: "newpassword1" });
+    assert.equal(res.status, 401);
+  });
+
+  test("changes the password and allows login with the new one", async () => {
+    const res = await request(app)
+      .patch("/auth/password")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ currentPassword: "adminpass1", newPassword: "newpassword1" });
+    assert.equal(res.status, 200);
+
+    const oldLogin = await request(app)
+      .post("/auth/login")
+      .send({ email: "admin@test.com", password: "adminpass1" });
+    assert.equal(oldLogin.status, 401);
+
+    const newLogin = await request(app)
+      .post("/auth/login")
+      .send({ email: "admin@test.com", password: "newpassword1" });
+    assert.equal(newLogin.status, 200);
+  });
+
+  test("rejects an incorrect current password", async () => {
+    const res = await request(app)
+      .patch("/auth/password")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ currentPassword: "wrong", newPassword: "newpassword1" });
+    assert.equal(res.status, 401);
+  });
+
+  test("rejects a new password shorter than 8 characters", async () => {
+    const res = await request(app)
+      .patch("/auth/password")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ currentPassword: "adminpass1", newPassword: "short" });
+    assert.equal(res.status, 400);
+  });
+});

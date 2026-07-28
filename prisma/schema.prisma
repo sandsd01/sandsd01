@@ -37,6 +37,7 @@ model Product {
   sku          String   @unique
   name         String
   unit         String
+  category     String?
   quantity     Int      @default(0)
   reorderLevel Int      @default(0)
   createdById  Int

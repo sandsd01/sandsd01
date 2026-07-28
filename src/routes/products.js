@@ -1,33 +1,124 @@
 const express = require("express");
 const prisma = require("../../prisma/client");
 const { authenticate, requireRole } = require("../middleware/auth");
-const { toCsv } = require("../lib/csv");
+const { toCsv, parseCsv } = require("../lib/csv");
 
 const router = express.Router();
+
+const SORTABLE_FIELDS = ["name", "sku", "quantity", "reorderLevel", "category"];
+
+function buildWhere({ search, category }) {
+  const where = {};
+  if (search) {
+    where.OR = [{ sku: { contains: search } }, { name: { contains: search } }];
+  }
+  if (category) {
+    where.category = category;
+  }
+  return Object.keys(where).length ? where : undefined;
+}
 
 router.use(authenticate);
 
 router.get("/", async (req, res) => {
-  const { search } = req.query;
-  const where = search
-    ? { OR: [{ sku: { contains: search } }, { name: { contains: search } }] }
-    : undefined;
-  const products = await prisma.product.findMany({ where, orderBy: { name: "asc" } });
-  res.json(products);
+  const { search, category } = req.query;
+  const where = buildWhere({ search, category });
+
+  const sortBy = SORTABLE_FIELDS.includes(req.query.sortBy) ? req.query.sortBy : "name";
+  const sortDir = req.query.sortDir === "desc" ? "desc" : "asc";
+
+  const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+  const pageSize = Math.min(100, Math.max(1, Number.parseInt(req.query.pageSize, 10) || 20));
+
+  const [data, total] = await Promise.all([
+    prisma.product.findMany({
+      where,
+      orderBy: { [sortBy]: sortDir },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+    prisma.product.count({ where }),
+  ]);
+
+  res.json({ data, total, page, pageSize });
 });
 
-router.get("/export", async (_req, res) => {
-  const products = await prisma.product.findMany({ orderBy: { name: "asc" } });
+router.get("/categories", async (_req, res) => {
+  const rows = await prisma.product.findMany({
+    where: { category: { not: null } },
+    distinct: ["category"],
+    select: { category: true },
+    orderBy: { category: "asc" },
+  });
+  res.json(rows.map((r) => r.category));
+});
+
+router.get("/export", async (req, res) => {
+  const where = buildWhere({ search: req.query.search, category: req.query.category });
+  const products = await prisma.product.findMany({ where, orderBy: { name: "asc" } });
   const csv = toCsv(products, [
     { label: "sku", value: (p) => p.sku },
     { label: "name", value: (p) => p.name },
     { label: "unit", value: (p) => p.unit },
+    { label: "category", value: (p) => p.category },
     { label: "quantity", value: (p) => p.quantity },
     { label: "reorderLevel", value: (p) => p.reorderLevel },
   ]);
   res.setHeader("Content-Type", "text/csv");
   res.setHeader("Content-Disposition", "attachment; filename=\"products.csv\"");
   res.send(csv);
+});
+
+router.post("/import", requireRole("admin"), async (req, res) => {
+  const { csv } = req.body || {};
+  if (typeof csv !== "string" || !csv.trim()) {
+    return res.status(400).json({ error: "csv (string) is required" });
+  }
+
+  let rows;
+  try {
+    rows = parseCsv(csv);
+  } catch (err) {
+    return res.status(400).json({ error: `Could not parse CSV: ${err.message}` });
+  }
+
+  let created = 0;
+  let updated = 0;
+  const errors = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const sku = row.sku?.trim();
+    const name = row.name?.trim();
+    const unit = row.unit?.trim();
+    const category = row.category?.trim() || null;
+    const reorderLevel = row.reorderLevel !== undefined ? Number(row.reorderLevel) : 0;
+
+    if (!sku || !name || !unit) {
+      errors.push({ row: i + 2, error: "sku, name, and unit are required" });
+      continue;
+    }
+    if (Number.isNaN(reorderLevel)) {
+      errors.push({ row: i + 2, error: "reorderLevel must be a number" });
+      continue;
+    }
+
+    const existing = await prisma.product.findUnique({ where: { sku } });
+    if (existing) {
+      await prisma.product.update({
+        where: { sku },
+        data: { name, unit, category, reorderLevel },
+      });
+      updated++;
+    } else {
+      await prisma.product.create({
+        data: { sku, name, unit, category, reorderLevel, createdById: req.user.id },
+      });
+      created++;
+    }
+  }
+
+  res.json({ created, updated, errors });
 });
 
 router.get("/:id", async (req, res) => {
@@ -37,7 +128,7 @@ router.get("/:id", async (req, res) => {
 });
 
 router.post("/", requireRole("admin"), async (req, res) => {
-  const { sku, name, unit, reorderLevel } = req.body || {};
+  const { sku, name, unit, category, reorderLevel } = req.body || {};
   if (!sku || !name || !unit) {
     return res.status(400).json({ error: "sku, name, and unit are required" });
   }
@@ -52,6 +143,7 @@ router.post("/", requireRole("admin"), async (req, res) => {
       sku,
       name,
       unit,
+      category: category || null,
       reorderLevel: reorderLevel ?? 0,
       createdById: req.user.id,
     },
@@ -60,7 +152,7 @@ router.post("/", requireRole("admin"), async (req, res) => {
 });
 
 router.patch("/:id", requireRole("admin"), async (req, res) => {
-  const { name, unit, reorderLevel, sku } = req.body || {};
+  const { name, unit, reorderLevel, sku, category } = req.body || {};
   const id = Number(req.params.id);
 
   const existing = await prisma.product.findUnique({ where: { id } });
@@ -73,6 +165,7 @@ router.patch("/:id", requireRole("admin"), async (req, res) => {
       ...(unit !== undefined && { unit }),
       ...(reorderLevel !== undefined && { reorderLevel }),
       ...(sku !== undefined && { sku }),
+      ...(category !== undefined && { category: category || null }),
     },
   });
   res.json(product);
@@ -140,7 +233,7 @@ router.post("/:id/movements", requireRole("admin", "staff"), async (req, res) =>
 
   const delta = type === "in" ? quantity : -quantity;
 
-  const [movement] = await prisma.$transaction([
+  const [movement, updatedProduct] = await prisma.$transaction([
     prisma.stockMovement.create({
       data: { productId, type, quantity, note, createdById: req.user.id },
     }),
@@ -150,7 +243,38 @@ router.post("/:id/movements", requireRole("admin", "staff"), async (req, res) =>
     }),
   ]);
 
+  req.app.locals.onStockMovement?.(updatedProduct, product.quantity);
+
   res.status(201).json(movement);
+});
+
+router.delete("/:id/movements/:movementId", requireRole("admin"), async (req, res) => {
+  const productId = Number(req.params.id);
+  const movementId = Number(req.params.movementId);
+
+  const movement = await prisma.stockMovement.findUnique({ where: { id: movementId } });
+  if (!movement || movement.productId !== productId) {
+    return res.status(404).json({ error: "Movement not found" });
+  }
+
+  const reverseDelta = movement.type === "in" ? -movement.quantity : movement.quantity;
+  const product = await prisma.product.findUnique({ where: { id: productId } });
+
+  if (product.quantity + reverseDelta < 0) {
+    return res.status(400).json({
+      error: "Cannot delete this movement: it would take quantity negative",
+    });
+  }
+
+  await prisma.$transaction([
+    prisma.stockMovement.delete({ where: { id: movementId } }),
+    prisma.product.update({
+      where: { id: productId },
+      data: { quantity: { increment: reverseDelta } },
+    }),
+  ]);
+
+  res.status(204).send();
 });
 
 module.exports = router;
