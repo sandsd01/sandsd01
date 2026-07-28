@@ -7,6 +7,7 @@ import { ProductsPage } from './pages/ProductsPage'
 import { ProductFormPage } from './pages/ProductFormPage'
 import { ProductMovementsPage } from './pages/ProductMovementsPage'
 import { UsersPage } from './pages/UsersPage'
+import { ReportsPage } from './pages/ReportsPage'
 
 function App() {
   return (
@@ -18,6 +19,7 @@ function App() {
           <Route element={<RequireAuth />}>
             <Route element={<Layout />}>
               <Route path="/" element={<ProductsPage />} />
+              <Route path="/reports" element={<ReportsPage />} />
               <Route path="/products/:id/movements" element={<ProductMovementsPage />} />
 
               <Route element={<RequireRole roles={['admin']} />}>

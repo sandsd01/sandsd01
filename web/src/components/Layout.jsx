@@ -14,6 +14,7 @@ export function Layout() {
     <div className="layout">
       <nav className="navbar">
         <Link to="/">Products</Link>
+        <Link to="/reports">Reports</Link>
         {user?.role === 'admin' && <Link to="/users">Users</Link>}
         <span className="spacer" />
         {user && (

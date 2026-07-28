@@ -1,19 +1,21 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { apiFetch } from '../api/client'
+import { apiFetch, downloadFile } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 
 export function ProductsPage() {
   const { token, user } = useAuth()
   const [products, setProducts] = useState([])
+  const [search, setSearch] = useState('')
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  async function loadProducts() {
+  async function loadProducts(searchTerm) {
     setLoading(true)
     setError(null)
     try {
-      const data = await apiFetch('/products', { token })
+      const query = searchTerm ? `?search=${encodeURIComponent(searchTerm)}` : ''
+      const data = await apiFetch(`/products${query}`, { token })
       setProducts(data)
     } catch (err) {
       setError(err.message)
@@ -23,9 +25,9 @@ export function ProductsPage() {
   }
 
   useEffect(() => {
-    loadProducts()
+    loadProducts(search)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [search])
 
   async function handleDelete(id) {
     if (!window.confirm('Delete this product?')) return
@@ -37,17 +39,46 @@ export function ProductsPage() {
     }
   }
 
+  async function handleExport() {
+    try {
+      await downloadFile('/products/export', { token, filename: 'products.csv' })
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  const lowStockProducts = products.filter((p) => p.quantity <= p.reorderLevel)
+
   if (loading) return <p>Loading…</p>
 
   return (
     <div>
       <div className="page-header">
         <h1>Products</h1>
-        {user?.role === 'admin' && <Link to="/products/new" className="button">+ Add product</Link>}
+        <div className="actions">
+          <button onClick={handleExport}>Export CSV</button>
+          {user?.role === 'admin' && <Link to="/products/new" className="button">+ Add product</Link>}
+        </div>
       </div>
       {error && <p className="error">{error}</p>}
+
+      {lowStockProducts.length > 0 && (
+        <p className="warning">
+          ⚠ {lowStockProducts.length} product{lowStockProducts.length > 1 ? 's are' : ' is'} at or
+          below reorder level: {lowStockProducts.map((p) => p.sku).join(', ')}
+        </p>
+      )}
+
+      <input
+        type="search"
+        placeholder="Search by SKU or name…"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        className="search-input"
+      />
+
       {products.length === 0 ? (
-        <p>No products yet.</p>
+        <p>No products found.</p>
       ) : (
         <table className="table">
           <thead>

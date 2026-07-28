@@ -137,4 +137,64 @@ describe("Products API", () => {
       .send({ type: "in", quantity: 1 });
     assert.equal(res.status, 404);
   });
+
+  test("search filters products by sku or name", async () => {
+    await createProduct(adminToken, { sku: "SKU-WIDGET", name: "Blue Widget" });
+    await createProduct(adminToken, { sku: "SKU-GADGET", name: "Red Gadget" });
+
+    const bySku = await request(app)
+      .get("/products?search=WIDGET")
+      .set("Authorization", `Bearer ${staffToken}`);
+    assert.equal(bySku.status, 200);
+    assert.equal(bySku.body.length, 1);
+    assert.equal(bySku.body[0].sku, "SKU-WIDGET");
+
+    const byName = await request(app)
+      .get("/products?search=Red")
+      .set("Authorization", `Bearer ${staffToken}`);
+    assert.equal(byName.body.length, 1);
+    assert.equal(byName.body[0].sku, "SKU-GADGET");
+
+    const noMatch = await request(app)
+      .get("/products?search=nonexistent")
+      .set("Authorization", `Bearer ${staffToken}`);
+    assert.equal(noMatch.body.length, 0);
+  });
+
+  test("exports products as CSV", async () => {
+    await createProduct(adminToken, { sku: "SKU-CSV", name: "CSV Widget", reorderLevel: 3 });
+
+    const res = await request(app)
+      .get("/products/export")
+      .set("Authorization", `Bearer ${staffToken}`);
+
+    assert.equal(res.status, 200);
+    assert.match(res.headers["content-type"], /text\/csv/);
+    assert.match(res.text, /^sku,name,unit,quantity,reorderLevel/);
+    assert.match(res.text, /SKU-CSV,CSV Widget,pcs,0,3/);
+  });
+
+  test("exports a product's movement history as CSV", async () => {
+    const created = await createProduct(adminToken, { sku: "SKU-HIST" });
+    await request(app)
+      .post(`/products/${created.body.id}/movements`)
+      .set("Authorization", `Bearer ${staffToken}`)
+      .send({ type: "in", quantity: 7, note: "restock" });
+
+    const res = await request(app)
+      .get(`/products/${created.body.id}/movements/export`)
+      .set("Authorization", `Bearer ${staffToken}`);
+
+    assert.equal(res.status, 200);
+    assert.match(res.headers["content-type"], /text\/csv/);
+    assert.match(res.text, /^date,type,quantity,note/);
+    assert.match(res.text, /in,7,restock/);
+  });
+
+  test("404s exporting movements for a non-existent product", async () => {
+    const res = await request(app)
+      .get("/products/999999/movements/export")
+      .set("Authorization", `Bearer ${staffToken}`);
+    assert.equal(res.status, 404);
+  });
 });
