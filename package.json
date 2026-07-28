@@ -9,7 +9,7 @@
     "dev": "node --watch src/server.js",
     "test": "npm run test:migrate && npm run test:run",
     "test:migrate": "DATABASE_URL=\"file:./test.db\" prisma migrate deploy",
-    "test:run": "DATABASE_URL=\"file:./test.db\" JWT_SECRET=\"test-secret\" node --test --test-concurrency=1 \"tests/**/*.test.js\"",
+    "test:run": "DATABASE_URL=\"file:./test.db\" JWT_SECRET=\"test-secret\" NODE_ENV=\"test\" node --test --test-concurrency=1 \"tests/**/*.test.js\"",
     "prisma:migrate": "prisma migrate dev",
     "prisma:generate": "prisma generate",
     "seed": "node prisma/seed.js"
@@ -32,6 +32,7 @@
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.6.1",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.2.0",
     "node-cron": "^4.6.0",

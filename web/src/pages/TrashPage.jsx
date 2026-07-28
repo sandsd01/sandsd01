@@ -36,6 +36,16 @@ export function TrashPage() {
     }
   }
 
+  async function handlePermanentDelete(id, sku) {
+    if (!window.confirm(t('trash.confirmPermanentDelete').replace('{sku}', sku))) return
+    try {
+      await apiFetch(`/products/${id}/permanent`, { method: 'DELETE', token })
+      setProducts((prev) => prev.filter((p) => p.id !== id))
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   if (loading) return <p>{t('common.loading')}</p>
 
   return (
@@ -63,6 +73,9 @@ export function TrashPage() {
                 <td>{new Date(p.deletedAt).toLocaleString()}</td>
                 <td className="actions">
                   <button onClick={() => handleRestore(p.id)}>{t('trash.restore')}</button>
+                  <button onClick={() => handlePermanentDelete(p.id, p.sku)}>
+                    {t('trash.permanentDelete')}
+                  </button>
                 </td>
               </tr>
             ))}

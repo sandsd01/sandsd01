@@ -418,6 +418,47 @@ describe("Products API", () => {
     assert.equal(res.status, 404);
   });
 
+  test("admin can permanently delete a soft-deleted product, including its movement history", async () => {
+    const created = await createProduct(adminToken, { sku: "SKU-PURGE" });
+    await request(app)
+      .post(`/products/${created.body.id}/movements`)
+      .set("Authorization", `Bearer ${staffToken}`)
+      .send({ type: "in", quantity: 5 });
+    await request(app)
+      .delete(`/products/${created.body.id}`)
+      .set("Authorization", `Bearer ${adminToken}`);
+
+    const purge = await request(app)
+      .delete(`/products/${created.body.id}/permanent`)
+      .set("Authorization", `Bearer ${adminToken}`);
+    assert.equal(purge.status, 204);
+
+    const trash = await request(app)
+      .get("/products/trash")
+      .set("Authorization", `Bearer ${adminToken}`);
+    assert.ok(!trash.body.some((p) => p.sku === "SKU-PURGE"));
+  });
+
+  test("404s permanently deleting a product that isn't in the trash", async () => {
+    const created = await createProduct(adminToken, { sku: "SKU-NOTTRASHED" });
+    const res = await request(app)
+      .delete(`/products/${created.body.id}/permanent`)
+      .set("Authorization", `Bearer ${adminToken}`);
+    assert.equal(res.status, 404);
+  });
+
+  test("staff cannot permanently delete a product", async () => {
+    const created = await createProduct(adminToken, { sku: "SKU-PURGE-STAFF" });
+    await request(app)
+      .delete(`/products/${created.body.id}`)
+      .set("Authorization", `Bearer ${adminToken}`);
+
+    const res = await request(app)
+      .delete(`/products/${created.body.id}/permanent`)
+      .set("Authorization", `Bearer ${staffToken}`);
+    assert.equal(res.status, 403);
+  });
+
   test("bulk-deletes products", async () => {
     const a = await createProduct(adminToken, { sku: "SKU-BULK-A" });
     const b = await createProduct(adminToken, { sku: "SKU-BULK-B" });

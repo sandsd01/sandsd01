@@ -21,7 +21,7 @@ npm run dev                 # run the backend with auto-restart (http://localhos
 npm test                    # migrate test.db, then run the full backend test suite
 ```
 
-To run a single backend test file: `DATABASE_URL="file:./test.db" JWT_SECRET="test-secret" node --test tests/products.test.js` (run `npm run test:migrate` first if `test.db` doesn't exist yet).
+To run a single backend test file: `DATABASE_URL="file:./test.db" JWT_SECRET="test-secret" NODE_ENV="test" node --test tests/products.test.js` (run `npm run test:migrate` first if `test.db` doesn't exist yet).
 
 Frontend (`cd web` first):
 
@@ -41,7 +41,8 @@ npm run build   # production build, also run in CI
 - A route computing "low stock" should use `quantity <= reorderLevel`, matching `src/routes/reports.js` and the frontend's `.low-stock` styling.
 - Route ordering matters in `src/routes/products.js`: fixed-path routes like `/export`, `/import`, `/categories` must be declared before `/:id` so Express doesn't treat them as an id.
 - `src/lib/email.js` sends low-stock alerts and the daily summary via Resend and is a no-op (logs a warning, doesn't throw) if `RESEND_API_KEY`/`ALERT_EMAIL_TO` aren't set — the automatic low-stock trigger in `src/server.js` (`app.locals.onStockMovement`) only fires on the transition into low stock, not on every movement, to avoid spamming; the daily summary is scheduled with `node-cron` (`DAILY_SUMMARY_CRON`, default 8am).
-- Products are soft-deleted (`deletedAt`), not removed: every product query in `src/routes/products.js` (list, get, export, movements) filters `deletedAt: null`; `GET /products/trash` and `POST /products/:id/restore` are the admin-only escape hatches. `tests/helpers/db.js#resetDb` deletes in FK order: `AuditLog` → `StockMovement` → `Product` → `Supplier` → `User`.
+- Products are soft-deleted (`deletedAt`), not removed: every product query in `src/routes/products.js` (list, get, export, movements) filters `deletedAt: null`; `GET /products/trash` and `POST /products/:id/restore` are the admin-only escape hatches, and `DELETE /products/:id/permanent` (admin, must already be soft-deleted) purges the product and its `StockMovement` rows in a transaction — `AuditLog` rows are untouched since they hold no FK to `Product`. `tests/helpers/db.js#resetDb` deletes in FK order: `AuditLog` → `StockMovement` → `Product` → `Supplier` → `User`.
+- `src/middleware/rateLimit.js` (`apiLimiter` mounted globally in `app.js`, `authLimiter` on `/auth/login` and `/auth/forgot-password`) is skipped entirely when `NODE_ENV=test` (set by `npm run test:run`) — when running a single test file by hand per the command above, add `NODE_ENV="test"` too or the login-lockout/rate-limit tests will interfere with each other.
 - `src/lib/audit.js#logAction` is called after every product/user/supplier mutation and movement create/delete; keep new mutating routes consistent with this so the Activity Log stays complete.
 - `src/lib/upload.js` configures multer to write to `uploads/` (gitignored, served at `/uploads` by `src/app.js`) with a jpg/png/webp/gif extension allowlist and a 5MB limit.
 - `Product.unitCost` is optional; `reports.js#getSummary` computes `totalValue` as `sum(quantity * (unitCost || 0))` — keep this the single source of truth for valuation rather than recomputing it elsewhere.
