@@ -86,7 +86,15 @@ All endpoints except `/health` and `/auth/login` require `Authorization: Bearer 
 | GET | `/suppliers` | any | List suppliers |
 | POST | `/suppliers` | admin | Create a supplier |
 | PATCH | `/suppliers/:id` | admin | Update a supplier |
-| DELETE | `/suppliers/:id` | admin | Delete a supplier (unlinks it from any products) |
+| DELETE | `/suppliers/:id` | admin | Delete a supplier (unlinks it from any products; rejected with `409` if it has purchase orders) |
+| GET | `/purchase-orders?status=&supplierId=&page=&pageSize=` | any | Paginated purchase order list, newest first |
+| GET | `/purchase-orders/:id` | any | Get one purchase order with its line items |
+| POST | `/purchase-orders` | admin | Create a draft PO (`{ supplierId, notes?, items: [{ productId, quantityOrdered, unitCost? }] }`) |
+| PATCH | `/purchase-orders/:id` | admin | Update a draft PO's supplier/notes/items (items are replaced wholesale); `400` once it's no longer a draft |
+| DELETE | `/purchase-orders/:id` | admin | Delete a draft PO; `400` once it's no longer a draft |
+| POST | `/purchase-orders/:id/mark-ordered` | admin | Draft → ordered (requires at least one item) |
+| POST | `/purchase-orders/:id/cancel` | admin | Draft or ordered → cancelled (once anything has been received, it can no longer be cancelled) |
+| POST | `/purchase-orders/:id/receive` | admin | Record receipt of stock (`{ items: [{ itemId, quantity }] }`); creates a stock-in movement per line, updates `Product.quantity`, and advances the PO to `partially_received` or `received` |
 | GET | `/reports/summary` | any | Product/quantity/value/low-stock counts and the 10 most recent movements |
 | GET | `/reports/summary/pdf` | any | The summary above as a downloadable PDF |
 | GET | `/reports/movements-timeseries?days=` | any | Daily in/out totals for the last N days (default 30) |
@@ -112,6 +120,7 @@ Without those env vars set, both kinds of alert are silently skipped (logged, no
 - **Password reset**: "Forgot password?" on the login page emails a link via Resend (no-ops if unconfigured, same as the other alerts) that expires in 30 minutes; the frontend auto-logs-out and redirects to `/login` if any authenticated request comes back `401` (e.g. an expired JWT).
 - **Soft delete**: deleting a product just sets `deletedAt`; it disappears from normal views but can be restored from Trash (admin), or permanently purged (along with its movement history) from the Trash page.
 - **Rate limiting**: all `/api/*` requests are limited to 300 per 15 minutes per IP; `/auth/login` and `/auth/forgot-password` are limited further to 20 per 15 minutes per IP (disabled when `NODE_ENV=test`).
+- **Purchase orders**: admins can raise a draft PO against a supplier, mark it as ordered, and record receipt of stock (fully or in installments) — each receipt creates a normal stock-in movement, so `Product.quantity` and the audit trail stay consistent with manually recorded movements. A supplier with purchase orders can't be deleted, and a product referenced by one can't be permanently purged from Trash.
 - **Audit log**: product/user/supplier create-update-delete and stock movement create/delete are recorded to `AuditLog`, viewable on the Activity Log page (admin).
 - **Product images**: uploaded files are stored on disk under `uploads/` (gitignored) and served at `/uploads/<filename>`.
 - **Account lockout**: 5 consecutive failed login attempts locks the account for 15 minutes.
@@ -130,7 +139,7 @@ src/
   lib/pdf.js     Summary report PDF generation (pdfkit)
   lib/audit.js   Writes AuditLog rows for the activity log
   lib/upload.js  Multer config for product image uploads
-  routes/        auth, products, users, reports, suppliers
+  routes/        auth, products, users, reports, suppliers, purchaseOrders
 uploads/         Uploaded product images (gitignored)
 tests/           node:test + Supertest suite (backend)
 web/             React (Vite) frontend SPA

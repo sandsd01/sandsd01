@@ -19,6 +19,14 @@ enum MovementType {
   out
 }
 
+enum PurchaseOrderStatus {
+  draft
+  ordered
+  partially_received
+  received
+  cancelled
+}
+
 model User {
   id                  Int       @id @default(autoincrement())
   email               String    @unique
@@ -30,9 +38,10 @@ model User {
   resetTokenExpiresAt DateTime?
   createdAt           DateTime  @default(now())
 
-  createdProducts  Product[]        @relation("ProductCreatedBy")
-  stockMovements   StockMovement[]  @relation("MovementCreatedBy")
-  auditLogs        AuditLog[]
+  createdProducts       Product[]       @relation("ProductCreatedBy")
+  stockMovements        StockMovement[] @relation("MovementCreatedBy")
+  auditLogs             AuditLog[]
+  createdPurchaseOrders PurchaseOrder[] @relation("PurchaseOrderCreatedBy")
 
   @@map("users")
 }
@@ -44,7 +53,8 @@ model Supplier {
   contactPhone String?
   createdAt    DateTime @default(now())
 
-  products Product[]
+  products       Product[]
+  purchaseOrders PurchaseOrder[]
 
   @@map("suppliers")
 }
@@ -65,9 +75,10 @@ model Product {
   updatedAt    DateTime  @updatedAt
   deletedAt    DateTime?
 
-  createdBy      User            @relation("ProductCreatedBy", fields: [createdById], references: [id])
-  supplier       Supplier?       @relation(fields: [supplierId], references: [id])
-  stockMovements StockMovement[]
+  createdBy          User                @relation("ProductCreatedBy", fields: [createdById], references: [id])
+  supplier           Supplier?           @relation(fields: [supplierId], references: [id])
+  stockMovements     StockMovement[]
+  purchaseOrderItems PurchaseOrderItem[]
 
   @@map("products")
 }
@@ -85,6 +96,39 @@ model StockMovement {
   createdBy User    @relation("MovementCreatedBy", fields: [createdById], references: [id])
 
   @@map("stock_movements")
+}
+
+model PurchaseOrder {
+  id          Int                 @id @default(autoincrement())
+  supplierId  Int
+  status      PurchaseOrderStatus @default(draft)
+  notes       String?
+  createdById Int
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  orderedAt   DateTime?
+  receivedAt  DateTime?
+  cancelledAt DateTime?
+
+  supplier  Supplier            @relation(fields: [supplierId], references: [id])
+  createdBy User                @relation("PurchaseOrderCreatedBy", fields: [createdById], references: [id])
+  items     PurchaseOrderItem[]
+
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id               Int   @id @default(autoincrement())
+  purchaseOrderId  Int
+  productId        Int
+  quantityOrdered  Int
+  quantityReceived Int   @default(0)
+  unitCost         Float?
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  product       Product       @relation(fields: [productId], references: [id])
+
+  @@map("purchase_order_items")
 }
 
 model AuditLog {

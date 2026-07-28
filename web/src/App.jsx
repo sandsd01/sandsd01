@@ -13,6 +13,9 @@ import { UsersPage } from './pages/UsersPage'
 import { ReportsPage } from './pages/ReportsPage'
 import { AccountPage } from './pages/AccountPage'
 import { SuppliersPage } from './pages/SuppliersPage'
+import { PurchaseOrdersPage } from './pages/PurchaseOrdersPage'
+import { PurchaseOrderFormPage } from './pages/PurchaseOrderFormPage'
+import { PurchaseOrderDetailPage } from './pages/PurchaseOrderDetailPage'
 import { TrashPage } from './pages/TrashPage'
 import { ActivityLogPage } from './pages/ActivityLogPage'
 
@@ -38,6 +41,9 @@ function App() {
                   <Route path="/products/:id/edit" element={<ProductFormPage />} />
                   <Route path="/users" element={<UsersPage />} />
                   <Route path="/suppliers" element={<SuppliersPage />} />
+                  <Route path="/purchase-orders" element={<PurchaseOrdersPage />} />
+                  <Route path="/purchase-orders/new" element={<PurchaseOrderFormPage />} />
+                  <Route path="/purchase-orders/:id" element={<PurchaseOrderDetailPage />} />
                   <Route path="/trash" element={<TrashPage />} />
                   <Route path="/activity-log" element={<ActivityLogPage />} />
                 </Route>

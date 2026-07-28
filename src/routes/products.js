@@ -311,6 +311,11 @@ router.delete("/:id/permanent", requireRole("admin"), async (req, res) => {
   const existing = await prisma.product.findFirst({ where: { id, deletedAt: { not: null } } });
   if (!existing) return res.status(404).json({ error: "Deleted product not found" });
 
+  const hasPurchaseOrderItems = await prisma.purchaseOrderItem.findFirst({ where: { productId: id } });
+  if (hasPurchaseOrderItems) {
+    return res.status(409).json({ error: "Cannot permanently delete a product referenced by a purchase order" });
+  }
+
   await prisma.$transaction([
     prisma.stockMovement.deleteMany({ where: { productId: id } }),
     prisma.product.delete({ where: { id } }),

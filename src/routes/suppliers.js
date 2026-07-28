@@ -70,6 +70,11 @@ router.delete("/:id", requireRole("admin"), async (req, res) => {
   const existing = await prisma.supplier.findUnique({ where: { id } });
   if (!existing) return res.status(404).json({ error: "Supplier not found" });
 
+  const hasPurchaseOrders = await prisma.purchaseOrder.findFirst({ where: { supplierId: id } });
+  if (hasPurchaseOrders) {
+    return res.status(409).json({ error: "Cannot delete a supplier with purchase orders" });
+  }
+
   await prisma.product.updateMany({ where: { supplierId: id }, data: { supplierId: null } });
   await prisma.supplier.delete({ where: { id } });
 
