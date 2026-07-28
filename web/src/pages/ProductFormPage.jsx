@@ -19,6 +19,7 @@ export function ProductFormPage() {
     category: '',
     supplierId: '',
     reorderLevel: 0,
+    unitCost: '',
   })
   const [suppliers, setSuppliers] = useState([])
   const [imageUrl, setImageUrl] = useState(null)
@@ -43,6 +44,7 @@ export function ProductFormPage() {
           category: p.category || '',
           supplierId: p.supplierId || '',
           reorderLevel: p.reorderLevel,
+          unitCost: p.unitCost ?? '',
         })
         setImageUrl(p.imageUrl)
       })
@@ -62,6 +64,7 @@ export function ProductFormPage() {
         ...form,
         reorderLevel: Number(form.reorderLevel),
         supplierId: form.supplierId || null,
+        unitCost: form.unitCost === '' ? null : Number(form.unitCost),
       }
       if (isEdit) {
         await apiFetch(`/products/${id}`, { method: 'PATCH', body: payload, token })
@@ -128,6 +131,16 @@ export function ProductFormPage() {
             min="0"
             value={form.reorderLevel}
             onChange={(e) => handleChange('reorderLevel', e.target.value)}
+          />
+        </label>
+        <label>
+          {t('products.unitCost')}
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={form.unitCost}
+            onChange={(e) => handleChange('unitCost', e.target.value)}
           />
         </label>
 

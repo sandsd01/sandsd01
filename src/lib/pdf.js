@@ -16,6 +16,7 @@ function buildSummaryPdf(summary) {
     doc.fontSize(14).text("Overview");
     doc.fontSize(12).text(`Total products: ${summary.totalProducts}`);
     doc.text(`Total units in stock: ${summary.totalQuantity}`);
+    doc.text(`Total inventory value: ${summary.totalValue.toFixed(2)}`);
     doc.text(`Low on stock: ${summary.lowStockCount}`);
     doc.moveDown();
 

@@ -75,6 +75,7 @@ router.get("/export", async (req, res) => {
     { label: "name", value: (p) => p.name },
     { label: "unit", value: (p) => p.unit },
     { label: "category", value: (p) => p.category },
+    { label: "unitCost", value: (p) => p.unitCost },
     { label: "quantity", value: (p) => p.quantity },
     { label: "reorderLevel", value: (p) => p.reorderLevel },
   ]);
@@ -107,6 +108,8 @@ router.post("/import", requireRole("admin"), async (req, res) => {
     const unit = row.unit?.trim();
     const category = row.category?.trim() || null;
     const reorderLevel = row.reorderLevel !== undefined ? Number(row.reorderLevel) : 0;
+    const unitCost =
+      row.unitCost !== undefined && row.unitCost !== "" ? Number(row.unitCost) : null;
 
     if (!sku || !name || !unit) {
       errors.push({ row: i + 2, error: "sku, name, and unit are required" });
@@ -116,17 +119,21 @@ router.post("/import", requireRole("admin"), async (req, res) => {
       errors.push({ row: i + 2, error: "reorderLevel must be a number" });
       continue;
     }
+    if (unitCost !== null && Number.isNaN(unitCost)) {
+      errors.push({ row: i + 2, error: "unitCost must be a number" });
+      continue;
+    }
 
     const existing = await prisma.product.findUnique({ where: { sku } });
     if (existing) {
       await prisma.product.update({
         where: { sku },
-        data: { name, unit, category, reorderLevel },
+        data: { name, unit, category, reorderLevel, unitCost },
       });
       updated++;
     } else {
       await prisma.product.create({
-        data: { sku, name, unit, category, reorderLevel, createdById: req.user.id },
+        data: { sku, name, unit, category, reorderLevel, unitCost, createdById: req.user.id },
       });
       created++;
     }
@@ -196,7 +203,7 @@ router.get("/:id", async (req, res) => {
 });
 
 router.post("/", requireRole("admin"), async (req, res) => {
-  const { sku, name, unit, category, reorderLevel, supplierId } = req.body || {};
+  const { sku, name, unit, category, reorderLevel, supplierId, unitCost } = req.body || {};
   if (!sku || !name || !unit) {
     return res.status(400).json({ error: "sku, name, and unit are required" });
   }
@@ -214,6 +221,7 @@ router.post("/", requireRole("admin"), async (req, res) => {
       category: category || null,
       reorderLevel: reorderLevel ?? 0,
       supplierId: supplierId ? Number(supplierId) : null,
+      unitCost: unitCost !== undefined && unitCost !== null && unitCost !== "" ? Number(unitCost) : null,
       createdById: req.user.id,
     },
   });
@@ -230,7 +238,7 @@ router.post("/", requireRole("admin"), async (req, res) => {
 });
 
 router.patch("/:id", requireRole("admin"), async (req, res) => {
-  const { name, unit, reorderLevel, sku, category, supplierId } = req.body || {};
+  const { name, unit, reorderLevel, sku, category, supplierId, unitCost } = req.body || {};
   const id = Number(req.params.id);
 
   const existing = await prisma.product.findFirst({ where: { id, deletedAt: null } });
@@ -245,6 +253,9 @@ router.patch("/:id", requireRole("admin"), async (req, res) => {
       ...(sku !== undefined && { sku }),
       ...(category !== undefined && { category: category || null }),
       ...(supplierId !== undefined && { supplierId: supplierId ? Number(supplierId) : null }),
+      ...(unitCost !== undefined && {
+        unitCost: unitCost !== null && unitCost !== "" ? Number(unitCost) : null,
+      }),
     },
   });
 

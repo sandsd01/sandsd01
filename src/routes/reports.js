@@ -12,6 +12,7 @@ async function getSummary() {
   const products = await prisma.product.findMany({ where: { deletedAt: null } });
   const totalProducts = products.length;
   const totalQuantity = products.reduce((sum, p) => sum + p.quantity, 0);
+  const totalValue = products.reduce((sum, p) => sum + p.quantity * (p.unitCost || 0), 0);
   const lowStockProducts = products
     .filter((p) => p.quantity <= p.reorderLevel)
     .map((p) => ({
@@ -34,6 +35,7 @@ async function getSummary() {
   return {
     totalProducts,
     totalQuantity,
+    totalValue,
     lowStockCount: lowStockProducts.length,
     lowStockProducts,
     recentMovements: recentMovements.map((m) => ({

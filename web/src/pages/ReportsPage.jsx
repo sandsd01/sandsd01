@@ -98,6 +98,10 @@ export function ReportsPage() {
           <span className="stat-label">{t('reports.totalUnits')}</span>
         </div>
         <div className="stat-tile">
+          <span className="stat-value">{summary.totalValue.toFixed(2)}</span>
+          <span className="stat-label">{t('reports.totalValue')}</span>
+        </div>
+        <div className="stat-tile">
           <span className="stat-value">{summary.lowStockCount}</span>
           <span className="stat-label">{t('reports.lowOnStock')}</span>
         </div>

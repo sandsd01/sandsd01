@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
 
@@ -63,6 +63,7 @@ export function LoginPage() {
         <button type="submit" disabled={loading}>
           {loading ? t('login.submitting') : t('login.submit')}
         </button>
+        <Link to="/forgot-password">{t('login.forgotPassword')}</Link>
       </form>
     </div>
   )
