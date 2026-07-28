@@ -62,8 +62,11 @@ All endpoints except `/health` and `/auth/login` require `Authorization: Bearer 
 | --- | --- | --- | --- |
 | POST | `/auth/login` | — | Log in, returns `{ token, user }` |
 | POST | `/auth/logout` | any | No-op; client discards the token |
-| GET | `/products?search=` | any | List products, optionally filtered by SKU/name |
-| GET | `/products/export` | any | Download all products as CSV |
+| PATCH | `/auth/password` | any | Change your own password (`{ currentPassword, newPassword }`) |
+| GET | `/products?search=&category=&page=&pageSize=&sortBy=&sortDir=` | any | Paginated product list — filter by SKU/name/category, sort by `name`\|`sku`\|`quantity`\|`reorderLevel`\|`category` |
+| GET | `/products/categories` | any | Distinct list of product categories in use |
+| GET | `/products/export` | any | Download products as CSV (respects `?search=`/`?category=`) |
+| POST | `/products/import` | admin | Bulk create/update products from CSV (`{ csv }`); upserts by SKU, never touches `quantity` |
 | GET | `/products/:id` | any | Get one product |
 | POST | `/products` | admin | Create a product |
 | PATCH | `/products/:id` | admin | Update a product |
@@ -71,11 +74,18 @@ All endpoints except `/health` and `/auth/login` require `Authorization: Bearer 
 | GET | `/products/:id/movements` | any | List stock movement history |
 | GET | `/products/:id/movements/export` | any | Download a product's movement history as CSV |
 | POST | `/products/:id/movements` | admin, staff | Record a stock in/out movement (updates quantity) |
+| DELETE | `/products/:id/movements/:movementId` | admin | Delete a movement, reversing its effect on quantity |
 | GET | `/reports/summary` | any | Product/quantity/low-stock counts and the 10 most recent movements |
+| GET | `/reports/movements-timeseries?days=` | any | Daily in/out totals for the last N days (default 30) |
+| POST | `/reports/send-low-stock-alert` | admin | Manually send the low-stock alert email now |
 | GET | `/users` | admin | List users |
 | POST | `/users` | admin | Create a user |
 | PATCH | `/users/:id` | admin | Update a user's email/password/role |
 | DELETE | `/users/:id` | admin | Delete a user |
+
+### Low-stock email alerts
+
+Set `RESEND_API_KEY` and `ALERT_EMAIL_TO` in `.env` (see `.env.example`) to enable email alerts via [Resend](https://resend.com). When configured, an alert fires automatically the moment a stock-out movement takes a product from above its reorder level to at-or-below it, and admins can also trigger one on demand from the Reports page. Without those env vars set, alerts are silently skipped (logged, not an error).
 
 ## Project structure
 
@@ -85,7 +95,8 @@ src/
   app.js         Express app (routes + middleware)
   server.js      Entry point (reads env, starts listening)
   middleware/    JWT auth + role-check middleware
-  lib/csv.js     CSV serialization helper used by the export endpoints
+  lib/csv.js     CSV serialize/parse helpers used by the export/import endpoints
+  lib/email.js   Low-stock alert emails via Resend (no-ops if unconfigured)
   routes/        auth, products, users, reports
 tests/           node:test + Supertest suite (backend)
 web/             React (Vite) frontend SPA

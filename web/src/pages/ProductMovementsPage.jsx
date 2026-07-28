@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext'
 
 export function ProductMovementsPage() {
   const { id } = useParams()
-  const { token } = useAuth()
+  const { token, user } = useAuth()
 
   const [product, setProduct] = useState(null)
   const [movements, setMovements] = useState([])
@@ -60,6 +60,16 @@ export function ProductMovementsPage() {
         token,
         filename: `${product.sku}-movements.csv`,
       })
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function handleDeleteMovement(movementId) {
+    if (!window.confirm('Delete this movement? This will reverse its effect on the quantity.')) return
+    try {
+      await apiFetch(`/products/${id}/movements/${movementId}`, { method: 'DELETE', token })
+      await load()
     } catch (err) {
       setError(err.message)
     }
@@ -120,6 +130,7 @@ export function ProductMovementsPage() {
               <th>Type</th>
               <th>Quantity</th>
               <th>Note</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -129,6 +140,11 @@ export function ProductMovementsPage() {
                 <td>{m.type}</td>
                 <td>{m.quantity}</td>
                 <td>{m.note || '-'}</td>
+                <td>
+                  {user?.role === 'admin' && (
+                    <button onClick={() => handleDeleteMovement(m.id)}>Delete</button>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>

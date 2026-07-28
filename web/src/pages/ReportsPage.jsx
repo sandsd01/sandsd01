@@ -2,19 +2,47 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiFetch } from '../api/client'
 import { useAuth } from '../context/AuthContext'
+import { MovementsChart } from '../components/MovementsChart'
 
 export function ReportsPage() {
-  const { token } = useAuth()
+  const { token, user } = useAuth()
   const [summary, setSummary] = useState(null)
+  const [timeseries, setTimeseries] = useState(null)
   const [error, setError] = useState(null)
+  const [alertMessage, setAlertMessage] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    apiFetch('/reports/summary', { token })
-      .then(setSummary)
+    Promise.all([
+      apiFetch('/reports/summary', { token }),
+      apiFetch('/reports/movements-timeseries?days=30', { token }),
+    ])
+      .then(([summaryData, timeseriesData]) => {
+        setSummary(summaryData)
+        setTimeseries(timeseriesData)
+      })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
   }, [token])
+
+  async function handleSendAlert() {
+    setAlertMessage(null)
+    setError(null)
+    try {
+      const result = await apiFetch('/reports/send-low-stock-alert', { method: 'POST', token })
+      if (result.sent) {
+        setAlertMessage(`Alert email sent for ${result.count} low-stock product(s).`)
+      } else if (result.reason === 'nothing_low') {
+        setAlertMessage('Nothing is low on stock right now — no email sent.')
+      } else {
+        setAlertMessage(
+          'Email not sent: alert email is not configured (set RESEND_API_KEY and ALERT_EMAIL_TO).'
+        )
+      }
+    } catch (err) {
+      setError(err.message)
+    }
+  }
 
   if (loading) return <p>Loading…</p>
   if (error) return <p className="error">{error}</p>
@@ -22,7 +50,11 @@ export function ReportsPage() {
 
   return (
     <div>
-      <h1>Reports</h1>
+      <div className="page-header">
+        <h1>Reports</h1>
+        {user?.role === 'admin' && <button onClick={handleSendAlert}>Send low-stock alert now</button>}
+      </div>
+      {alertMessage && <p className="notice">{alertMessage}</p>}
 
       <div className="stat-row">
         <div className="stat-tile">
@@ -38,6 +70,9 @@ export function ReportsPage() {
           <span className="stat-label">Low on stock</span>
         </div>
       </div>
+
+      <h2>Stock movements (last 30 days)</h2>
+      {timeseries && <MovementsChart data={timeseries} />}
 
       <h2>Low stock products</h2>
       {summary.lowStockProducts.length === 0 ? (

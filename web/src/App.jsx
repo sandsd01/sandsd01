@@ -8,6 +8,7 @@ import { ProductFormPage } from './pages/ProductFormPage'
 import { ProductMovementsPage } from './pages/ProductMovementsPage'
 import { UsersPage } from './pages/UsersPage'
 import { ReportsPage } from './pages/ReportsPage'
+import { AccountPage } from './pages/AccountPage'
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
             <Route element={<Layout />}>
               <Route path="/" element={<ProductsPage />} />
               <Route path="/reports" element={<ReportsPage />} />
+              <Route path="/account" element={<AccountPage />} />
               <Route path="/products/:id/movements" element={<ProductMovementsPage />} />
 
               <Route element={<RequireRole roles={['admin']} />}>

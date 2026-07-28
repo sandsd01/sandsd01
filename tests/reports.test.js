@@ -36,7 +36,7 @@ describe("GET /reports/summary", () => {
       .send({ sku: "SKU-OK", name: "OK Widget", unit: "pcs", reorderLevel: 1 });
 
     const products = await request(app).get("/products").set("Authorization", `Bearer ${staffToken}`);
-    const [low, ok] = products.body;
+    const [low, ok] = products.body.data;
 
     await request(app)
       .post(`/products/${ok.id}/movements`)
@@ -54,5 +54,83 @@ describe("GET /reports/summary", () => {
     assert.equal(res.body.lowStockProducts[0].sku, low.sku);
     assert.equal(res.body.recentMovements.length, 1);
     assert.equal(res.body.recentMovements[0].createdByEmail, "staff@test.com");
+  });
+});
+
+describe("GET /reports/movements-timeseries", () => {
+  let adminToken;
+  let staffToken;
+
+  beforeEach(async () => {
+    await resetDb();
+    await createUser({ email: "admin@test.com", password: "adminpass1", role: "admin" });
+    await createUser({ email: "staff@test.com", password: "staffpass1", role: "staff" });
+    adminToken = await login("admin@test.com", "adminpass1");
+    staffToken = await login("staff@test.com", "staffpass1");
+  });
+
+  test("requires authentication", async () => {
+    const res = await request(app).get("/reports/movements-timeseries");
+    assert.equal(res.status, 401);
+  });
+
+  test("aggregates today's movements into the returned series", async () => {
+    const product = await request(app)
+      .post("/products")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ sku: "SKU-TS", name: "Widget", unit: "pcs" });
+    await request(app)
+      .post(`/products/${product.body.id}/movements`)
+      .set("Authorization", `Bearer ${staffToken}`)
+      .send({ type: "in", quantity: 15 });
+    await request(app)
+      .post(`/products/${product.body.id}/movements`)
+      .set("Authorization", `Bearer ${staffToken}`)
+      .send({ type: "out", quantity: 4 });
+
+    const res = await request(app)
+      .get("/reports/movements-timeseries?days=7")
+      .set("Authorization", `Bearer ${staffToken}`);
+
+    assert.equal(res.status, 200);
+    assert.equal(res.body.length, 7);
+    const today = res.body[res.body.length - 1];
+    assert.equal(today.in, 15);
+    assert.equal(today.out, 4);
+  });
+});
+
+describe("POST /reports/send-low-stock-alert", () => {
+  let adminToken;
+  let staffToken;
+
+  beforeEach(async () => {
+    await resetDb();
+    await createUser({ email: "admin@test.com", password: "adminpass1", role: "admin" });
+    await createUser({ email: "staff@test.com", password: "staffpass1", role: "staff" });
+    adminToken = await login("admin@test.com", "adminpass1");
+    staffToken = await login("staff@test.com", "staffpass1");
+  });
+
+  test("staff cannot trigger the alert", async () => {
+    const res = await request(app)
+      .post("/reports/send-low-stock-alert")
+      .set("Authorization", `Bearer ${staffToken}`);
+    assert.equal(res.status, 403);
+  });
+
+  test("admin can trigger it; skips sending when Resend isn't configured", async () => {
+    await request(app)
+      .post("/products")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ sku: "SKU-ALERT", name: "Widget", unit: "pcs", reorderLevel: 5 });
+
+    const res = await request(app)
+      .post("/reports/send-low-stock-alert")
+      .set("Authorization", `Bearer ${adminToken}`);
+
+    assert.equal(res.status, 200);
+    assert.equal(res.body.count, 1);
+    assert.equal(res.body.sent, false);
   });
 });

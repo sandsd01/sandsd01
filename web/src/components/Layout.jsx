@@ -19,9 +19,9 @@ export function Layout() {
         <span className="spacer" />
         {user && (
           <>
-            <span className="user-badge">
+            <Link to="/account" className="user-badge">
               {user.email} ({user.role})
-            </span>
+            </Link>
             <button onClick={handleLogout}>Logout</button>
           </>
         )}
