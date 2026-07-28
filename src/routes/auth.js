@@ -4,6 +4,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const prisma = require("../../prisma/client");
 const { authenticate } = require("../middleware/auth");
+const { authLimiter } = require("../middleware/rateLimit");
 const { sendPasswordResetEmail } = require("../lib/email");
 
 const router = express.Router();
@@ -16,7 +17,7 @@ function hashToken(token) {
   return crypto.createHash("sha256").update(token).digest("hex");
 }
 
-router.post("/login", async (req, res) => {
+router.post("/login", authLimiter, async (req, res) => {
   const { email, password } = req.body || {};
   if (!email || !password) {
     return res.status(400).json({ error: "email and password are required" });
@@ -95,7 +96,7 @@ router.patch("/password", authenticate, async (req, res) => {
   res.json({ message: "Password updated" });
 });
 
-router.post("/forgot-password", async (req, res) => {
+router.post("/forgot-password", authLimiter, async (req, res) => {
   const { email } = req.body || {};
   if (!email) {
     return res.status(400).json({ error: "email is required" });

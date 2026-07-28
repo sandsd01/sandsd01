@@ -77,6 +77,7 @@ All endpoints except `/health` and `/auth/login` require `Authorization: Bearer 
 | PATCH | `/products/:id` | admin | Update a product |
 | DELETE | `/products/:id` | admin | Soft-delete a product (recoverable via `/restore`) |
 | POST | `/products/:id/restore` | admin | Restore a soft-deleted product |
+| DELETE | `/products/:id/permanent` | admin | Permanently delete a soft-deleted product and its movement history (must already be in Trash) |
 | POST | `/products/:id/image` | admin | Upload a product image (multipart, field `image`; jpg/png/webp/gif, 5MB max) |
 | GET | `/products/:id/movements` | any | List stock movement history |
 | GET | `/products/:id/movements/export` | any | Download a product's movement history as CSV |
@@ -109,7 +110,8 @@ Without those env vars set, both kinds of alert are silently skipped (logged, no
 
 - **Stock valuation**: products can have an optional `unitCost`; Reports shows total inventory value (`quantity * unitCost` summed across products) alongside unit counts.
 - **Password reset**: "Forgot password?" on the login page emails a link via Resend (no-ops if unconfigured, same as the other alerts) that expires in 30 minutes; the frontend auto-logs-out and redirects to `/login` if any authenticated request comes back `401` (e.g. an expired JWT).
-- **Soft delete**: deleting a product just sets `deletedAt`; it disappears from normal views but can be restored from Trash (admin).
+- **Soft delete**: deleting a product just sets `deletedAt`; it disappears from normal views but can be restored from Trash (admin), or permanently purged (along with its movement history) from the Trash page.
+- **Rate limiting**: all `/api/*` requests are limited to 300 per 15 minutes per IP; `/auth/login` and `/auth/forgot-password` are limited further to 20 per 15 minutes per IP (disabled when `NODE_ENV=test`).
 - **Audit log**: product/user/supplier create-update-delete and stock movement create/delete are recorded to `AuditLog`, viewable on the Activity Log page (admin).
 - **Product images**: uploaded files are stored on disk under `uploads/` (gitignored) and served at `/uploads/<filename>`.
 - **Account lockout**: 5 consecutive failed login attempts locks the account for 15 minutes.

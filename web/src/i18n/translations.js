@@ -116,6 +116,8 @@ export const translations = {
     'trash.empty': 'Trash is empty.',
     'trash.restore': 'Restore',
     'trash.deletedAt': 'Deleted at',
+    'trash.permanentDelete': 'Delete permanently',
+    'trash.confirmPermanentDelete': 'Permanently delete {sku}? This cannot be undone.',
 
     'activityLog.title': 'Activity Log',
     'activityLog.time': 'Time',
@@ -240,6 +242,8 @@ export const translations = {
     'trash.empty': 'ถังขยะว่างเปล่า',
     'trash.restore': 'กู้คืน',
     'trash.deletedAt': 'ลบเมื่อ',
+    'trash.permanentDelete': 'ลบถาวร',
+    'trash.confirmPermanentDelete': 'ลบ {sku} อย่างถาวรใช่หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้',
 
     'activityLog.title': 'ประวัติกิจกรรม',
     'activityLog.time': 'เวลา',

@@ -7,6 +7,7 @@ const userRoutes = require("./routes/users");
 const reportRoutes = require("./routes/reports");
 const supplierRoutes = require("./routes/suppliers");
 const { uploadDir } = require("./lib/upload");
+const { apiLimiter } = require("./middleware/rateLimit");
 
 const app = express();
 
@@ -16,6 +17,8 @@ app.use(express.json());
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
 app.use("/uploads", express.static(uploadDir));
+
+app.use(apiLimiter);
 
 app.use("/auth", authRoutes);
 app.use("/products", productRoutes);
