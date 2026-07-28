@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { apiFetch } from '../api/client'
+import { apiFetch, downloadFile } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 
 export function ProductMovementsPage() {
@@ -54,6 +54,17 @@ export function ProductMovementsPage() {
     }
   }
 
+  async function handleExport() {
+    try {
+      await downloadFile(`/products/${id}/movements/export`, {
+        token,
+        filename: `${product.sku}-movements.csv`,
+      })
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   if (loading) return <p>Loading…</p>
   if (!product) return <p className="error">{error || 'Product not found'}</p>
 
@@ -95,7 +106,10 @@ export function ProductMovementsPage() {
         <button type="submit">Submit</button>
       </form>
 
-      <h2>History</h2>
+      <div className="page-header">
+        <h2>History</h2>
+        {movements.length > 0 && <button onClick={handleExport}>Export CSV</button>}
+      </div>
       {movements.length === 0 ? (
         <p>No movements recorded yet.</p>
       ) : (

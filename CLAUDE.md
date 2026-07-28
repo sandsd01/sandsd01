@@ -37,6 +37,8 @@ npm run build   # production build, also run in CI
 - `src/middleware/auth.js`: `authenticate` verifies the JWT and attaches `req.user`; `requireRole(...roles)` 403s if `req.user.role` isn't in the allowed list. Apply `authenticate` (and `requireRole` where needed) at the top of each router with `router.use(...)`.
 - `prisma/client.js` is the single shared Prisma Client instance (constructed with the better-sqlite3 driver adapter reading `DATABASE_URL`) — routes and scripts require this rather than instantiating their own client.
 - Stock movements (`POST /products/:id/movements`) are the only place `Product.quantity` changes; a movement create + quantity update happen together in a `prisma.$transaction`. Out-movements are rejected with 400 if they'd take quantity negative.
+- CSV export endpoints (`GET /products/export`, `GET /products/:id/movements/export`) build CSV with `src/lib/csv.js` rather than a dependency; a route computing "low stock" should use `quantity <= reorderLevel`, matching `src/routes/reports.js` and the frontend's `.low-stock` styling.
+- Route ordering matters in `src/routes/products.js`: fixed-path routes like `/export` must be declared before `/:id` so Express doesn't treat `"export"` as an id.
 - Frontend auth state (JWT + user) lives in `web/src/context/AuthContext.jsx`, persisted to `localStorage`; `RequireAuth`/`RequireRole` (`web/src/components/RequireAuth.jsx`) gate routes in `web/src/App.jsx`.
 
 ## Conventions

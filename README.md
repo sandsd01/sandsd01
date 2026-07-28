@@ -62,13 +62,16 @@ All endpoints except `/health` and `/auth/login` require `Authorization: Bearer 
 | --- | --- | --- | --- |
 | POST | `/auth/login` | — | Log in, returns `{ token, user }` |
 | POST | `/auth/logout` | any | No-op; client discards the token |
-| GET | `/products` | any | List products |
+| GET | `/products?search=` | any | List products, optionally filtered by SKU/name |
+| GET | `/products/export` | any | Download all products as CSV |
 | GET | `/products/:id` | any | Get one product |
 | POST | `/products` | admin | Create a product |
 | PATCH | `/products/:id` | admin | Update a product |
 | DELETE | `/products/:id` | admin | Delete a product |
 | GET | `/products/:id/movements` | any | List stock movement history |
+| GET | `/products/:id/movements/export` | any | Download a product's movement history as CSV |
 | POST | `/products/:id/movements` | admin, staff | Record a stock in/out movement (updates quantity) |
+| GET | `/reports/summary` | any | Product/quantity/low-stock counts and the 10 most recent movements |
 | GET | `/users` | admin | List users |
 | POST | `/users` | admin | Create a user |
 | PATCH | `/users/:id` | admin | Update a user's email/password/role |
@@ -82,7 +85,8 @@ src/
   app.js         Express app (routes + middleware)
   server.js      Entry point (reads env, starts listening)
   middleware/    JWT auth + role-check middleware
-  routes/        auth, products, users
+  lib/csv.js     CSV serialization helper used by the export endpoints
+  routes/        auth, products, users, reports
 tests/           node:test + Supertest suite (backend)
 web/             React (Vite) frontend SPA
 .claude/agents/  Claude Code subagent pipeline (see CLAUDE.md)
