@@ -40,6 +40,23 @@ describe("Products API", () => {
     assert.equal(res.body.reorderLevel, 2);
   });
 
+  test("admin can set and update a product's unit cost", async () => {
+    const created = await createProduct(adminToken, { sku: "SKU-COST", unitCost: 12.5 });
+    assert.equal(created.body.unitCost, 12.5);
+
+    const updated = await request(app)
+      .patch(`/products/${created.body.id}`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ unitCost: 20 });
+    assert.equal(updated.body.unitCost, 20);
+
+    const cleared = await request(app)
+      .patch(`/products/${created.body.id}`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ unitCost: null });
+    assert.equal(cleared.body.unitCost, null);
+  });
+
   test("staff cannot create a product", async () => {
     const res = await createProduct(staffToken, { sku: "SKU-B" });
     assert.equal(res.status, 403);
@@ -215,8 +232,8 @@ describe("Products API", () => {
 
     assert.equal(res.status, 200);
     assert.match(res.headers["content-type"], /text\/csv/);
-    assert.match(res.text, /^sku,name,unit,category,quantity,reorderLevel/);
-    assert.match(res.text, /SKU-CSV,CSV Widget,pcs,,0,3/);
+    assert.match(res.text, /^sku,name,unit,category,unitCost,quantity,reorderLevel/);
+    assert.match(res.text, /SKU-CSV,CSV Widget,pcs,,,0,3/);
   });
 
   test("exports a product's movement history as CSV", async () => {

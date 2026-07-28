@@ -26,6 +26,8 @@ model User {
   role                Role      @default(staff)
   failedLoginAttempts Int       @default(0)
   lockedUntil         DateTime?
+  resetTokenHash      String?
+  resetTokenExpiresAt DateTime?
   createdAt           DateTime  @default(now())
 
   createdProducts  Product[]        @relation("ProductCreatedBy")
@@ -54,6 +56,7 @@ model Product {
   unit         String
   category     String?
   imageUrl     String?
+  unitCost     Float?
   quantity     Int       @default(0)
   reorderLevel Int       @default(0)
   supplierId   Int?

@@ -44,7 +44,7 @@ async function sendLowStockAlert(products) {
   return { sent: true };
 }
 
-async function sendDailySummary({ totalProducts, totalQuantity, lowStockProducts }) {
+async function sendDailySummary({ totalProducts, totalQuantity, totalValue, lowStockProducts }) {
   const client = getClient();
   if (!client) {
     console.warn("RESEND_API_KEY not set; skipping daily summary email");
@@ -68,6 +68,7 @@ async function sendDailySummary({ totalProducts, totalQuantity, lowStockProducts
     html:
       `<p>Total products: <strong>${totalProducts}</strong></p>` +
       `<p>Total units in stock: <strong>${totalQuantity}</strong></p>` +
+      `<p>Total inventory value: <strong>${totalValue.toFixed(2)}</strong></p>` +
       (lowStockProducts.length > 0
         ? "<p>Low on stock:</p>" +
           "<table border=\"1\" cellpadding=\"4\" cellspacing=\"0\">" +
@@ -80,4 +81,25 @@ async function sendDailySummary({ totalProducts, totalQuantity, lowStockProducts
   return { sent: true };
 }
 
-module.exports = { sendLowStockAlert, sendDailySummary };
+async function sendPasswordResetEmail(user, resetUrl) {
+  const client = getClient();
+  if (!client) {
+    console.warn("RESEND_API_KEY not set; skipping password reset email");
+    return { sent: false, reason: "not_configured" };
+  }
+
+  await client.emails.send({
+    from: process.env.ALERT_EMAIL_FROM || "onboarding@resend.dev",
+    to: user.email,
+    subject: "Reset your password",
+    html:
+      "<p>Someone requested a password reset for this account. If this was you, click the link below " +
+      "(it expires in 30 minutes):</p>" +
+      `<p><a href="${resetUrl}">${resetUrl}</a></p>` +
+      "<p>If you didn't request this, you can ignore this email.</p>",
+  });
+
+  return { sent: true };
+}
+
+module.exports = { sendLowStockAlert, sendDailySummary, sendPasswordResetEmail };

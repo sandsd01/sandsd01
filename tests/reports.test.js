@@ -55,6 +55,23 @@ describe("GET /reports/summary", () => {
     assert.equal(res.body.recentMovements.length, 1);
     assert.equal(res.body.recentMovements[0].createdByEmail, "staff@test.com");
   });
+
+  test("computes total inventory value from unit cost * quantity", async () => {
+    const adminToken = await login("admin@test.com", "adminpass1");
+    const product = await request(app)
+      .post("/products")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ sku: "SKU-VAL", name: "Priced Widget", unit: "pcs", unitCost: 2.5 });
+    await request(app)
+      .post(`/products/${product.body.id}/movements`)
+      .set("Authorization", `Bearer ${staffToken}`)
+      .send({ type: "in", quantity: 10 });
+
+    const res = await request(app)
+      .get("/reports/summary")
+      .set("Authorization", `Bearer ${staffToken}`);
+    assert.equal(res.body.totalValue, 25);
+  });
 });
 
 describe("GET /reports/movements-timeseries", () => {

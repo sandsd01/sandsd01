@@ -63,6 +63,8 @@ All endpoints except `/health` and `/auth/login` require `Authorization: Bearer 
 | POST | `/auth/login` | — | Log in, returns `{ token, user }`. Locks the account for 15 minutes after 5 consecutive failed attempts (`423`) |
 | POST | `/auth/logout` | any | No-op; client discards the token |
 | PATCH | `/auth/password` | any | Change your own password (`{ currentPassword, newPassword }`) |
+| POST | `/auth/forgot-password` | — | `{ email }` — always returns a generic success message; emails a reset link if the account exists |
+| POST | `/auth/reset-password` | — | `{ email, token, newPassword }` — token expires after 30 minutes and is single-use |
 | GET | `/products?search=&category=&page=&pageSize=&sortBy=&sortDir=` | any | Paginated, non-deleted product list — filter by SKU/name/category, sort by `name`\|`sku`\|`quantity`\|`reorderLevel`\|`category` |
 | GET | `/products/categories` | any | Distinct list of product categories in use |
 | GET | `/products/trash` | admin | List soft-deleted products |
@@ -71,7 +73,7 @@ All endpoints except `/health` and `/auth/login` require `Authorization: Bearer 
 | POST | `/products/bulk-delete` | admin | Soft-delete multiple products (`{ ids: [...] }`) |
 | POST | `/products/bulk-category` | admin | Set category on multiple products (`{ ids: [...], category }`) |
 | GET | `/products/:id` | any | Get one product (excludes soft-deleted) |
-| POST | `/products` | admin | Create a product (`category`, `supplierId` optional) |
+| POST | `/products` | admin | Create a product (`category`, `supplierId`, `unitCost` optional) |
 | PATCH | `/products/:id` | admin | Update a product |
 | DELETE | `/products/:id` | admin | Soft-delete a product (recoverable via `/restore`) |
 | POST | `/products/:id/restore` | admin | Restore a soft-deleted product |
@@ -84,7 +86,7 @@ All endpoints except `/health` and `/auth/login` require `Authorization: Bearer 
 | POST | `/suppliers` | admin | Create a supplier |
 | PATCH | `/suppliers/:id` | admin | Update a supplier |
 | DELETE | `/suppliers/:id` | admin | Delete a supplier (unlinks it from any products) |
-| GET | `/reports/summary` | any | Product/quantity/low-stock counts and the 10 most recent movements |
+| GET | `/reports/summary` | any | Product/quantity/value/low-stock counts and the 10 most recent movements |
 | GET | `/reports/summary/pdf` | any | The summary above as a downloadable PDF |
 | GET | `/reports/movements-timeseries?days=` | any | Daily in/out totals for the last N days (default 30) |
 | GET | `/reports/activity-log?page=&pageSize=` | admin | Paginated audit log (who did what, when) |
@@ -105,6 +107,8 @@ Without those env vars set, both kinds of alert are silently skipped (logged, no
 
 ### Other notable features
 
+- **Stock valuation**: products can have an optional `unitCost`; Reports shows total inventory value (`quantity * unitCost` summed across products) alongside unit counts.
+- **Password reset**: "Forgot password?" on the login page emails a link via Resend (no-ops if unconfigured, same as the other alerts) that expires in 30 minutes; the frontend auto-logs-out and redirects to `/login` if any authenticated request comes back `401` (e.g. an expired JWT).
 - **Soft delete**: deleting a product just sets `deletedAt`; it disappears from normal views but can be restored from Trash (admin).
 - **Audit log**: product/user/supplier create-update-delete and stock movement create/delete are recorded to `AuditLog`, viewable on the Activity Log page (admin).
 - **Product images**: uploaded files are stored on disk under `uploads/` (gitignored) and served at `/uploads/<filename>`.

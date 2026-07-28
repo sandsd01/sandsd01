@@ -1,8 +1,13 @@
+const crypto = require("node:crypto");
 const { test, describe, beforeEach } = require("node:test");
 const assert = require("node:assert/strict");
 const request = require("supertest");
-const { resetDb, createUser } = require("./helpers/db");
+const { resetDb, createUser, prisma } = require("./helpers/db");
 const app = require("../src/app");
+
+function hashToken(token) {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
 
 describe("POST /auth/login", () => {
   beforeEach(async () => {
@@ -135,5 +140,95 @@ describe("Account lockout", () => {
         .send({ email: "admin@test.com", password: "wrong" });
       assert.equal(res.status, 401, "counter should have reset after the successful login");
     }
+  });
+});
+
+describe("Password reset", () => {
+  let user;
+
+  beforeEach(async () => {
+    await resetDb();
+    user = await createUser({ email: "admin@test.com", password: "adminpass1", role: "admin" });
+  });
+
+  test("forgot-password returns a generic message for both existing and unknown emails", async () => {
+    const known = await request(app).post("/auth/forgot-password").send({ email: "admin@test.com" });
+    const unknown = await request(app)
+      .post("/auth/forgot-password")
+      .send({ email: "nobody@test.com" });
+    assert.equal(known.status, 200);
+    assert.equal(unknown.status, 200);
+    assert.equal(known.body.message, unknown.body.message);
+  });
+
+  test("forgot-password sets a reset token on the user", async () => {
+    await request(app).post("/auth/forgot-password").send({ email: "admin@test.com" });
+    const updated = await prisma.user.findUnique({ where: { id: user.id } });
+    assert.ok(updated.resetTokenHash);
+    assert.ok(updated.resetTokenExpiresAt > new Date());
+  });
+
+  test("reset-password with a valid token updates the password and unlocks the account", async () => {
+    const token = "test-reset-token";
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        resetTokenHash: hashToken(token),
+        resetTokenExpiresAt: new Date(Date.now() + 30 * 60 * 1000),
+        failedLoginAttempts: 3,
+      },
+    });
+
+    const res = await request(app)
+      .post("/auth/reset-password")
+      .send({ email: "admin@test.com", token, newPassword: "brandnewpass1" });
+    assert.equal(res.status, 200);
+
+    const login = await request(app)
+      .post("/auth/login")
+      .send({ email: "admin@test.com", password: "brandnewpass1" });
+    assert.equal(login.status, 200);
+
+    const updated = await prisma.user.findUnique({ where: { id: user.id } });
+    assert.equal(updated.resetTokenHash, null);
+    assert.equal(updated.failedLoginAttempts, 0);
+  });
+
+  test("reset-password rejects an invalid token", async () => {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        resetTokenHash: hashToken("real-token"),
+        resetTokenExpiresAt: new Date(Date.now() + 30 * 60 * 1000),
+      },
+    });
+
+    const res = await request(app)
+      .post("/auth/reset-password")
+      .send({ email: "admin@test.com", token: "wrong-token", newPassword: "brandnewpass1" });
+    assert.equal(res.status, 400);
+  });
+
+  test("reset-password rejects an expired token", async () => {
+    const token = "expired-token";
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        resetTokenHash: hashToken(token),
+        resetTokenExpiresAt: new Date(Date.now() - 1000),
+      },
+    });
+
+    const res = await request(app)
+      .post("/auth/reset-password")
+      .send({ email: "admin@test.com", token, newPassword: "brandnewpass1" });
+    assert.equal(res.status, 400);
+  });
+
+  test("reset-password rejects a new password shorter than 8 characters", async () => {
+    const res = await request(app)
+      .post("/auth/reset-password")
+      .send({ email: "admin@test.com", token: "whatever", newPassword: "short" });
+    assert.equal(res.status, 400);
   });
 });

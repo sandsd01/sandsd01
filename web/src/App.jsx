@@ -4,6 +4,8 @@ import { LanguageProvider } from './context/LanguageContext'
 import { RequireAuth, RequireRole } from './components/RequireAuth'
 import { Layout } from './components/Layout'
 import { LoginPage } from './pages/LoginPage'
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
+import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { ProductsPage } from './pages/ProductsPage'
 import { ProductFormPage } from './pages/ProductFormPage'
 import { ProductMovementsPage } from './pages/ProductMovementsPage'
@@ -21,6 +23,8 @@ function App() {
         <AuthProvider>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
 
             <Route element={<RequireAuth />}>
               <Route element={<Layout />}>
