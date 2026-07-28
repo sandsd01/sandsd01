@@ -2,14 +2,48 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Repository status
+## Overview
 
-This repository (`sandsd01/sandsd01`) currently has no application source code, build configuration, or dependency manifests — it is a blank slate for a web application project. Once code is added, this file should be updated to reflect:
+An inventory/stock management system with two roles, admin and staff. See `README.md` for setup, the API endpoint table, and available scripts.
 
-- The language(s) and framework(s) in use
-- Commands to build, lint, run, and test the project (including how to run a single test)
-- The high-level architecture and how major components fit together
-- Any project-specific conventions
+- **Backend**: Node.js + Express 5 (`src/`), Prisma ORM + SQLite via `@prisma/adapter-better-sqlite3` (`prisma/`)
+- **Frontend**: React + Vite SPA (`web/`)
+- **Auth**: JWT (`Authorization: Bearer <token>`), role-based authorization (`admin`/`staff`) enforced in backend middleware — never rely on the frontend to hide unauthorized actions, it's UX-only there
+- **Tests**: `node:test` + Supertest (`tests/`) against a dedicated SQLite test database
+
+## Commands
+
+```bash
+npm install                 # also runs `prisma generate` via postinstall
+npx prisma migrate deploy   # create/update dev.db from prisma/migrations
+npm run seed                # seed the initial admin user into dev.db
+npm run dev                 # run the backend with auto-restart (http://localhost:3000)
+npm test                    # migrate test.db, then run the full backend test suite
+```
+
+To run a single backend test file: `DATABASE_URL="file:./test.db" JWT_SECRET="test-secret" node --test tests/products.test.js` (run `npm run test:migrate` first if `test.db` doesn't exist yet).
+
+Frontend (`cd web` first):
+
+```bash
+npm install
+npm run dev     # http://localhost:5173, proxies /api/* to the backend
+npm run build   # production build, also run in CI
+```
+
+## Architecture
+
+- `src/app.js` wires up Express routes and middleware; `src/server.js` is the actual process entry point (reads env, calls `app.listen`) — tests import `app.js` directly and never start a real listener.
+- `src/middleware/auth.js`: `authenticate` verifies the JWT and attaches `req.user`; `requireRole(...roles)` 403s if `req.user.role` isn't in the allowed list. Apply `authenticate` (and `requireRole` where needed) at the top of each router with `router.use(...)`.
+- `prisma/client.js` is the single shared Prisma Client instance (constructed with the better-sqlite3 driver adapter reading `DATABASE_URL`) — routes and scripts require this rather than instantiating their own client.
+- Stock movements (`POST /products/:id/movements`) are the only place `Product.quantity` changes; a movement create + quantity update happen together in a `prisma.$transaction`. Out-movements are rejected with 400 if they'd take quantity negative.
+- Frontend auth state (JWT + user) lives in `web/src/context/AuthContext.jsx`, persisted to `localStorage`; `RequireAuth`/`RequireRole` (`web/src/components/RequireAuth.jsx`) gate routes in `web/src/App.jsx`.
+
+## Conventions
+
+- Backend and frontend are separate npm projects (root `package.json` vs `web/package.json`) with independent dependencies and CI jobs.
+- Never commit `.env`, `dev.db`, or `test.db` (all gitignored) — use `.env.example` as the template for required environment variables.
+- New backend routes needing role restriction should reuse `requireRole` rather than checking `req.user.role` ad hoc.
 
 ## Subagent pipeline
 
