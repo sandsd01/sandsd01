@@ -21,6 +21,7 @@ export function Layout() {
           <>
             <Link to="/users">{t('nav.users')}</Link>
             <Link to="/suppliers">{t('nav.suppliers')}</Link>
+            <Link to="/purchase-orders">{t('nav.purchaseOrders')}</Link>
             <Link to="/trash">{t('nav.trash')}</Link>
             <Link to="/activity-log">{t('nav.activityLog')}</Link>
           </>
