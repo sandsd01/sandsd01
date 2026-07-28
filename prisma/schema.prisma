@@ -1,0 +1,65 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum Role {
+  admin
+  staff
+}
+
+enum MovementType {
+  in
+  out
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(staff)
+  createdAt    DateTime @default(now())
+
+  createdProducts  Product[]        @relation("ProductCreatedBy")
+  stockMovements   StockMovement[]  @relation("MovementCreatedBy")
+
+  @@map("users")
+}
+
+model Product {
+  id           Int      @id @default(autoincrement())
+  sku          String   @unique
+  name         String
+  unit         String
+  quantity     Int      @default(0)
+  reorderLevel Int      @default(0)
+  createdById  Int
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  createdBy       User            @relation("ProductCreatedBy", fields: [createdById], references: [id])
+  stockMovements  StockMovement[]
+
+  @@map("products")
+}
+
+model StockMovement {
+  id          Int          @id @default(autoincrement())
+  productId   Int
+  type        MovementType
+  quantity    Int
+  note        String?
+  createdById Int
+  createdAt   DateTime     @default(now())
+
+  product   Product @relation(fields: [productId], references: [id])
+  createdBy User    @relation("MovementCreatedBy", fields: [createdById], references: [id])
+
+  @@map("stock_movements")
+}
