@@ -20,32 +20,51 @@ enum MovementType {
 }
 
 model User {
-  id           Int      @id @default(autoincrement())
-  email        String   @unique
-  passwordHash String
-  role         Role     @default(staff)
-  createdAt    DateTime @default(now())
+  id                  Int       @id @default(autoincrement())
+  email               String    @unique
+  passwordHash        String
+  role                Role      @default(staff)
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+  createdAt           DateTime  @default(now())
 
   createdProducts  Product[]        @relation("ProductCreatedBy")
   stockMovements   StockMovement[]  @relation("MovementCreatedBy")
+  auditLogs        AuditLog[]
 
   @@map("users")
 }
 
-model Product {
+model Supplier {
   id           Int      @id @default(autoincrement())
-  sku          String   @unique
+  name         String   @unique
+  contactEmail String?
+  contactPhone String?
+  createdAt    DateTime @default(now())
+
+  products Product[]
+
+  @@map("suppliers")
+}
+
+model Product {
+  id           Int       @id @default(autoincrement())
+  sku          String    @unique
   name         String
   unit         String
   category     String?
-  quantity     Int      @default(0)
-  reorderLevel Int      @default(0)
+  imageUrl     String?
+  quantity     Int       @default(0)
+  reorderLevel Int       @default(0)
+  supplierId   Int?
   createdById  Int
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
 
-  createdBy       User            @relation("ProductCreatedBy", fields: [createdById], references: [id])
-  stockMovements  StockMovement[]
+  createdBy      User            @relation("ProductCreatedBy", fields: [createdById], references: [id])
+  supplier       Supplier?       @relation(fields: [supplierId], references: [id])
+  stockMovements StockMovement[]
 
   @@map("products")
 }
@@ -63,4 +82,18 @@ model StockMovement {
   createdBy User    @relation("MovementCreatedBy", fields: [createdById], references: [id])
 
   @@map("stock_movements")
+}
+
+model AuditLog {
+  id         Int      @id @default(autoincrement())
+  action     String
+  entityType String
+  entityId   Int?
+  details    String?
+  userId     Int
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
 }

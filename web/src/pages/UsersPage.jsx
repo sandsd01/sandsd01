@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../api/client'
 import { useAuth } from '../context/AuthContext'
+import { useLanguage } from '../context/LanguageContext'
 
 export function UsersPage() {
   const { token } = useAuth()
+  const { t } = useLanguage()
   const [users, setUsers] = useState([])
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -62,21 +64,21 @@ export function UsersPage() {
     }
   }
 
-  if (loading) return <p>Loading…</p>
+  if (loading) return <p>{t('common.loading')}</p>
 
   return (
     <div>
-      <h1>Users</h1>
+      <h1>{t('users.title')}</h1>
       {error && <p className="error">{error}</p>}
 
       <form className="card inline-form" onSubmit={handleCreate}>
-        <h2>Add user</h2>
+        <h2>{t('users.addUser')}</h2>
         <label>
-          Email
+          {t('common.email')}
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
         </label>
         <label>
-          Password
+          {t('login.password')}
           <input
             type="password"
             value={password}
@@ -85,20 +87,20 @@ export function UsersPage() {
           />
         </label>
         <label>
-          Role
+          {t('common.role')}
           <select value={role} onChange={(e) => setRole(e.target.value)}>
             <option value="staff">staff</option>
             <option value="admin">admin</option>
           </select>
         </label>
-        <button type="submit">Add user</button>
+        <button type="submit">{t('users.addUser')}</button>
       </form>
 
       <table className="table">
         <thead>
           <tr>
-            <th>Email</th>
-            <th>Role</th>
+            <th>{t('common.email')}</th>
+            <th>{t('common.role')}</th>
             <th></th>
           </tr>
         </thead>
@@ -113,7 +115,7 @@ export function UsersPage() {
                 </select>
               </td>
               <td className="actions">
-                <button onClick={() => handleDelete(u.id)}>Delete</button>
+                <button onClick={() => handleDelete(u.id)}>{t('common.delete')}</button>
               </td>
             </tr>
           ))}

@@ -349,4 +349,129 @@ describe("Products API", () => {
       .send({ csv: "sku,name,unit\nSKU-X,X,pcs\n" });
     assert.equal(res.status, 403);
   });
+
+  test("soft-deleted products disappear from listing/get/export but land in trash", async () => {
+    const created = await createProduct(adminToken, { sku: "SKU-SOFT" });
+
+    const del = await request(app)
+      .delete(`/products/${created.body.id}`)
+      .set("Authorization", `Bearer ${adminToken}`);
+    assert.equal(del.status, 204);
+
+    const get = await request(app)
+      .get(`/products/${created.body.id}`)
+      .set("Authorization", `Bearer ${staffToken}`);
+    assert.equal(get.status, 404);
+
+    const list = await request(app).get("/products").set("Authorization", `Bearer ${staffToken}`);
+    assert.ok(!list.body.data.some((p) => p.sku === "SKU-SOFT"));
+
+    const trash = await request(app).get("/products/trash").set("Authorization", `Bearer ${adminToken}`);
+    assert.ok(trash.body.some((p) => p.sku === "SKU-SOFT"));
+
+    const staffTrash = await request(app)
+      .get("/products/trash")
+      .set("Authorization", `Bearer ${staffToken}`);
+    assert.equal(staffTrash.status, 403);
+  });
+
+  test("admin can restore a soft-deleted product", async () => {
+    const created = await createProduct(adminToken, { sku: "SKU-RESTORE" });
+    await request(app)
+      .delete(`/products/${created.body.id}`)
+      .set("Authorization", `Bearer ${adminToken}`);
+
+    const restore = await request(app)
+      .post(`/products/${created.body.id}/restore`)
+      .set("Authorization", `Bearer ${adminToken}`);
+    assert.equal(restore.status, 200);
+    assert.equal(restore.body.deletedAt, null);
+
+    const get = await request(app)
+      .get(`/products/${created.body.id}`)
+      .set("Authorization", `Bearer ${staffToken}`);
+    assert.equal(get.status, 200);
+  });
+
+  test("404s restoring a product that isn't deleted", async () => {
+    const created = await createProduct(adminToken, { sku: "SKU-NOTDELETED" });
+    const res = await request(app)
+      .post(`/products/${created.body.id}/restore`)
+      .set("Authorization", `Bearer ${adminToken}`);
+    assert.equal(res.status, 404);
+  });
+
+  test("bulk-deletes products", async () => {
+    const a = await createProduct(adminToken, { sku: "SKU-BULK-A" });
+    const b = await createProduct(adminToken, { sku: "SKU-BULK-B" });
+
+    const res = await request(app)
+      .post("/products/bulk-delete")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ ids: [a.body.id, b.body.id] });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.deleted, 2);
+
+    const list = await request(app).get("/products").set("Authorization", `Bearer ${staffToken}`);
+    assert.equal(list.body.data.length, 0);
+  });
+
+  test("staff cannot bulk-delete products", async () => {
+    const a = await createProduct(adminToken, { sku: "SKU-BULK-C" });
+    const res = await request(app)
+      .post("/products/bulk-delete")
+      .set("Authorization", `Bearer ${staffToken}`)
+      .send({ ids: [a.body.id] });
+    assert.equal(res.status, 403);
+  });
+
+  test("bulk-updates category for multiple products", async () => {
+    const a = await createProduct(adminToken, { sku: "SKU-BULK-D" });
+    const b = await createProduct(adminToken, { sku: "SKU-BULK-E" });
+
+    const res = await request(app)
+      .post("/products/bulk-category")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ ids: [a.body.id, b.body.id], category: "Electronics" });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.updated, 2);
+
+    const updated = await prisma.product.findUnique({ where: { id: a.body.id } });
+    assert.equal(updated.category, "Electronics");
+  });
+
+  test("admin can upload and replace a product image", async () => {
+    const created = await createProduct(adminToken, { sku: "SKU-IMG" });
+    const tinyPng = Buffer.from(
+      "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000a49444154789c6300010000050001" +
+        "0d0a2db40000000049454e44ae426082",
+      "hex"
+    );
+
+    const res = await request(app)
+      .post(`/products/${created.body.id}/image`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .attach("image", tinyPng, "test.png");
+
+    assert.equal(res.status, 200);
+    assert.match(res.body.imageUrl, /^\/uploads\/product-/);
+  });
+
+  test("rejects a product image upload with an unsupported extension", async () => {
+    const created = await createProduct(adminToken, { sku: "SKU-IMG2" });
+    const res = await request(app)
+      .post(`/products/${created.body.id}/image`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .attach("image", Buffer.from("not an image"), "test.txt");
+    assert.equal(res.status, 400);
+  });
+
+  test("staff cannot upload a product image", async () => {
+    const created = await createProduct(adminToken, { sku: "SKU-IMG3" });
+    const res = await request(app)
+      .post(`/products/${created.body.id}/image`)
+      .set("Authorization", `Bearer ${staffToken}`)
+      .attach("image", Buffer.from("fake"), "test.png");
+    assert.equal(res.status, 403);
+  });
 });

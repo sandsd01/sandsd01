@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { apiFetch } from '../api/client'
 import { useAuth } from '../context/AuthContext'
+import { useLanguage } from '../context/LanguageContext'
 
 export function AccountPage() {
   const { token, user } = useAuth()
+  const { t } = useLanguage()
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [error, setError] = useState(null)
@@ -34,15 +36,15 @@ export function AccountPage() {
   return (
     <div className="centered">
       <form className="card" onSubmit={handleSubmit}>
-        <h1>Account</h1>
+        <h1>{t('account.title')}</h1>
         <p>
-          Signed in as <strong>{user?.email}</strong> ({user?.role})
+          {t('account.signedInAs')} <strong>{user?.email}</strong> ({user?.role})
         </p>
-        <h2>Change password</h2>
+        <h2>{t('account.changePassword')}</h2>
         {error && <p className="error">{error}</p>}
         {message && <p className="notice">{message}</p>}
         <label>
-          Current password
+          {t('account.currentPassword')}
           <input
             type="password"
             value={currentPassword}
@@ -51,7 +53,7 @@ export function AccountPage() {
           />
         </label>
         <label>
-          New password
+          {t('account.newPassword')}
           <input
             type="password"
             value={newPassword}
@@ -61,7 +63,7 @@ export function AccountPage() {
           />
         </label>
         <button type="submit" disabled={loading}>
-          {loading ? 'Saving…' : 'Update password'}
+          {loading ? '…' : t('account.updatePassword')}
         </button>
       </form>
     </div>

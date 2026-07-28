@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { apiFetch, downloadFile } from '../api/client'
 import { useAuth } from '../context/AuthContext'
+import { useLanguage } from '../context/LanguageContext'
 
 export function ProductMovementsPage() {
   const { id } = useParams()
   const { token, user } = useAuth()
+  const { t } = useLanguage()
 
   const [product, setProduct] = useState(null)
   const [movements, setMovements] = useState([])
@@ -75,32 +77,32 @@ export function ProductMovementsPage() {
     }
   }
 
-  if (loading) return <p>Loading…</p>
+  if (loading) return <p>{t('common.loading')}</p>
   if (!product) return <p className="error">{error || 'Product not found'}</p>
 
   return (
     <div>
-      <Link to="/">&larr; Back to products</Link>
+      <Link to="/">{t('movements.back')}</Link>
       <h1>
         {product.name} <small>({product.sku})</small>
       </h1>
       <p>
-        Current quantity: <strong>{product.quantity}</strong> {product.unit}
+        {t('movements.currentQuantity')}: <strong>{product.quantity}</strong> {product.unit}
       </p>
 
       {error && <p className="error">{error}</p>}
 
       <form className="card inline-form" onSubmit={handleSubmit}>
-        <h2>Record movement</h2>
+        <h2>{t('movements.recordMovement')}</h2>
         <label>
-          Type
+          {t('movements.type')}
           <select value={type} onChange={(e) => setType(e.target.value)}>
-            <option value="in">Stock in</option>
-            <option value="out">Stock out</option>
+            <option value="in">{t('movements.stockIn')}</option>
+            <option value="out">{t('movements.stockOut')}</option>
           </select>
         </label>
         <label>
-          Quantity
+          {t('movements.quantity')}
           <input
             type="number"
             min="1"
@@ -110,26 +112,26 @@ export function ProductMovementsPage() {
           />
         </label>
         <label>
-          Note
+          {t('movements.note')}
           <input value={note} onChange={(e) => setNote(e.target.value)} />
         </label>
-        <button type="submit">Submit</button>
+        <button type="submit">{t('movements.submit')}</button>
       </form>
 
       <div className="page-header">
-        <h2>History</h2>
-        {movements.length > 0 && <button onClick={handleExport}>Export CSV</button>}
+        <h2>{t('movements.history')}</h2>
+        {movements.length > 0 && <button onClick={handleExport}>{t('products.exportCsv')}</button>}
       </div>
       {movements.length === 0 ? (
-        <p>No movements recorded yet.</p>
+        <p>{t('movements.none')}</p>
       ) : (
         <table className="table">
           <thead>
             <tr>
-              <th>Date</th>
-              <th>Type</th>
-              <th>Quantity</th>
-              <th>Note</th>
+              <th>{t('movements.date')}</th>
+              <th>{t('movements.type.col')}</th>
+              <th>{t('movements.quantity')}</th>
+              <th>{t('movements.note')}</th>
               <th></th>
             </tr>
           </thead>
@@ -142,7 +144,7 @@ export function ProductMovementsPage() {
                 <td>{m.note || '-'}</td>
                 <td>
                   {user?.role === 'admin' && (
-                    <button onClick={() => handleDeleteMovement(m.id)}>Delete</button>
+                    <button onClick={() => handleDeleteMovement(m.id)}>{t('common.delete')}</button>
                   )}
                 </td>
               </tr>

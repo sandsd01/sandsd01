@@ -5,6 +5,8 @@ const authRoutes = require("./routes/auth");
 const productRoutes = require("./routes/products");
 const userRoutes = require("./routes/users");
 const reportRoutes = require("./routes/reports");
+const supplierRoutes = require("./routes/suppliers");
+const { uploadDir } = require("./lib/upload");
 
 const app = express();
 
@@ -13,10 +15,13 @@ app.use(express.json());
 
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
+app.use("/uploads", express.static(uploadDir));
+
 app.use("/auth", authRoutes);
 app.use("/products", productRoutes);
 app.use("/users", userRoutes);
 app.use("/reports", reportRoutes);
+app.use("/suppliers", supplierRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: "Not found" });

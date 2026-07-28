@@ -2,6 +2,7 @@ const express = require("express");
 const bcrypt = require("bcryptjs");
 const prisma = require("../../prisma/client");
 const { authenticate, requireRole } = require("../middleware/auth");
+const { logAction } = require("../lib/audit");
 
 const router = express.Router();
 
@@ -32,6 +33,15 @@ router.post("/", async (req, res) => {
   const user = await prisma.user.create({
     data: { email, passwordHash, role: role || "staff" },
   });
+
+  await logAction({
+    userId: req.user.id,
+    action: "create",
+    entityType: "user",
+    entityId: user.id,
+    details: { email: user.email, role: user.role },
+  });
+
   res.status(201).json(publicUser(user));
 });
 
@@ -54,6 +64,15 @@ router.patch("/:id", async (req, res) => {
   }
 
   const user = await prisma.user.update({ where: { id }, data });
+
+  await logAction({
+    userId: req.user.id,
+    action: "update",
+    entityType: "user",
+    entityId: user.id,
+    details: { email: user.email, role: user.role },
+  });
+
   res.json(publicUser(user));
 });
 
@@ -63,6 +82,15 @@ router.delete("/:id", async (req, res) => {
   if (!existing) return res.status(404).json({ error: "User not found" });
 
   await prisma.user.delete({ where: { id } });
+
+  await logAction({
+    userId: req.user.id,
+    action: "delete",
+    entityType: "user",
+    entityId: id,
+    details: { email: existing.email },
+  });
+
   res.status(204).send();
 });
 

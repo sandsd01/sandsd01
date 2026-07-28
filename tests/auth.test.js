@@ -94,3 +94,46 @@ describe("PATCH /auth/password", () => {
     assert.equal(res.status, 400);
   });
 });
+
+describe("Account lockout", () => {
+  beforeEach(async () => {
+    await resetDb();
+    await createUser({ email: "admin@test.com", password: "adminpass1", role: "admin" });
+  });
+
+  test("locks the account after 5 failed attempts", async () => {
+    for (let i = 0; i < 4; i++) {
+      const res = await request(app)
+        .post("/auth/login")
+        .send({ email: "admin@test.com", password: "wrong" });
+      assert.equal(res.status, 401);
+    }
+
+    const fifthAttempt = await request(app)
+      .post("/auth/login")
+      .send({ email: "admin@test.com", password: "wrong" });
+    assert.equal(fifthAttempt.status, 423);
+
+    const correctPasswordWhileLocked = await request(app)
+      .post("/auth/login")
+      .send({ email: "admin@test.com", password: "adminpass1" });
+    assert.equal(correctPasswordWhileLocked.status, 423);
+  });
+
+  test("a successful login resets the failed attempt counter", async () => {
+    await request(app).post("/auth/login").send({ email: "admin@test.com", password: "wrong" });
+    await request(app).post("/auth/login").send({ email: "admin@test.com", password: "wrong" });
+
+    const success = await request(app)
+      .post("/auth/login")
+      .send({ email: "admin@test.com", password: "adminpass1" });
+    assert.equal(success.status, 200);
+
+    for (let i = 0; i < 4; i++) {
+      const res = await request(app)
+        .post("/auth/login")
+        .send({ email: "admin@test.com", password: "wrong" });
+      assert.equal(res.status, 401, "counter should have reset after the successful login");
+    }
+  });
+});

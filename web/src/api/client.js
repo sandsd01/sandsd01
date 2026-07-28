@@ -28,6 +28,23 @@ export async function apiFetch(path, { method = 'GET', body, token } = {}) {
   return data
 }
 
+export async function uploadFile(path, { file, fieldName = 'image', token } = {}) {
+  const headers = {}
+  if (token) headers.Authorization = `Bearer ${token}`
+
+  const formData = new FormData()
+  formData.append(fieldName, file)
+
+  const res = await fetch(`${BASE_URL}${path}`, { method: 'POST', headers, body: formData })
+  const data = await res.json().catch(() => null)
+
+  if (!res.ok) {
+    throw new ApiError(data?.error || `Request failed with status ${res.status}`, res.status)
+  }
+
+  return data
+}
+
 export async function downloadFile(path, { token, filename } = {}) {
   const headers = {}
   if (token) headers.Authorization = `Bearer ${token}`

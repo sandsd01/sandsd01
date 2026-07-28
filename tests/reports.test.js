@@ -134,3 +134,95 @@ describe("POST /reports/send-low-stock-alert", () => {
     assert.equal(res.body.sent, false);
   });
 });
+
+describe("GET /reports/summary/pdf", () => {
+  let adminToken;
+
+  beforeEach(async () => {
+    await resetDb();
+    await createUser({ email: "admin@test.com", password: "adminpass1", role: "admin" });
+    adminToken = await login("admin@test.com", "adminpass1");
+  });
+
+  test("returns a PDF document", async () => {
+    const res = await request(app)
+      .get("/reports/summary/pdf")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .buffer(true)
+      .parse((response, callback) => {
+        const chunks = [];
+        response.on("data", (chunk) => chunks.push(chunk));
+        response.on("end", () => callback(null, Buffer.concat(chunks)));
+      });
+
+    assert.equal(res.status, 200);
+    assert.match(res.headers["content-type"], /application\/pdf/);
+    assert.equal(res.body.slice(0, 4).toString(), "%PDF");
+  });
+});
+
+describe("POST /reports/send-daily-summary", () => {
+  let adminToken;
+  let staffToken;
+
+  beforeEach(async () => {
+    await resetDb();
+    await createUser({ email: "admin@test.com", password: "adminpass1", role: "admin" });
+    await createUser({ email: "staff@test.com", password: "staffpass1", role: "staff" });
+    adminToken = await login("admin@test.com", "adminpass1");
+    staffToken = await login("staff@test.com", "staffpass1");
+  });
+
+  test("staff cannot trigger the daily summary", async () => {
+    const res = await request(app)
+      .post("/reports/send-daily-summary")
+      .set("Authorization", `Bearer ${staffToken}`);
+    assert.equal(res.status, 403);
+  });
+
+  test("admin can trigger it; skips sending when Resend isn't configured", async () => {
+    const res = await request(app)
+      .post("/reports/send-daily-summary")
+      .set("Authorization", `Bearer ${adminToken}`);
+    assert.equal(res.status, 200);
+    assert.equal(res.body.sent, false);
+  });
+});
+
+describe("GET /reports/activity-log", () => {
+  let adminToken;
+  let staffToken;
+
+  beforeEach(async () => {
+    await resetDb();
+    await createUser({ email: "admin@test.com", password: "adminpass1", role: "admin" });
+    await createUser({ email: "staff@test.com", password: "staffpass1", role: "staff" });
+    adminToken = await login("admin@test.com", "adminpass1");
+    staffToken = await login("staff@test.com", "staffpass1");
+  });
+
+  test("staff cannot view the activity log", async () => {
+    const res = await request(app)
+      .get("/reports/activity-log")
+      .set("Authorization", `Bearer ${staffToken}`);
+    assert.equal(res.status, 403);
+  });
+
+  test("records and lists actions with the acting user's email", async () => {
+    await request(app)
+      .post("/products")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ sku: "SKU-LOG", name: "Widget", unit: "pcs" });
+
+    const res = await request(app)
+      .get("/reports/activity-log")
+      .set("Authorization", `Bearer ${adminToken}`);
+
+    assert.equal(res.status, 200);
+    assert.ok(res.body.total >= 1);
+    const entry = res.body.data.find((e) => e.entityType === "product" && e.action === "create");
+    assert.ok(entry);
+    assert.equal(entry.userEmail, "admin@test.com");
+    assert.equal(entry.details.sku, "SKU-LOG");
+  });
+});

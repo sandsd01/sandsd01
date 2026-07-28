@@ -8,3 +8,7 @@ node_modules
 /dev.db
 /*.db
 /*.db-journal
+
+# Uploaded product images (served from disk, not version controlled)
+/uploads/*
+!/uploads/.gitkeep
