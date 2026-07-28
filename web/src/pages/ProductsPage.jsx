@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiFetch, downloadFile } from '../api/client'
 import { useAuth } from '../context/AuthContext'
+import { useLanguage } from '../context/LanguageContext'
 
 const PAGE_SIZE = 10
 
 export function ProductsPage() {
   const { token, user } = useAuth()
+  const { t } = useLanguage()
   const [products, setProducts] = useState([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -16,6 +18,7 @@ export function ProductsPage() {
   const [sortBy, setSortBy] = useState('name')
   const [sortDir, setSortDir] = useState('asc')
   const [lowStockCount, setLowStockCount] = useState(0)
+  const [selected, setSelected] = useState(new Set())
   const [error, setError] = useState(null)
   const [importMessage, setImportMessage] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -41,6 +44,7 @@ export function ProductsPage() {
       setProducts(result.data)
       setTotal(result.total)
       setLowStockCount(summary.lowStockCount)
+      setSelected(new Set())
     } catch (err) {
       setError(err.message)
     } finally {
@@ -78,11 +82,55 @@ export function ProductsPage() {
     return sortDir === 'asc' ? ' ▲' : ' ▼'
   }
 
+  function toggleSelected(id) {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAll() {
+    setSelected((prev) => (prev.size === products.length ? new Set() : new Set(products.map((p) => p.id))))
+  }
+
   async function handleDelete(id) {
     if (!window.confirm('Delete this product?')) return
     try {
       await apiFetch(`/products/${id}`, { method: 'DELETE', token })
       await loadProducts()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function handleBulkDelete() {
+    if (!window.confirm(`Delete ${selected.size} selected product(s)?`)) return
+    try {
+      await apiFetch('/products/bulk-delete', {
+        method: 'POST',
+        body: { ids: Array.from(selected) },
+        token,
+      })
+      await loadProducts()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function handleBulkCategory() {
+    const value = window.prompt('Set category for selected products to:')
+    if (value === null) return
+    try {
+      await apiFetch('/products/bulk-category', {
+        method: 'POST',
+        body: { ids: Array.from(selected), category: value },
+        token,
+      })
+      await loadProducts()
+      const cats = await apiFetch('/products/categories', { token })
+      setCategories(cats)
     } catch (err) {
       setError(err.message)
     }
@@ -123,16 +171,17 @@ export function ProductsPage() {
   }
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const isAdmin = user?.role === 'admin'
 
   return (
     <div>
       <div className="page-header">
-        <h1>Products</h1>
+        <h1>{t('products.title')}</h1>
         <div className="actions">
-          <button onClick={handleExport}>Export CSV</button>
-          {user?.role === 'admin' && (
+          <button onClick={handleExport}>{t('products.exportCsv')}</button>
+          {isAdmin && (
             <>
-              <button onClick={handleImportClick}>Import CSV</button>
+              <button onClick={handleImportClick}>{t('products.importCsv')}</button>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -140,7 +189,9 @@ export function ProductsPage() {
                 onChange={handleImportFile}
                 style={{ display: 'none' }}
               />
-              <Link to="/products/new" className="button">+ Add product</Link>
+              <Link to="/products/new" className="button">
+                {t('products.addProduct')}
+              </Link>
             </>
           )}
         </div>
@@ -150,21 +201,20 @@ export function ProductsPage() {
 
       {lowStockCount > 0 && (
         <p className="warning">
-          ⚠ {lowStockCount} product{lowStockCount > 1 ? 's are' : ' is'} at or below reorder level.
-          See the <Link to="/reports">Reports</Link> page for details.
+          ⚠ {lowStockCount} {t('products.lowStockWarning')} <Link to="/reports">{t('nav.reports')}</Link>
         </p>
       )}
 
       <div className="filter-row">
         <input
           type="search"
-          placeholder="Search by SKU or name…"
+          placeholder={t('products.search')}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="search-input"
         />
         <select value={category} onChange={(e) => setCategory(e.target.value)}>
-          <option value="">All categories</option>
+          <option value="">{t('products.allCategories')}</option>
           {categories.map((c) => (
             <option key={c} value={c}>
               {c}
@@ -173,30 +223,55 @@ export function ProductsPage() {
         </select>
       </div>
 
+      {isAdmin && selected.size > 0 && (
+        <div className="bulk-bar">
+          <span>
+            {selected.size} {t('products.selected')}
+          </span>
+          <button onClick={handleBulkDelete}>{t('products.deleteSelected')}</button>
+          <button onClick={handleBulkCategory}>{t('products.setCategoryForSelected')}</button>
+        </div>
+      )}
+
       {loading ? (
-        <p>Loading…</p>
+        <p>{t('common.loading')}</p>
       ) : products.length === 0 ? (
-        <p>No products found.</p>
+        <p>{t('products.noneFound')}</p>
       ) : (
         <>
           <table className="table">
             <thead>
               <tr>
+                {isAdmin && (
+                  <th>
+                    <input
+                      type="checkbox"
+                      checked={selected.size === products.length}
+                      onChange={toggleSelectAll}
+                    />
+                  </th>
+                )}
+                <th></th>
                 <th className="sortable" onClick={() => toggleSort('sku')}>
-                  SKU{sortIndicator('sku')}
+                  {t('products.sku')}
+                  {sortIndicator('sku')}
                 </th>
                 <th className="sortable" onClick={() => toggleSort('name')}>
-                  Name{sortIndicator('name')}
+                  {t('common.name')}
+                  {sortIndicator('name')}
                 </th>
                 <th className="sortable" onClick={() => toggleSort('category')}>
-                  Category{sortIndicator('category')}
+                  {t('products.category')}
+                  {sortIndicator('category')}
                 </th>
-                <th>Unit</th>
+                <th>{t('products.unit')}</th>
                 <th className="sortable" onClick={() => toggleSort('quantity')}>
-                  Quantity{sortIndicator('quantity')}
+                  {t('products.quantity')}
+                  {sortIndicator('quantity')}
                 </th>
                 <th className="sortable" onClick={() => toggleSort('reorderLevel')}>
-                  Reorder level{sortIndicator('reorderLevel')}
+                  {t('products.reorderLevel')}
+                  {sortIndicator('reorderLevel')}
                 </th>
                 <th></th>
               </tr>
@@ -204,6 +279,18 @@ export function ProductsPage() {
             <tbody>
               {products.map((p) => (
                 <tr key={p.id} className={p.quantity <= p.reorderLevel ? 'low-stock' : ''}>
+                  {isAdmin && (
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={selected.has(p.id)}
+                        onChange={() => toggleSelected(p.id)}
+                      />
+                    </td>
+                  )}
+                  <td>
+                    {p.imageUrl && <img src={p.imageUrl} alt={p.name} className="thumb" />}
+                  </td>
                   <td>{p.sku}</td>
                   <td>{p.name}</td>
                   <td>{p.category || '-'}</td>
@@ -211,11 +298,11 @@ export function ProductsPage() {
                   <td>{p.quantity}</td>
                   <td>{p.reorderLevel}</td>
                   <td className="actions">
-                    <Link to={`/products/${p.id}/movements`}>Record movement</Link>
-                    {user?.role === 'admin' && (
+                    <Link to={`/products/${p.id}/movements`}>{t('products.recordMovement')}</Link>
+                    {isAdmin && (
                       <>
-                        <Link to={`/products/${p.id}/edit`}>Edit</Link>
-                        <button onClick={() => handleDelete(p.id)}>Delete</button>
+                        <Link to={`/products/${p.id}/edit`}>{t('common.edit')}</Link>
+                        <button onClick={() => handleDelete(p.id)}>{t('common.delete')}</button>
                       </>
                     )}
                   </td>
@@ -226,13 +313,13 @@ export function ProductsPage() {
 
           <div className="pagination">
             <button disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-              &larr; Prev
+              {t('products.prev')}
             </button>
             <span>
-              Page {page} of {totalPages} ({total} products)
+              {t('products.page')} {page} {t('products.of')} {totalPages} ({total})
             </span>
             <button disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
-              Next &rarr;
+              {t('products.next')}
             </button>
           </div>
         </>

@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { apiFetch } from '../api/client'
+import { apiFetch, downloadFile } from '../api/client'
 import { useAuth } from '../context/AuthContext'
+import { useLanguage } from '../context/LanguageContext'
 import { MovementsChart } from '../components/MovementsChart'
 
 export function ReportsPage() {
   const { token, user } = useAuth()
+  const { t } = useLanguage()
   const [summary, setSummary] = useState(null)
   const [timeseries, setTimeseries] = useState(null)
   const [error, setError] = useState(null)
-  const [alertMessage, setAlertMessage] = useState(null)
+  const [message, setMessage] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -26,65 +28,95 @@ export function ReportsPage() {
   }, [token])
 
   async function handleSendAlert() {
-    setAlertMessage(null)
+    setMessage(null)
     setError(null)
     try {
       const result = await apiFetch('/reports/send-low-stock-alert', { method: 'POST', token })
       if (result.sent) {
-        setAlertMessage(`Alert email sent for ${result.count} low-stock product(s).`)
+        setMessage(`Alert email sent for ${result.count} low-stock product(s).`)
       } else if (result.reason === 'nothing_low') {
-        setAlertMessage('Nothing is low on stock right now — no email sent.')
+        setMessage('Nothing is low on stock right now — no email sent.')
       } else {
-        setAlertMessage(
-          'Email not sent: alert email is not configured (set RESEND_API_KEY and ALERT_EMAIL_TO).'
-        )
+        setMessage('Email not sent: alert email is not configured (set RESEND_API_KEY and ALERT_EMAIL_TO).')
       }
     } catch (err) {
       setError(err.message)
     }
   }
 
-  if (loading) return <p>Loading…</p>
+  async function handleSendDailySummary() {
+    setMessage(null)
+    setError(null)
+    try {
+      const result = await apiFetch('/reports/send-daily-summary', { method: 'POST', token })
+      setMessage(
+        result.sent
+          ? 'Daily summary email sent.'
+          : 'Email not sent: alert email is not configured (set RESEND_API_KEY and ALERT_EMAIL_TO).'
+      )
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function handleExportPdf() {
+    setError(null)
+    try {
+      await downloadFile('/reports/summary/pdf', { token, filename: 'inventory-summary.pdf' })
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  if (loading) return <p>{t('common.loading')}</p>
   if (error) return <p className="error">{error}</p>
   if (!summary) return null
 
   return (
     <div>
       <div className="page-header">
-        <h1>Reports</h1>
-        {user?.role === 'admin' && <button onClick={handleSendAlert}>Send low-stock alert now</button>}
+        <h1>{t('reports.title')}</h1>
+        <div className="actions">
+          <button onClick={handleExportPdf}>{t('reports.exportPdf')}</button>
+          {user?.role === 'admin' && (
+            <>
+              <button onClick={handleSendAlert}>{t('reports.sendAlert')}</button>
+              <button onClick={handleSendDailySummary}>{t('reports.sendDailySummary')}</button>
+            </>
+          )}
+        </div>
       </div>
-      {alertMessage && <p className="notice">{alertMessage}</p>}
+      {message && <p className="notice">{message}</p>}
 
       <div className="stat-row">
         <div className="stat-tile">
           <span className="stat-value">{summary.totalProducts}</span>
-          <span className="stat-label">Products</span>
+          <span className="stat-label">{t('reports.products')}</span>
         </div>
         <div className="stat-tile">
           <span className="stat-value">{summary.totalQuantity}</span>
-          <span className="stat-label">Total units in stock</span>
+          <span className="stat-label">{t('reports.totalUnits')}</span>
         </div>
         <div className="stat-tile">
           <span className="stat-value">{summary.lowStockCount}</span>
-          <span className="stat-label">Low on stock</span>
+          <span className="stat-label">{t('reports.lowOnStock')}</span>
         </div>
       </div>
 
-      <h2>Stock movements (last 30 days)</h2>
+      <h2>{t('reports.chartTitle')}</h2>
       {timeseries && <MovementsChart data={timeseries} />}
 
-      <h2>Low stock products</h2>
+      <h2>{t('reports.lowStockProducts')}</h2>
       {summary.lowStockProducts.length === 0 ? (
-        <p>Nothing is low on stock right now.</p>
+        <p>{t('reports.nothingLow')}</p>
       ) : (
         <table className="table">
           <thead>
             <tr>
-              <th>SKU</th>
-              <th>Name</th>
-              <th>Quantity</th>
-              <th>Reorder level</th>
+              <th>{t('products.sku')}</th>
+              <th>{t('common.name')}</th>
+              <th>{t('products.quantity')}</th>
+              <th>{t('products.reorderLevel')}</th>
               <th></th>
             </tr>
           </thead>
@@ -96,7 +128,7 @@ export function ReportsPage() {
                 <td>{p.quantity}</td>
                 <td>{p.reorderLevel}</td>
                 <td>
-                  <Link to={`/products/${p.id}/movements`}>Record movement</Link>
+                  <Link to={`/products/${p.id}/movements`}>{t('products.recordMovement')}</Link>
                 </td>
               </tr>
             ))}
@@ -104,18 +136,18 @@ export function ReportsPage() {
         </table>
       )}
 
-      <h2>Recent movements</h2>
+      <h2>{t('reports.recentMovements')}</h2>
       {summary.recentMovements.length === 0 ? (
-        <p>No stock movements recorded yet.</p>
+        <p>{t('reports.noMovements')}</p>
       ) : (
         <table className="table">
           <thead>
             <tr>
-              <th>Date</th>
-              <th>Product</th>
-              <th>Type</th>
-              <th>Quantity</th>
-              <th>By</th>
+              <th>{t('movements.date')}</th>
+              <th>{t('common.name')}</th>
+              <th>{t('movements.type.col')}</th>
+              <th>{t('movements.quantity')}</th>
+              <th>{t('activityLog.user')}</th>
             </tr>
           </thead>
           <tbody>

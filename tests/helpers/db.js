@@ -5,8 +5,10 @@ const bcrypt = require("bcryptjs");
 const prisma = require("../../prisma/client");
 
 async function resetDb() {
+  await prisma.auditLog.deleteMany();
   await prisma.stockMovement.deleteMany();
   await prisma.product.deleteMany();
+  await prisma.supplier.deleteMany();
   await prisma.user.deleteMany();
 }
 

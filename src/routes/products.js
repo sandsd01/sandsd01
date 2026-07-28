@@ -1,21 +1,26 @@
+const path = require("path");
+const fs = require("fs");
 const express = require("express");
 const prisma = require("../../prisma/client");
 const { authenticate, requireRole } = require("../middleware/auth");
 const { toCsv, parseCsv } = require("../lib/csv");
+const { logAction } = require("../lib/audit");
+const { upload } = require("../lib/upload");
 
 const router = express.Router();
 
 const SORTABLE_FIELDS = ["name", "sku", "quantity", "reorderLevel", "category"];
+const SUPPLIER_SELECT = { select: { id: true, name: true } };
 
 function buildWhere({ search, category }) {
-  const where = {};
+  const where = { deletedAt: null };
   if (search) {
     where.OR = [{ sku: { contains: search } }, { name: { contains: search } }];
   }
   if (category) {
     where.category = category;
   }
-  return Object.keys(where).length ? where : undefined;
+  return where;
 }
 
 router.use(authenticate);
@@ -36,6 +41,7 @@ router.get("/", async (req, res) => {
       orderBy: { [sortBy]: sortDir },
       skip: (page - 1) * pageSize,
       take: pageSize,
+      include: { supplier: SUPPLIER_SELECT },
     }),
     prisma.product.count({ where }),
   ]);
@@ -45,12 +51,20 @@ router.get("/", async (req, res) => {
 
 router.get("/categories", async (_req, res) => {
   const rows = await prisma.product.findMany({
-    where: { category: { not: null } },
+    where: { category: { not: null }, deletedAt: null },
     distinct: ["category"],
     select: { category: true },
     orderBy: { category: "asc" },
   });
   res.json(rows.map((r) => r.category));
+});
+
+router.get("/trash", requireRole("admin"), async (_req, res) => {
+  const products = await prisma.product.findMany({
+    where: { deletedAt: { not: null } },
+    orderBy: { deletedAt: "desc" },
+  });
+  res.json(products);
 });
 
 router.get("/export", async (req, res) => {
@@ -118,17 +132,71 @@ router.post("/import", requireRole("admin"), async (req, res) => {
     }
   }
 
+  await logAction({
+    userId: req.user.id,
+    action: "import",
+    entityType: "product",
+    details: { created, updated, errorCount: errors.length },
+  });
+
   res.json({ created, updated, errors });
 });
 
+router.post("/bulk-delete", requireRole("admin"), async (req, res) => {
+  const { ids } = req.body || {};
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: "ids (non-empty array) is required" });
+  }
+  const numericIds = ids.map(Number).filter((id) => Number.isInteger(id));
+
+  const result = await prisma.product.updateMany({
+    where: { id: { in: numericIds }, deletedAt: null },
+    data: { deletedAt: new Date() },
+  });
+
+  await logAction({
+    userId: req.user.id,
+    action: "bulk_delete",
+    entityType: "product",
+    details: { ids: numericIds, count: result.count },
+  });
+
+  res.json({ deleted: result.count });
+});
+
+router.post("/bulk-category", requireRole("admin"), async (req, res) => {
+  const { ids, category } = req.body || {};
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: "ids (non-empty array) is required" });
+  }
+  const numericIds = ids.map(Number).filter((id) => Number.isInteger(id));
+
+  const result = await prisma.product.updateMany({
+    where: { id: { in: numericIds }, deletedAt: null },
+    data: { category: category || null },
+  });
+
+  await logAction({
+    userId: req.user.id,
+    action: "bulk_category_update",
+    entityType: "product",
+    details: { ids: numericIds, category, count: result.count },
+  });
+
+  res.json({ updated: result.count });
+});
+
 router.get("/:id", async (req, res) => {
-  const product = await prisma.product.findUnique({ where: { id: Number(req.params.id) } });
+  const product = await prisma.product.findFirst({
+    where: { id: Number(req.params.id), deletedAt: null },
+    include: { supplier: SUPPLIER_SELECT },
+  });
   if (!product) return res.status(404).json({ error: "Product not found" });
   res.json(product);
 });
 
 router.post("/", requireRole("admin"), async (req, res) => {
-  const { sku, name, unit, category, reorderLevel } = req.body || {};
+  const { sku, name, unit, category, reorderLevel, supplierId } = req.body || {};
   if (!sku || !name || !unit) {
     return res.status(400).json({ error: "sku, name, and unit are required" });
   }
@@ -145,17 +213,27 @@ router.post("/", requireRole("admin"), async (req, res) => {
       unit,
       category: category || null,
       reorderLevel: reorderLevel ?? 0,
+      supplierId: supplierId ? Number(supplierId) : null,
       createdById: req.user.id,
     },
   });
+
+  await logAction({
+    userId: req.user.id,
+    action: "create",
+    entityType: "product",
+    entityId: product.id,
+    details: { sku: product.sku },
+  });
+
   res.status(201).json(product);
 });
 
 router.patch("/:id", requireRole("admin"), async (req, res) => {
-  const { name, unit, reorderLevel, sku, category } = req.body || {};
+  const { name, unit, reorderLevel, sku, category, supplierId } = req.body || {};
   const id = Number(req.params.id);
 
-  const existing = await prisma.product.findUnique({ where: { id } });
+  const existing = await prisma.product.findFirst({ where: { id, deletedAt: null } });
   if (!existing) return res.status(404).json({ error: "Product not found" });
 
   const product = await prisma.product.update({
@@ -166,23 +244,86 @@ router.patch("/:id", requireRole("admin"), async (req, res) => {
       ...(reorderLevel !== undefined && { reorderLevel }),
       ...(sku !== undefined && { sku }),
       ...(category !== undefined && { category: category || null }),
+      ...(supplierId !== undefined && { supplierId: supplierId ? Number(supplierId) : null }),
     },
   });
+
+  await logAction({
+    userId: req.user.id,
+    action: "update",
+    entityType: "product",
+    entityId: product.id,
+    details: { sku: product.sku },
+  });
+
   res.json(product);
 });
 
 router.delete("/:id", requireRole("admin"), async (req, res) => {
   const id = Number(req.params.id);
-  const existing = await prisma.product.findUnique({ where: { id } });
+  const existing = await prisma.product.findFirst({ where: { id, deletedAt: null } });
   if (!existing) return res.status(404).json({ error: "Product not found" });
 
-  await prisma.product.delete({ where: { id } });
+  await prisma.product.update({ where: { id }, data: { deletedAt: new Date() } });
+
+  await logAction({
+    userId: req.user.id,
+    action: "delete",
+    entityType: "product",
+    entityId: id,
+    details: { sku: existing.sku },
+  });
+
   res.status(204).send();
 });
 
+router.post("/:id/restore", requireRole("admin"), async (req, res) => {
+  const id = Number(req.params.id);
+  const existing = await prisma.product.findFirst({ where: { id, deletedAt: { not: null } } });
+  if (!existing) return res.status(404).json({ error: "Deleted product not found" });
+
+  const product = await prisma.product.update({ where: { id }, data: { deletedAt: null } });
+
+  await logAction({
+    userId: req.user.id,
+    action: "restore",
+    entityType: "product",
+    entityId: id,
+    details: { sku: existing.sku },
+  });
+
+  res.json(product);
+});
+
+router.post(
+  "/:id/image",
+  requireRole("admin"),
+  (req, res, next) => {
+    upload.single("image")(req, res, (err) => {
+      if (err) return res.status(400).json({ error: err.message });
+      next();
+    });
+  },
+  async (req, res) => {
+    const id = Number(req.params.id);
+    const existing = await prisma.product.findFirst({ where: { id, deletedAt: null } });
+    if (!existing) return res.status(404).json({ error: "Product not found" });
+    if (!req.file) return res.status(400).json({ error: "image file is required" });
+
+    if (existing.imageUrl) {
+      const oldPath = path.join(__dirname, "../..", existing.imageUrl.replace(/^\//, ""));
+      fs.unlink(oldPath, () => {});
+    }
+
+    const imageUrl = `/uploads/${req.file.filename}`;
+    const product = await prisma.product.update({ where: { id }, data: { imageUrl } });
+    res.json(product);
+  }
+);
+
 router.get("/:id/movements", async (req, res) => {
   const productId = Number(req.params.id);
-  const product = await prisma.product.findUnique({ where: { id: productId } });
+  const product = await prisma.product.findFirst({ where: { id: productId, deletedAt: null } });
   if (!product) return res.status(404).json({ error: "Product not found" });
 
   const movements = await prisma.stockMovement.findMany({
@@ -194,7 +335,7 @@ router.get("/:id/movements", async (req, res) => {
 
 router.get("/:id/movements/export", async (req, res) => {
   const productId = Number(req.params.id);
-  const product = await prisma.product.findUnique({ where: { id: productId } });
+  const product = await prisma.product.findFirst({ where: { id: productId, deletedAt: null } });
   if (!product) return res.status(404).json({ error: "Product not found" });
 
   const movements = await prisma.stockMovement.findMany({
@@ -224,7 +365,7 @@ router.post("/:id/movements", requireRole("admin", "staff"), async (req, res) =>
     return res.status(400).json({ error: "quantity must be a positive integer" });
   }
 
-  const product = await prisma.product.findUnique({ where: { id: productId } });
+  const product = await prisma.product.findFirst({ where: { id: productId, deletedAt: null } });
   if (!product) return res.status(404).json({ error: "Product not found" });
 
   if (type === "out" && product.quantity < quantity) {
@@ -242,6 +383,14 @@ router.post("/:id/movements", requireRole("admin", "staff"), async (req, res) =>
       data: { quantity: { increment: delta } },
     }),
   ]);
+
+  await logAction({
+    userId: req.user.id,
+    action: "movement_create",
+    entityType: "stock_movement",
+    entityId: movement.id,
+    details: { productId, type, quantity },
+  });
 
   req.app.locals.onStockMovement?.(updatedProduct, product.quantity);
 
@@ -273,6 +422,14 @@ router.delete("/:id/movements/:movementId", requireRole("admin"), async (req, re
       data: { quantity: { increment: reverseDelta } },
     }),
   ]);
+
+  await logAction({
+    userId: req.user.id,
+    action: "movement_delete",
+    entityType: "stock_movement",
+    entityId: movementId,
+    details: { productId, type: movement.type, quantity: movement.quantity },
+  });
 
   res.status(204).send();
 });

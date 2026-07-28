@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { useLanguage } from '../context/LanguageContext'
 
 export function LoginPage() {
   const [email, setEmail] = useState('')
@@ -8,6 +9,7 @@ export function LoginPage() {
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
   const { login } = useAuth()
+  const { language, setLanguage, t } = useLanguage()
   const navigate = useNavigate()
 
   async function handleSubmit(e) {
@@ -27,10 +29,21 @@ export function LoginPage() {
   return (
     <div className="centered">
       <form className="card" onSubmit={handleSubmit}>
-        <h1>Sign in</h1>
+        <div className="page-header">
+          <h1>{t('login.title')}</h1>
+          <select
+            className="language-select"
+            value={language}
+            onChange={(e) => setLanguage(e.target.value)}
+            aria-label="Language"
+          >
+            <option value="en">EN</option>
+            <option value="th">ไทย</option>
+          </select>
+        </div>
         {error && <p className="error">{error}</p>}
         <label>
-          Email
+          {t('login.email')}
           <input
             type="email"
             value={email}
@@ -39,7 +52,7 @@ export function LoginPage() {
           />
         </label>
         <label>
-          Password
+          {t('login.password')}
           <input
             type="password"
             value={password}
@@ -48,7 +61,7 @@ export function LoginPage() {
           />
         </label>
         <button type="submit" disabled={loading}>
-          {loading ? 'Signing in…' : 'Sign in'}
+          {loading ? t('login.submitting') : t('login.submit')}
         </button>
       </form>
     </div>
