@@ -11,9 +11,12 @@ export function ProductMovementsPage() {
 
   const [product, setProduct] = useState(null)
   const [movements, setMovements] = useState([])
+  const [byLocation, setByLocation] = useState([])
+  const [locations, setLocations] = useState([])
   const [type, setType] = useState('in')
   const [quantity, setQuantity] = useState(1)
   const [note, setNote] = useState('')
+  const [locationId, setLocationId] = useState('')
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(true)
 
@@ -21,12 +24,16 @@ export function ProductMovementsPage() {
     setLoading(true)
     setError(null)
     try {
-      const [p, m] = await Promise.all([
+      const [p, m, bl, locs] = await Promise.all([
         apiFetch(`/products/${id}`, { token }),
         apiFetch(`/products/${id}/movements`, { token }),
+        apiFetch(`/products/${id}/movements/by-location`, { token }),
+        apiFetch('/locations', { token }),
       ])
       setProduct(p)
       setMovements(m)
+      setByLocation(bl)
+      setLocations(locs)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -45,7 +52,12 @@ export function ProductMovementsPage() {
     try {
       await apiFetch(`/products/${id}/movements`, {
         method: 'POST',
-        body: { type, quantity: Number(quantity), note: note || undefined },
+        body: {
+          type,
+          quantity: Number(quantity),
+          note: note || undefined,
+          locationId: locationId || undefined,
+        },
         token,
       })
       setQuantity(1)
@@ -112,11 +124,44 @@ export function ProductMovementsPage() {
           />
         </label>
         <label>
+          {t('movements.location')}
+          <select value={locationId} onChange={(e) => setLocationId(e.target.value)}>
+            <option value="">{t('movements.noLocation')}</option>
+            {locations.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
           {t('movements.note')}
           <input value={note} onChange={(e) => setNote(e.target.value)} />
         </label>
         <button type="submit">{t('movements.submit')}</button>
       </form>
+
+      {byLocation.length > 0 && (
+        <>
+          <h2>{t('movements.byLocation')}</h2>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>{t('movements.location')}</th>
+                <th>{t('products.quantity')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {byLocation.map((l) => (
+                <tr key={l.locationId ?? 'unassigned'}>
+                  <td>{l.name}</td>
+                  <td>{l.quantity}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
 
       <div className="page-header">
         <h2>{t('movements.history')}</h2>
@@ -131,6 +176,7 @@ export function ProductMovementsPage() {
               <th>{t('movements.date')}</th>
               <th>{t('movements.type.col')}</th>
               <th>{t('movements.quantity')}</th>
+              <th>{t('movements.location')}</th>
               <th>{t('movements.note')}</th>
               <th></th>
             </tr>
@@ -141,6 +187,7 @@ export function ProductMovementsPage() {
                 <td>{new Date(m.createdAt).toLocaleString()}</td>
                 <td>{m.type}</td>
                 <td>{m.quantity}</td>
+                <td>{m.location?.name || t('movements.noLocation')}</td>
                 <td>{m.note || '-'}</td>
                 <td>
                   {user?.role === 'admin' && (

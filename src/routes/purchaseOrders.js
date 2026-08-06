@@ -241,10 +241,17 @@ router.post("/:id/cancel", requireRole("admin"), async (req, res) => {
 
 router.post("/:id/receive", requireRole("admin"), async (req, res) => {
   const id = Number(req.params.id);
-  const { items } = req.body || {};
+  const { items, locationId } = req.body || {};
 
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: "items (non-empty array) is required" });
+  }
+
+  let resolvedLocationId = null;
+  if (locationId !== undefined && locationId !== null && locationId !== "") {
+    const location = await prisma.location.findUnique({ where: { id: Number(locationId) } });
+    if (!location) return res.status(400).json({ error: "Location not found" });
+    resolvedLocationId = location.id;
   }
 
   const existing = await prisma.purchaseOrder.findUnique({ where: { id }, include: { items: true } });
@@ -284,6 +291,7 @@ router.post("/:id/receive", requireRole("admin"), async (req, res) => {
           type: "in",
           quantity,
           note: `Received from PO #${id}`,
+          locationId: resolvedLocationId,
           createdById: req.user.id,
         },
       });

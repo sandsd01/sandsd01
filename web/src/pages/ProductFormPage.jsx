@@ -14,6 +14,7 @@ export function ProductFormPage() {
 
   const [form, setForm] = useState({
     sku: '',
+    barcode: '',
     name: '',
     unit: '',
     category: '',
@@ -23,6 +24,7 @@ export function ProductFormPage() {
   })
   const [suppliers, setSuppliers] = useState([])
   const [imageUrl, setImageUrl] = useState(null)
+  const [qrCodeUrl, setQrCodeUrl] = useState(null)
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(isEdit)
 
@@ -39,6 +41,7 @@ export function ProductFormPage() {
       .then((p) => {
         setForm({
           sku: p.sku,
+          barcode: p.barcode || '',
           name: p.name,
           unit: p.unit,
           category: p.category || '',
@@ -50,6 +53,21 @@ export function ProductFormPage() {
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
+  }, [id, isEdit, token])
+
+  useEffect(() => {
+    if (!isEdit) return
+    let objectUrl
+    fetch(`/api/products/${id}/qrcode`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((res) => (res.ok ? res.blob() : Promise.reject(new Error('Failed to load QR code'))))
+      .then((blob) => {
+        objectUrl = URL.createObjectURL(blob)
+        setQrCodeUrl(objectUrl)
+      })
+      .catch(() => {})
+    return () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
   }, [id, isEdit, token])
 
   function handleChange(field, value) {
@@ -102,6 +120,10 @@ export function ProductFormPage() {
           <input value={form.sku} onChange={(e) => handleChange('sku', e.target.value)} required />
         </label>
         <label>
+          {t('products.barcode')}
+          <input value={form.barcode} onChange={(e) => handleChange('barcode', e.target.value)} />
+        </label>
+        <label>
           {t('common.name')}
           <input value={form.name} onChange={(e) => handleChange('name', e.target.value)} required />
         </label>
@@ -145,11 +167,17 @@ export function ProductFormPage() {
         </label>
 
         {isEdit ? (
-          <label>
-            {t('productForm.image')}
-            {imageUrl && <img src={imageUrl} alt="" className="product-image-preview" />}
-            <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageChange} />
-          </label>
+          <>
+            <label>
+              {t('productForm.image')}
+              {imageUrl && <img src={imageUrl} alt="" className="product-image-preview" />}
+              <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageChange} />
+            </label>
+            <label>
+              {t('productForm.qrCode')}
+              {qrCodeUrl && <img src={qrCodeUrl} alt="" className="product-image-preview" />}
+            </label>
+          </>
         ) : (
           <p className="hint">{t('productForm.saveFirst')}</p>
         )}

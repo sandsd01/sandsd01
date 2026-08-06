@@ -1,6 +1,7 @@
 const path = require("path");
 const fs = require("fs");
 const express = require("express");
+const QRCode = require("qrcode");
 const prisma = require("../../prisma/client");
 const { authenticate, requireRole } = require("../middleware/auth");
 const { toCsv, parseCsv } = require("../lib/csv");
@@ -49,6 +50,19 @@ router.get("/", async (req, res) => {
   res.json({ data, total, page, pageSize });
 });
 
+router.get("/lookup", async (req, res) => {
+  const code = (req.query.code || "").trim();
+  if (!code) {
+    return res.status(400).json({ error: "code is required" });
+  }
+
+  const product = await prisma.product.findFirst({
+    where: { deletedAt: null, OR: [{ sku: code }, { barcode: code }] },
+  });
+  if (!product) return res.status(404).json({ error: "No product matches that code" });
+  res.json(product);
+});
+
 router.get("/categories", async (_req, res) => {
   const rows = await prisma.product.findMany({
     where: { category: { not: null }, deletedAt: null },
@@ -72,6 +86,7 @@ router.get("/export", async (req, res) => {
   const products = await prisma.product.findMany({ where, orderBy: { name: "asc" } });
   const csv = toCsv(products, [
     { label: "sku", value: (p) => p.sku },
+    { label: "barcode", value: (p) => p.barcode },
     { label: "name", value: (p) => p.name },
     { label: "unit", value: (p) => p.unit },
     { label: "category", value: (p) => p.category },
@@ -107,6 +122,7 @@ router.post("/import", requireRole("admin"), async (req, res) => {
     const name = row.name?.trim();
     const unit = row.unit?.trim();
     const category = row.category?.trim() || null;
+    const barcode = row.barcode?.trim() || null;
     const reorderLevel = row.reorderLevel !== undefined ? Number(row.reorderLevel) : 0;
     const unitCost =
       row.unitCost !== undefined && row.unitCost !== "" ? Number(row.unitCost) : null;
@@ -128,12 +144,12 @@ router.post("/import", requireRole("admin"), async (req, res) => {
     if (existing) {
       await prisma.product.update({
         where: { sku },
-        data: { name, unit, category, reorderLevel, unitCost },
+        data: { name, unit, category, reorderLevel, unitCost, barcode },
       });
       updated++;
     } else {
       await prisma.product.create({
-        data: { sku, name, unit, category, reorderLevel, unitCost, createdById: req.user.id },
+        data: { sku, name, unit, category, reorderLevel, unitCost, barcode, createdById: req.user.id },
       });
       created++;
     }
@@ -203,7 +219,7 @@ router.get("/:id", async (req, res) => {
 });
 
 router.post("/", requireRole("admin"), async (req, res) => {
-  const { sku, name, unit, category, reorderLevel, supplierId, unitCost } = req.body || {};
+  const { sku, name, unit, category, reorderLevel, supplierId, unitCost, barcode } = req.body || {};
   if (!sku || !name || !unit) {
     return res.status(400).json({ error: "sku, name, and unit are required" });
   }
@@ -211,6 +227,13 @@ router.post("/", requireRole("admin"), async (req, res) => {
   const existing = await prisma.product.findUnique({ where: { sku } });
   if (existing) {
     return res.status(409).json({ error: "A product with this sku already exists" });
+  }
+
+  if (barcode) {
+    const existingBarcode = await prisma.product.findUnique({ where: { barcode } });
+    if (existingBarcode) {
+      return res.status(409).json({ error: "A product with this barcode already exists" });
+    }
   }
 
   const product = await prisma.product.create({
@@ -222,6 +245,7 @@ router.post("/", requireRole("admin"), async (req, res) => {
       reorderLevel: reorderLevel ?? 0,
       supplierId: supplierId ? Number(supplierId) : null,
       unitCost: unitCost !== undefined && unitCost !== null && unitCost !== "" ? Number(unitCost) : null,
+      barcode: barcode || null,
       createdById: req.user.id,
     },
   });
@@ -238,11 +262,18 @@ router.post("/", requireRole("admin"), async (req, res) => {
 });
 
 router.patch("/:id", requireRole("admin"), async (req, res) => {
-  const { name, unit, reorderLevel, sku, category, supplierId, unitCost } = req.body || {};
+  const { name, unit, reorderLevel, sku, category, supplierId, unitCost, barcode } = req.body || {};
   const id = Number(req.params.id);
 
   const existing = await prisma.product.findFirst({ where: { id, deletedAt: null } });
   if (!existing) return res.status(404).json({ error: "Product not found" });
+
+  if (barcode) {
+    const existingBarcode = await prisma.product.findFirst({ where: { barcode, id: { not: id } } });
+    if (existingBarcode) {
+      return res.status(409).json({ error: "A product with this barcode already exists" });
+    }
+  }
 
   const product = await prisma.product.update({
     where: { id },
@@ -256,6 +287,7 @@ router.patch("/:id", requireRole("admin"), async (req, res) => {
       ...(unitCost !== undefined && {
         unitCost: unitCost !== null && unitCost !== "" ? Number(unitCost) : null,
       }),
+      ...(barcode !== undefined && { barcode: barcode || null }),
     },
   });
 
@@ -363,6 +395,17 @@ router.post(
   }
 );
 
+router.get("/:id/qrcode", async (req, res) => {
+  const id = Number(req.params.id);
+  const product = await prisma.product.findFirst({ where: { id, deletedAt: null } });
+  if (!product) return res.status(404).json({ error: "Product not found" });
+
+  const payload = product.barcode || product.sku;
+  const png = await QRCode.toBuffer(payload, { width: 256, margin: 1 });
+  res.setHeader("Content-Type", "image/png");
+  res.send(png);
+});
+
 router.get("/:id/movements", async (req, res) => {
   const productId = Number(req.params.id);
   const product = await prisma.product.findFirst({ where: { id: productId, deletedAt: null } });
@@ -371,8 +414,32 @@ router.get("/:id/movements", async (req, res) => {
   const movements = await prisma.stockMovement.findMany({
     where: { productId },
     orderBy: { createdAt: "desc" },
+    include: { location: { select: { id: true, name: true } } },
   });
   res.json(movements);
+});
+
+router.get("/:id/movements/by-location", async (req, res) => {
+  const productId = Number(req.params.id);
+  const product = await prisma.product.findFirst({ where: { id: productId, deletedAt: null } });
+  if (!product) return res.status(404).json({ error: "Product not found" });
+
+  const movements = await prisma.stockMovement.findMany({
+    where: { productId },
+    include: { location: { select: { id: true, name: true } } },
+  });
+
+  const byLocation = new Map();
+  for (const m of movements) {
+    const key = m.locationId ?? "unassigned";
+    const label = m.location?.name ?? "Unassigned";
+    const delta = m.type === "in" ? m.quantity : -m.quantity;
+    const entry = byLocation.get(key) || { locationId: m.locationId, name: label, quantity: 0 };
+    entry.quantity += delta;
+    byLocation.set(key, entry);
+  }
+
+  res.json([...byLocation.values()]);
 });
 
 router.get("/:id/movements/export", async (req, res) => {
@@ -398,7 +465,7 @@ router.get("/:id/movements/export", async (req, res) => {
 
 router.post("/:id/movements", requireRole("admin", "staff"), async (req, res) => {
   const productId = Number(req.params.id);
-  const { type, quantity, note } = req.body || {};
+  const { type, quantity, note, locationId } = req.body || {};
 
   if (!["in", "out"].includes(type)) {
     return res.status(400).json({ error: "type must be 'in' or 'out'" });
@@ -414,11 +481,18 @@ router.post("/:id/movements", requireRole("admin", "staff"), async (req, res) =>
     return res.status(400).json({ error: "Insufficient stock for this movement" });
   }
 
+  let resolvedLocationId = null;
+  if (locationId !== undefined && locationId !== null && locationId !== "") {
+    const location = await prisma.location.findUnique({ where: { id: Number(locationId) } });
+    if (!location) return res.status(400).json({ error: "Location not found" });
+    resolvedLocationId = location.id;
+  }
+
   const delta = type === "in" ? quantity : -quantity;
 
   const [movement, updatedProduct] = await prisma.$transaction([
     prisma.stockMovement.create({
-      data: { productId, type, quantity, note, createdById: req.user.id },
+      data: { productId, type, quantity, note, locationId: resolvedLocationId, createdById: req.user.id },
     }),
     prisma.product.update({
       where: { id: productId },

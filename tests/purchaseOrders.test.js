@@ -177,6 +177,30 @@ describe("Purchase Orders API", () => {
     assert.ok(movements.every((m) => m.type === "in" && m.note.includes(`PO #${created.body.id}`)));
   });
 
+  test("receiving stock against a location tags the resulting movement", async () => {
+    const location = await request(app)
+      .post("/locations")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ name: "Receiving Dock" });
+
+    const created = await createOrder({ items: [{ productId: product.id, quantityOrdered: 5 }] });
+    await request(app)
+      .post(`/purchase-orders/${created.body.id}/mark-ordered`)
+      .set("Authorization", `Bearer ${adminToken}`);
+
+    await request(app)
+      .post(`/purchase-orders/${created.body.id}/receive`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        items: [{ itemId: created.body.items[0].id, quantity: 5 }],
+        locationId: location.body.id,
+      });
+
+    const movements = await prisma.stockMovement.findMany({ where: { productId: product.id } });
+    assert.equal(movements.length, 1);
+    assert.equal(movements[0].locationId, location.body.id);
+  });
+
   test("rejects receiving more than the remaining ordered quantity", async () => {
     const created = await createOrder({
       items: [{ productId: product.id, quantityOrdered: 5 }],

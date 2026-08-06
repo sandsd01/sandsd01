@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { apiFetch, downloadFile } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
@@ -9,6 +9,8 @@ const PAGE_SIZE = 10
 export function ProductsPage() {
   const { token, user } = useAuth()
   const { t } = useLanguage()
+  const navigate = useNavigate()
+  const [scanCode, setScanCode] = useState('')
   const [products, setProducts] = useState([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -170,6 +172,21 @@ export function ProductsPage() {
     }
   }
 
+  async function handleScan(e) {
+    e.preventDefault()
+    if (!scanCode.trim()) return
+    setError(null)
+    try {
+      const product = await apiFetch(`/products/lookup?code=${encodeURIComponent(scanCode.trim())}`, {
+        token,
+      })
+      setScanCode('')
+      navigate(`/products/${product.id}/movements`)
+    } catch {
+      setError(t('products.scanNotFound'))
+    }
+  }
+
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const isAdmin = user?.role === 'admin'
 
@@ -198,6 +215,16 @@ export function ProductsPage() {
       </div>
       {error && <p className="error">{error}</p>}
       {importMessage && <p className="notice">{importMessage}</p>}
+
+      <form className="inline-form" onSubmit={handleScan}>
+        <input
+          type="text"
+          placeholder={t('products.scanPlaceholder')}
+          value={scanCode}
+          onChange={(e) => setScanCode(e.target.value)}
+          autoFocus
+        />
+      </form>
 
       {lowStockCount > 0 && (
         <p className="warning">

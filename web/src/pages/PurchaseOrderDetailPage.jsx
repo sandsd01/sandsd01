@@ -11,7 +11,9 @@ export function PurchaseOrderDetailPage() {
   const navigate = useNavigate()
 
   const [order, setOrder] = useState(null)
+  const [locations, setLocations] = useState([])
   const [receiveQuantities, setReceiveQuantities] = useState({})
+  const [receiveLocationId, setReceiveLocationId] = useState('')
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(true)
 
@@ -19,7 +21,12 @@ export function PurchaseOrderDetailPage() {
     setLoading(true)
     setError(null)
     try {
-      setOrder(await apiFetch(`/purchase-orders/${id}`, { token }))
+      const [o, locs] = await Promise.all([
+        apiFetch(`/purchase-orders/${id}`, { token }),
+        apiFetch('/locations', { token }),
+      ])
+      setOrder(o)
+      setLocations(locs)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -76,7 +83,7 @@ export function PurchaseOrderDetailPage() {
     try {
       await apiFetch(`/purchase-orders/${id}/receive`, {
         method: 'POST',
-        body: { items: receiptItems },
+        body: { items: receiptItems, locationId: receiveLocationId || undefined },
         token,
       })
       setReceiveQuantities({})
@@ -135,6 +142,19 @@ export function PurchaseOrderDetailPage() {
 
       <h2>{t('po.items')}</h2>
       <form onSubmit={handleReceive}>
+        {canReceive && (
+          <label>
+            {t('po.receiveLocation')}
+            <select value={receiveLocationId} onChange={(e) => setReceiveLocationId(e.target.value)}>
+              <option value="">{t('movements.noLocation')}</option>
+              {locations.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <table className="table">
           <thead>
             <tr>

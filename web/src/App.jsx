@@ -16,6 +16,7 @@ import { SuppliersPage } from './pages/SuppliersPage'
 import { PurchaseOrdersPage } from './pages/PurchaseOrdersPage'
 import { PurchaseOrderFormPage } from './pages/PurchaseOrderFormPage'
 import { PurchaseOrderDetailPage } from './pages/PurchaseOrderDetailPage'
+import { LocationsPage } from './pages/LocationsPage'
 import { TrashPage } from './pages/TrashPage'
 import { ActivityLogPage } from './pages/ActivityLogPage'
 
@@ -44,6 +45,7 @@ function App() {
                   <Route path="/purchase-orders" element={<PurchaseOrdersPage />} />
                   <Route path="/purchase-orders/new" element={<PurchaseOrderFormPage />} />
                   <Route path="/purchase-orders/:id" element={<PurchaseOrderDetailPage />} />
+                  <Route path="/locations" element={<LocationsPage />} />
                   <Route path="/trash" element={<TrashPage />} />
                   <Route path="/activity-log" element={<ActivityLogPage />} />
                 </Route>
