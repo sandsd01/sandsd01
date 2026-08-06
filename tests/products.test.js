@@ -57,6 +57,51 @@ describe("Products API", () => {
     assert.equal(cleared.body.unitCost, null);
   });
 
+  test("admin can set a barcode, and it must be unique", async () => {
+    const created = await createProduct(adminToken, { sku: "SKU-BAR-1", barcode: "1234567890" });
+    assert.equal(created.status, 201);
+    assert.equal(created.body.barcode, "1234567890");
+
+    const conflict = await createProduct(adminToken, { sku: "SKU-BAR-2", barcode: "1234567890" });
+    assert.equal(conflict.status, 409);
+
+    const updateConflict = await request(app)
+      .patch(`/products/${created.body.id}`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ barcode: "1234567890" });
+    assert.equal(updateConflict.status, 200, "updating to its own existing barcode is fine");
+  });
+
+  test("looks up a product by sku or barcode", async () => {
+    const created = await createProduct(adminToken, { sku: "SKU-LOOKUP", barcode: "9998887776" });
+
+    const bySku = await request(app)
+      .get("/products/lookup?code=SKU-LOOKUP")
+      .set("Authorization", `Bearer ${staffToken}`);
+    assert.equal(bySku.status, 200);
+    assert.equal(bySku.body.id, created.body.id);
+
+    const byBarcode = await request(app)
+      .get("/products/lookup?code=9998887776")
+      .set("Authorization", `Bearer ${staffToken}`);
+    assert.equal(byBarcode.status, 200);
+    assert.equal(byBarcode.body.id, created.body.id);
+
+    const notFound = await request(app)
+      .get("/products/lookup?code=nonexistent")
+      .set("Authorization", `Bearer ${staffToken}`);
+    assert.equal(notFound.status, 404);
+  });
+
+  test("returns a PNG QR code for a product", async () => {
+    const created = await createProduct(adminToken, { sku: "SKU-QR" });
+    const res = await request(app)
+      .get(`/products/${created.body.id}/qrcode`)
+      .set("Authorization", `Bearer ${staffToken}`);
+    assert.equal(res.status, 200);
+    assert.match(res.headers["content-type"], /image\/png/);
+  });
+
   test("staff cannot create a product", async () => {
     const res = await createProduct(staffToken, { sku: "SKU-B" });
     assert.equal(res.status, 403);
@@ -110,6 +155,54 @@ describe("Products API", () => {
 
     const product = await prisma.product.findUnique({ where: { id: created.body.id } });
     assert.equal(product.quantity, 10);
+  });
+
+  test("records a movement against a location and aggregates quantity by location", async () => {
+    const created = await createProduct(adminToken, { sku: "SKU-LOC-2" });
+    const locationA = await request(app)
+      .post("/locations")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ name: "Warehouse A" });
+    const locationB = await request(app)
+      .post("/locations")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ name: "Warehouse B" });
+
+    await request(app)
+      .post(`/products/${created.body.id}/movements`)
+      .set("Authorization", `Bearer ${staffToken}`)
+      .send({ type: "in", quantity: 10, locationId: locationA.body.id });
+    await request(app)
+      .post(`/products/${created.body.id}/movements`)
+      .set("Authorization", `Bearer ${staffToken}`)
+      .send({ type: "in", quantity: 4, locationId: locationB.body.id });
+    await request(app)
+      .post(`/products/${created.body.id}/movements`)
+      .set("Authorization", `Bearer ${staffToken}`)
+      .send({ type: "out", quantity: 3, locationId: locationA.body.id });
+
+    const byLocation = await request(app)
+      .get(`/products/${created.body.id}/movements/by-location`)
+      .set("Authorization", `Bearer ${staffToken}`);
+    assert.equal(byLocation.status, 200);
+    const a = byLocation.body.find((l) => l.locationId === locationA.body.id);
+    const b = byLocation.body.find((l) => l.locationId === locationB.body.id);
+    assert.equal(a.quantity, 7);
+    assert.equal(b.quantity, 4);
+
+    const movements = await request(app)
+      .get(`/products/${created.body.id}/movements`)
+      .set("Authorization", `Bearer ${staffToken}`);
+    assert.ok(movements.body.every((m) => m.location));
+  });
+
+  test("rejects a movement with an unknown locationId", async () => {
+    const created = await createProduct(adminToken, { sku: "SKU-LOC-3" });
+    const res = await request(app)
+      .post(`/products/${created.body.id}/movements`)
+      .set("Authorization", `Bearer ${staffToken}`)
+      .send({ type: "in", quantity: 1, locationId: 999999 });
+    assert.equal(res.status, 400);
   });
 
   test("rejects a stock-out movement that exceeds the current quantity", async () => {
@@ -232,8 +325,8 @@ describe("Products API", () => {
 
     assert.equal(res.status, 200);
     assert.match(res.headers["content-type"], /text\/csv/);
-    assert.match(res.text, /^sku,name,unit,category,unitCost,quantity,reorderLevel/);
-    assert.match(res.text, /SKU-CSV,CSV Widget,pcs,,,0,3/);
+    assert.match(res.text, /^sku,barcode,name,unit,category,unitCost,quantity,reorderLevel/);
+    assert.match(res.text, /SKU-CSV,,CSV Widget,pcs,,,0,3/);
   });
 
   test("exports a product's movement history as CSV", async () => {

@@ -7,6 +7,7 @@ const userRoutes = require("./routes/users");
 const reportRoutes = require("./routes/reports");
 const supplierRoutes = require("./routes/suppliers");
 const purchaseOrderRoutes = require("./routes/purchaseOrders");
+const locationRoutes = require("./routes/locations");
 const { uploadDir } = require("./lib/upload");
 const { apiLimiter } = require("./middleware/rateLimit");
 
@@ -27,6 +28,7 @@ app.use("/users", userRoutes);
 app.use("/reports", reportRoutes);
 app.use("/suppliers", supplierRoutes);
 app.use("/purchase-orders", purchaseOrderRoutes);
+app.use("/locations", locationRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: "Not found" });

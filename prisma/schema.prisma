@@ -62,6 +62,7 @@ model Supplier {
 model Product {
   id           Int       @id @default(autoincrement())
   sku          String    @unique
+  barcode      String?   @unique
   name         String
   unit         String
   category     String?
@@ -89,13 +90,25 @@ model StockMovement {
   type        MovementType
   quantity    Int
   note        String?
+  locationId  Int?
   createdById Int
   createdAt   DateTime     @default(now())
 
-  product   Product @relation(fields: [productId], references: [id])
-  createdBy User    @relation("MovementCreatedBy", fields: [createdById], references: [id])
+  product   Product   @relation(fields: [productId], references: [id])
+  location  Location? @relation(fields: [locationId], references: [id])
+  createdBy User      @relation("MovementCreatedBy", fields: [createdById], references: [id])
 
   @@map("stock_movements")
+}
+
+model Location {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  stockMovements StockMovement[]
+
+  @@map("locations")
 }
 
 model PurchaseOrder {
