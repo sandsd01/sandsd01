@@ -13,6 +13,7 @@ const purchaseOrderRoutes = require("./routes/purchaseOrders");
 const locationRoutes = require("./routes/locations");
 const salesRoutes = require("./routes/sales");
 const settingsRoutes = require("./routes/settings");
+const { router: cashShiftRoutes } = require("./routes/cashShifts");
 const { uploadDir, isRemote: usingObjectStorage, publicBaseUrl } = require("./lib/storage");
 const { apiLimiter } = require("./middleware/rateLimit");
 const { decimalsToNumbers } = require("./lib/money");
@@ -97,6 +98,7 @@ apiRouter.use("/purchase-orders", purchaseOrderRoutes);
 apiRouter.use("/locations", locationRoutes);
 apiRouter.use("/sales", salesRoutes);
 apiRouter.use("/settings", settingsRoutes);
+apiRouter.use("/cash-shifts", cashShiftRoutes);
 
 // The API is namespaced under /api so the SPA can own the rest of the URL
 // space: client routes such as /sales, /users and /locations would otherwise
