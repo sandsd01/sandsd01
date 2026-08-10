@@ -1,0 +1,33 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+#
+# Deploy with: Render dashboard -> New -> Blueprint -> pick this repo.
+# Render reads this file and creates the service already configured, so the
+# only thing left to fill in by hand is DATABASE_URL (see `sync: false` below).
+services:
+  - type: web
+    name: sandsd01-pos
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: singapore
+    healthCheckPath: /health
+    envVars:
+      # Not in this file on purpose: the connection string carries the database
+      # password, and a Blueprint is committed to the repository. Render prompts
+      # for it once at create time and stores it with the service.
+      - key: DATABASE_URL
+        sync: false
+      # Render generates a random 256-bit value; the server refuses to boot on
+      # anything under 32 characters, so don't replace this with a short one.
+      - key: JWT_SECRET
+        generateValue: true
+      - key: NODE_ENV
+        value: production
+      # Render terminates TLS in front of the container. Without this, every
+      # client looks like the proxy and express-rate-limit buckets them all
+      # together; with it, rate limits see the real caller.
+      - key: TRUST_PROXY
+        value: "1"
+      # The daily summary cron should fire at 8am shop time, not 8am UTC.
+      - key: CRON_TIMEZONE
+        value: Asia/Bangkok
