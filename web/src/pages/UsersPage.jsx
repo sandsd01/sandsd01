@@ -7,18 +7,25 @@ export function UsersPage() {
   const { token } = useAuth()
   const { t } = useLanguage()
   const [users, setUsers] = useState([])
+  const [locations, setLocations] = useState([])
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(true)
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [role, setRole] = useState('staff')
+  const [homeLocationId, setHomeLocationId] = useState('')
 
   async function load() {
     setLoading(true)
     setError(null)
     try {
-      setUsers(await apiFetch('/users', { token }))
+      const [userList, locationList] = await Promise.all([
+        apiFetch('/users', { token }),
+        apiFetch('/locations', { token }),
+      ])
+      setUsers(userList)
+      setLocations(locationList)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -35,10 +42,15 @@ export function UsersPage() {
     e.preventDefault()
     setError(null)
     try {
-      await apiFetch('/users', { method: 'POST', body: { email, password, role }, token })
+      await apiFetch('/users', {
+        method: 'POST',
+        body: { email, password, role, homeLocationId: homeLocationId || null },
+        token,
+      })
       setEmail('')
       setPassword('')
       setRole('staff')
+      setHomeLocationId('')
       await load()
     } catch (err) {
       setError(err.message)
@@ -48,6 +60,19 @@ export function UsersPage() {
   async function handleRoleChange(id, newRole) {
     try {
       await apiFetch(`/users/${id}`, { method: 'PATCH', body: { role: newRole }, token })
+      await load()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function handleHomeLocationChange(id, newHomeLocationId) {
+    try {
+      await apiFetch(`/users/${id}`, {
+        method: 'PATCH',
+        body: { homeLocationId: newHomeLocationId || null },
+        token,
+      })
       await load()
     } catch (err) {
       setError(err.message)
@@ -93,6 +118,17 @@ export function UsersPage() {
             <option value="admin">admin</option>
           </select>
         </label>
+        <label>
+          {t('users.homeBranch')}
+          <select value={homeLocationId} onChange={(e) => setHomeLocationId(e.target.value)}>
+            <option value="">{t('users.noHomeBranch')}</option>
+            {locations.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.name}
+              </option>
+            ))}
+          </select>
+        </label>
         <button type="submit">{t('users.addUser')}</button>
       </form>
 
@@ -101,6 +137,7 @@ export function UsersPage() {
           <tr>
             <th>{t('common.email')}</th>
             <th>{t('common.role')}</th>
+            <th>{t('users.homeBranch')}</th>
             <th></th>
           </tr>
         </thead>
@@ -112,6 +149,19 @@ export function UsersPage() {
                 <select value={u.role} onChange={(e) => handleRoleChange(u.id, e.target.value)}>
                   <option value="staff">staff</option>
                   <option value="admin">admin</option>
+                </select>
+              </td>
+              <td>
+                <select
+                  value={u.homeLocationId ?? ''}
+                  onChange={(e) => handleHomeLocationChange(u.id, e.target.value)}
+                >
+                  <option value="">{t('users.noHomeBranch')}</option>
+                  {locations.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.name}
+                    </option>
+                  ))}
                 </select>
               </td>
               <td className="actions">

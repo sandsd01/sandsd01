@@ -8,6 +8,9 @@ export function LocationsPage() {
   const { t } = useLanguage()
   const [locations, setLocations] = useState([])
   const [name, setName] = useState('')
+  const [address, setAddress] = useState('')
+  const [phone, setPhone] = useState('')
+  const [isActive, setIsActive] = useState(true)
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(true)
 
@@ -32,8 +35,15 @@ export function LocationsPage() {
     e.preventDefault()
     setError(null)
     try {
-      await apiFetch('/locations', { method: 'POST', body: { name }, token })
+      await apiFetch('/locations', {
+        method: 'POST',
+        body: { name, address: address || undefined, phone: phone || undefined, isActive },
+        token,
+      })
       setName('')
+      setAddress('')
+      setPhone('')
+      setIsActive(true)
       await load()
     } catch (err) {
       setError(err.message)
@@ -45,6 +55,20 @@ export function LocationsPage() {
     try {
       await apiFetch(`/locations/${id}`, { method: 'DELETE', token })
       setLocations((prev) => prev.filter((l) => l.id !== id))
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function handleToggleActive(location) {
+    setError(null)
+    try {
+      await apiFetch(`/locations/${location.id}`, {
+        method: 'PATCH',
+        body: { isActive: !location.isActive },
+        token,
+      })
+      await load()
     } catch (err) {
       setError(err.message)
     }
@@ -63,6 +87,18 @@ export function LocationsPage() {
           {t('common.name')}
           <input value={name} onChange={(e) => setName(e.target.value)} required />
         </label>
+        <label>
+          {t('locations.address')}
+          <input value={address} onChange={(e) => setAddress(e.target.value)} />
+        </label>
+        <label>
+          {t('locations.phone')}
+          <input value={phone} onChange={(e) => setPhone(e.target.value)} />
+        </label>
+        <label>
+          <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />{' '}
+          {t('locations.active')}
+        </label>
         <button type="submit">{t('locations.addLocation')}</button>
       </form>
 
@@ -73,6 +109,9 @@ export function LocationsPage() {
           <thead>
             <tr>
               <th>{t('common.name')}</th>
+              <th>{t('locations.address')}</th>
+              <th>{t('locations.phone')}</th>
+              <th>{t('locations.status')}</th>
               <th></th>
             </tr>
           </thead>
@@ -80,7 +119,13 @@ export function LocationsPage() {
             {locations.map((l) => (
               <tr key={l.id}>
                 <td>{l.name}</td>
+                <td>{l.address || '-'}</td>
+                <td>{l.phone || '-'}</td>
+                <td>{l.isActive ? t('locations.active') : t('locations.inactive')}</td>
                 <td className="actions">
+                  <button onClick={() => handleToggleActive(l)}>
+                    {l.isActive ? t('locations.deactivate') : t('locations.activate')}
+                  </button>
                   <button onClick={() => handleDelete(l.id)}>{t('common.delete')}</button>
                 </td>
               </tr>
