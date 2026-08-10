@@ -126,12 +126,13 @@ model StockMovement {
 }
 
 model Location {
-  id        Int      @id @default(autoincrement())
-  name      String   @unique
-  address   String?
-  phone     String?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
+  id             Int      @id @default(autoincrement())
+  name           String   @unique
+  address        String?
+  phone          String?
+  isActive       Boolean  @default(true)
+  promptPayQrUrl String?
+  createdAt      DateTime @default(now())
 
   stockMovements StockMovement[]
   homeStaff      User[]

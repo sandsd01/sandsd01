@@ -329,6 +329,28 @@ button:disabled {
   margin-bottom: 8px;
 }
 
+.qr-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.location-qr-thumb {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: white;
+}
+
+.file-input-label {
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+}
+
 .hint {
   font-size: 13px;
   color: var(--text-muted);
@@ -475,6 +497,27 @@ button:disabled {
   background: var(--accent);
   color: white;
   border-color: var(--accent);
+}
+
+.promptpay-qr-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.promptpay-qr-image {
+  width: 240px;
+  height: 240px;
+  max-width: 100%;
+  object-fit: contain;
+  background: white;
+  border-radius: 6px;
 }
 
 /* Modal */

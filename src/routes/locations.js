@@ -1,7 +1,10 @@
+const path = require("path");
+const fs = require("fs");
 const express = require("express");
 const prisma = require("../../prisma/client");
 const { authenticate, requireRole } = require("../middleware/auth");
 const { logAction } = require("../lib/audit");
+const { upload } = require("../lib/upload");
 
 const router = express.Router();
 
@@ -118,6 +121,65 @@ router.delete("/:id", requireRole("admin"), async (req, res) => {
   });
 
   res.status(204).send();
+});
+
+router.post(
+  "/:id/promptpay-qr",
+  requireRole("admin"),
+  (req, res, next) => {
+    upload.single("qr")(req, res, (err) => {
+      if (err) return res.status(400).json({ error: err.message });
+      next();
+    });
+  },
+  async (req, res) => {
+    const id = Number(req.params.id);
+    const existing = await prisma.location.findUnique({ where: { id } });
+    if (!existing) return res.status(404).json({ error: "Location not found" });
+    if (!req.file) return res.status(400).json({ error: "qr file is required" });
+
+    if (existing.promptPayQrUrl) {
+      const oldPath = path.join(__dirname, "../..", existing.promptPayQrUrl.replace(/^\//, ""));
+      fs.unlink(oldPath, () => {});
+    }
+
+    const promptPayQrUrl = `/uploads/${req.file.filename}`;
+    const location = await prisma.location.update({ where: { id }, data: { promptPayQrUrl } });
+
+    await logAction({
+      userId: req.user.id,
+      action: "location_promptpay_qr_upload",
+      entityType: "location",
+      entityId: location.id,
+      details: { name: location.name },
+    });
+
+    res.json(location);
+  }
+);
+
+router.delete("/:id/promptpay-qr", requireRole("admin"), async (req, res) => {
+  const id = Number(req.params.id);
+  const existing = await prisma.location.findUnique({ where: { id } });
+  if (!existing) return res.status(404).json({ error: "Location not found" });
+  if (!existing.promptPayQrUrl) {
+    return res.status(400).json({ error: "Location has no PromptPay QR to delete" });
+  }
+
+  const oldPath = path.join(__dirname, "../..", existing.promptPayQrUrl.replace(/^\//, ""));
+  fs.unlink(oldPath, () => {});
+
+  const location = await prisma.location.update({ where: { id }, data: { promptPayQrUrl: null } });
+
+  await logAction({
+    userId: req.user.id,
+    action: "location_promptpay_qr_delete",
+    entityType: "location",
+    entityId: location.id,
+    details: { name: location.name },
+  });
+
+  res.json(location);
 });
 
 module.exports = router;
