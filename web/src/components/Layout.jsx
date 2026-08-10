@@ -18,6 +18,7 @@ export function Layout() {
         <NavLink to="/" end className={({isActive}) => isActive ? "active" : undefined}>{t('nav.products')}</NavLink>
         <NavLink to="/pos" className={({isActive}) => isActive ? "active" : undefined}>{t('nav.pos')}</NavLink>
         <NavLink to="/sales" className={({isActive}) => isActive ? "active" : undefined}>{t('nav.sales')}</NavLink>
+        <NavLink to="/shifts" className={({isActive}) => isActive ? "active" : undefined}>{t('nav.shifts')}</NavLink>
         <NavLink to="/reports" className={({isActive}) => isActive ? "active" : undefined}>{t('nav.reports')}</NavLink>
         {user?.role === 'admin' && (
           <>

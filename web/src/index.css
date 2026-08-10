@@ -16,6 +16,16 @@
   --warn-bg: #fdf1dc;
   --ring: #6d28d9;
 
+  /* Drawer reconciliation. Short reuses the danger family; over is deliberately
+     the warn family rather than the ok one — a drawer that is over is still
+     wrong, and it keeps short/over off a red/green pairing. */
+  --short: #a3231c;
+  --short-bg: #fdeceb;
+  --over: #7a4708;
+  --over-bg: #fdf1dc;
+  --exact: #17643f;
+  --exact-bg: #e6f4ec;
+
   /* Every control is at least this tall: a cashier taps these on a tablet at
      speed, and 36px targets get mis-hit. */
   --tap: 46px;
@@ -45,6 +55,13 @@
     --ok-bg: #14301f;
     --warn-bg: #3a2f16;
     --ring: #c4a2fd;
+
+    --short: #ff9d95;
+    --short-bg: #3d1f1d;
+    --over: #f0c274;
+    --over-bg: #3a2f16;
+    --exact: #7fdcab;
+    --exact-bg: #14301f;
   }
 }
 
@@ -723,10 +740,6 @@ button:disabled {
   font-weight: 600;
 }
 
-.status-badge.completed {
-  background: #dcfce7;
-  color: #166534;
-}
 
 .status-badge.voided {
   background: var(--danger-bg);
@@ -934,5 +947,399 @@ td:has(+ td),
 
   .payment-methods button {
     flex: 1 1 30%;
+  }
+}
+
+/* ---- Cash drawer (shift reconciliation) ---------------------------------
+   The variance is the reason this screen exists: it gets the biggest number in
+   the app, plus a word, a sign and a glyph, so it reads the same in greyscale
+   or under counter glare as it does in colour. */
+
+.shift-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px 24px;
+  margin-bottom: 16px;
+}
+
+.shift-header h1 {
+  margin: 0;
+}
+
+.shift-branch-picker {
+  min-width: 240px;
+  margin-bottom: 0;
+}
+
+.shift-branch-fixed {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 15px;
+  font-weight: 550;
+}
+
+.shift-branch-fixed strong {
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.shift-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.shift-panel {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  width: 100%;
+  max-width: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* The panel holding the two controls actually in use while counting. */
+.shift-panel.emphasis {
+  background: var(--bg-raised);
+  border: 2px solid var(--border-strong);
+}
+
+.shift-panel h2 {
+  margin: 0;
+}
+
+.shift-panel.narrow {
+  max-width: 460px;
+}
+
+/* Field-level guidance sits next to its input as plain text: three stacked
+   boxed hints turned the close panel into a wall of grey. */
+.field-note {
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text-muted);
+  margin: -6px 0 2px;
+}
+
+/* Drawer state reads as a labelled strip: the bar and the words carry it, the
+   tint only reinforces. */
+.drawer-state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-left: 6px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  margin-bottom: 16px;
+  font-size: 15px;
+}
+
+.drawer-state-label {
+  font-weight: 700;
+}
+
+.drawer-state .meta {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.drawer-state.idle {
+  border-left-color: var(--border-strong);
+  background: var(--bg-subtle);
+}
+
+.drawer-state-link {
+  margin-left: auto;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+/* Adding-machine tape: label left, money right, a rule above the total. */
+.ledger {
+  display: flex;
+  flex-direction: column;
+}
+
+.ledger-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px dashed var(--border);
+  min-height: 48px;
+}
+
+.ledger-row:last-child {
+  border-bottom: none;
+}
+
+.ledger-label {
+  font-size: 15px;
+}
+
+.ledger-sub {
+  display: block;
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.ledger-value {
+  font-size: 21px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ledger-row.total {
+  border-top: 2px solid var(--border-strong);
+  border-bottom: none;
+  margin-top: 4px;
+  padding-top: 16px;
+}
+
+.ledger-row.total .ledger-label {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.ledger-row.total .ledger-value {
+  font-size: 30px;
+  font-weight: 750;
+}
+
+/* Counting is done standing at an open drawer: this input and the button under
+   it are the only controls in play, so they are sized for a thumb. */
+.count-input {
+  width: 100%;
+  min-height: 72px;
+  font-size: 30px;
+  font-weight: 700;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  background: var(--bg);
+}
+
+.btn-shift {
+  width: 100%;
+  min-height: 64px;
+  font-size: 20px;
+  font-weight: 700;
+  border-radius: var(--radius);
+}
+
+.variance-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 20px;
+  border-radius: var(--radius);
+  border: 2px solid currentColor;
+}
+
+.variance-panel.short {
+  background: var(--short-bg);
+  color: var(--short);
+}
+
+.variance-panel.over {
+  background: var(--over-bg);
+  color: var(--over);
+}
+
+.variance-panel.exact {
+  background: var(--exact-bg);
+  color: var(--exact);
+}
+
+.variance-caption {
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.variance-figure {
+  font-size: 44px;
+  line-height: 1.2;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.variance-hint {
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.variance-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  border: 2px solid currentColor;
+  border-radius: 999px;
+  padding: 4px 14px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.variance-glyph {
+  font-size: 13px;
+}
+
+.variance-panel.compact {
+  padding: 14px 16px;
+}
+
+.variance-panel.compact .variance-figure {
+  font-size: 28px;
+}
+
+.shift-result {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.shift-result-figures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.shift-figure {
+  flex: 1 1 160px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+
+.shift-figure .figure-label {
+  display: block;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.shift-figure .figure-value {
+  font-size: 26px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A timestamp isn't a money figure — same tile, quieter type. */
+.shift-figure .figure-value-text {
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.shift-history {
+  margin-top: 32px;
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.table-scroll table {
+  min-width: 640px;
+}
+
+.date-cell {
+  white-space: nowrap;
+}
+
+.date-cell span {
+  display: block;
+}
+
+.date-cell .time-line {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+/* This table carries nine columns of numbers; buy the variance column its
+   room back from the gutters rather than from the figures. */
+.shift-history th,
+.shift-history td {
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+/* Emails are the one unbounded string in this table; let them wrap so the
+   variance column stays on screen instead of scrolling off the right edge. */
+.staff-cell {
+  min-width: 150px;
+  max-width: 210px;
+  overflow-wrap: anywhere;
+}
+
+.money-cell,
+th.money-cell {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.variance-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  border: 1.5px solid currentColor;
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+
+.variance-tag.short {
+  color: var(--short);
+  background: var(--short-bg);
+}
+
+.variance-tag.over {
+  color: var(--over);
+  background: var(--over-bg);
+}
+
+.variance-tag.exact {
+  color: var(--exact);
+  background: var(--exact-bg);
+}
+
+/* Shift status badges use tokens so they invert with the theme. */
+.status-badge.shift-open {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid currentColor;
+}
+
+.status-badge.shift-closed {
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  border: 1px solid var(--border-strong);
+}
+
+/* Sale badges were hard-coded light values and stayed pale-on-pale in dark. */
+.status-badge.completed {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+@media (max-width: 860px) {
+  .shift-columns {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

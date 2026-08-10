@@ -22,6 +22,7 @@ import { TrashPage } from './pages/TrashPage'
 import { ActivityLogPage } from './pages/ActivityLogPage'
 import { PosPage } from './pages/PosPage'
 import { SalesHistoryPage } from './pages/SalesHistoryPage'
+import { ShiftsPage } from './pages/ShiftsPage'
 import { SaleDetailPage } from './pages/SaleDetailPage'
 
 function App() {
@@ -42,6 +43,7 @@ function App() {
                 <Route path="/products/:id/movements" element={<ProductMovementsPage />} />
                 <Route path="/pos" element={<PosPage />} />
                 <Route path="/sales" element={<SalesHistoryPage />} />
+                <Route path="/shifts" element={<ShiftsPage />} />
                 <Route path="/sales/:id" element={<SaleDetailPage />} />
 
                 <Route element={<RequireRole roles={['admin']} />}>

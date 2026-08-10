@@ -215,6 +215,38 @@ describe("Cash shifts", () => {
     assert.equal(res.body.data[0].locationId, branchA);
   });
 
+  test("the history list carries expected cash for open shifts too", async () => {
+    const shift = await openShift(adminToken, { locationId: branchA, openingFloat: 500 });
+    await sell(adminToken, {
+      locationId: branchA,
+      items: [{ productId, quantity: 1 }],
+      paymentMethod: "cash",
+    });
+
+    // The list has to report expectedCash itself: a still-open shift has no
+    // countedCash/variance to derive it from, so the client can't work it out.
+    const res = await request(app)
+      .get(`/api/cash-shifts?locationId=${branchA}`)
+      .set("Authorization", `Bearer ${adminToken}`);
+
+    assert.equal(res.status, 200);
+    const row = res.body.data.find((r) => r.id === shift.body.id);
+    assert.equal(row.cashSales, 100);
+    assert.equal(row.expectedCash, 600);
+    assert.equal(row.saleCount, 1);
+    assert.equal(row.countedCash, null);
+  });
+
+  test("shifts with no sales still report their float as expected cash", async () => {
+    await openShift(adminToken, { locationId: branchA, openingFloat: 250 });
+    const res = await request(app)
+      .get(`/api/cash-shifts?locationId=${branchA}`)
+      .set("Authorization", `Bearer ${adminToken}`);
+    assert.equal(res.body.data[0].cashSales, 0, "no sales grouped to this shift at all");
+    assert.equal(res.body.data[0].expectedCash, 250);
+    assert.equal(res.body.data[0].saleCount, 0);
+  });
+
   test("requires authentication", async () => {
     const res = await request(app).post("/api/cash-shifts/open").send({ locationId: branchA, openingFloat: 0 });
     assert.equal(res.status, 401);

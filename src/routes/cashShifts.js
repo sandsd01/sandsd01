@@ -44,6 +44,42 @@ async function summarise(shift) {
   return { ...shift, cashSales, expectedCash, saleCount };
 }
 
+/**
+ * Adds cashSales/expectedCash/saleCount to a page of shifts using two grouped
+ * queries rather than a pair per row, so the history table doesn't turn into
+ * an N+1 as it fills up.
+ */
+async function summariseMany(shifts) {
+  if (shifts.length === 0) return [];
+  const ids = shifts.map((s) => s.id);
+
+  const [cashByShift, countByShift] = await Promise.all([
+    prisma.sale.groupBy({
+      by: ["cashShiftId"],
+      where: { cashShiftId: { in: ids }, status: "completed", paymentMethod: "cash" },
+      _sum: { total: true },
+    }),
+    prisma.sale.groupBy({
+      by: ["cashShiftId"],
+      where: { cashShiftId: { in: ids }, status: "completed" },
+      _count: { _all: true },
+    }),
+  ]);
+
+  const cash = new Map(cashByShift.map((r) => [r.cashShiftId, r._sum.total]));
+  const counts = new Map(countByShift.map((r) => [r.cashShiftId, r._count._all]));
+
+  return shifts.map((shift) => {
+    const cashSales = money(toDecimal(cash.get(shift.id) ?? 0));
+    return {
+      ...shift,
+      cashSales,
+      expectedCash: money(toDecimal(shift.openingFloat).plus(cashSales)),
+      saleCount: counts.get(shift.id) ?? 0,
+    };
+  });
+}
+
 /** The open shift for a branch, or null. At most one may be open per branch. */
 async function findOpenShift(locationId) {
   return prisma.cashShift.findFirst({
@@ -85,7 +121,7 @@ router.get("/", async (req, res) => {
     prisma.cashShift.count({ where }),
   ]);
 
-  res.json({ data, total, page, pageSize });
+  res.json({ data: await summariseMany(data), total, page, pageSize });
 });
 
 router.post("/open", requireRole("admin", "staff"), async (req, res) => {

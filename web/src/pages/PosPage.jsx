@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { apiFetch, downloadFile } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
@@ -49,6 +50,10 @@ export function PosPage() {
   const [checkoutError, setCheckoutError] = useState(null)
   const [completedSale, setCompletedSale] = useState(null)
 
+  // Whether this branch's cash drawer is being reconciled right now. A cashier
+  // needs to know before they take cash, not at the end of the day.
+  const [drawer, setDrawer] = useState({ state: 'idle' })
+
   useEffect(() => {
     apiFetch('/locations', { token })
       .then((locs) => {
@@ -98,6 +103,25 @@ export function PosPage() {
       .then((stock) => setStockMap(new Map(stock.map((s) => [s.productId, s.quantity]))))
       .catch((err) => setGridError(err.message))
   }, [locationId, token])
+
+  useEffect(() => {
+    if (!locationId) {
+      setDrawer({ state: 'idle' })
+      return undefined
+    }
+    let cancelled = false
+    setDrawer({ state: 'loading' })
+    apiFetch(`/cash-shifts/current?locationId=${encodeURIComponent(locationId)}`, { token })
+      .then((shift) => {
+        if (!cancelled) setDrawer(shift ? { state: 'open', shift } : { state: 'none' })
+      })
+      .catch(() => {
+        if (!cancelled) setDrawer({ state: 'error' })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [locationId, token, completedSale])
 
   // /auth/me may resolve after the first render, so re-apply the lock when it lands.
   useEffect(() => {
@@ -350,6 +374,23 @@ export function PosPage() {
         </select>
       </label>
       {lockedLocationId && <p className="hint">{t('pos.branchLockedToHome')}</p>}
+      {locationId && (
+        <div className={`drawer-state${drawer.state === 'open' ? '' : ' idle'}`}>
+          {drawer.state === 'loading' && <span className="meta">{t('pos.drawerChecking')}</span>}
+          {drawer.state === 'error' && <span className="meta">{t('pos.drawerError')}</span>}
+          {drawer.state === 'none' && (
+            <span className="drawer-state-label">{t('pos.drawerNone')}</span>
+          )}
+          {drawer.state === 'open' && (
+            <span className="drawer-state-label">
+              {t('pos.drawerOpen', { amount: Number(drawer.shift.expectedCash).toFixed(2) })}
+            </span>
+          )}
+          <Link className="drawer-state-link" to="/shifts">
+            {t('pos.drawerLink')} →
+          </Link>
+        </div>
+      )}
       {locations.length === 0 && !locationsError && <p className="hint">{t('pos.noActiveBranches')}</p>}
 
       <form className="inline-form" onSubmit={handleScan}>
