@@ -38,6 +38,14 @@ router.post("/", requireRole("admin", "staff"), async (req, res) => {
     return res.status(400).json({ error: "locationId must refer to an existing, active location" });
   }
 
+  // Staff ring up sales only at their own branch — the POS locks the selector, but
+  // that's UX, so enforce it here too or a hand-crafted request could sell another
+  // branch's stock (and then not even see the sale, since reads are scoped).
+  const staffHomeLocationId = await getStaffHomeLocationId(req);
+  if (staffHomeLocationId && location.id !== staffHomeLocationId) {
+    return res.status(403).json({ error: "You can only record sales at your own branch" });
+  }
+
   if (!["cash", "promptpay", "card"].includes(paymentMethod)) {
     return res.status(400).json({ error: "paymentMethod must be 'cash', 'promptpay', or 'card'" });
   }

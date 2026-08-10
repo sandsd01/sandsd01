@@ -116,7 +116,7 @@ All endpoints except `/health` and `/auth/login` require `Authorization: Bearer 
 | DELETE | `/locations/:id` | admin | Delete a location (rejected with `409` if any movement has been recorded against it, or if it still has `LocationStock` with quantity > 0) |
 | POST | `/locations/:id/promptpay-qr` | admin | Upload/replace a location's PromptPay QR image (multipart, field `qr`; jpg/png/webp/gif, 5MB max); deletes the old file on disk if one existed |
 | DELETE | `/locations/:id/promptpay-qr` | admin | Remove a location's PromptPay QR (`400` if none is set) |
-| POST | `/sales` | admin, staff | Checkout — `{ locationId, items: [{ productId, quantity, modifierOptionIds? }], paymentMethod: "cash"\|"promptpay"\|"card", amountTendered?, note? }`; prices each line as `sellingPrice + Σ priceDelta`, then decrements stock (company-wide `Product.quantity` and that branch's `LocationStock`) |
+| POST | `/sales` | admin, staff | Checkout — `{ locationId, items: [{ productId, quantity, modifierOptionIds? }], paymentMethod: "cash"\|"promptpay"\|"card", amountTendered?, note? }`; prices each line as `sellingPrice + Σ priceDelta`, then decrements stock (company-wide `Product.quantity` and that branch's `LocationStock`). Staff with a `homeLocationId` get `403` for any other branch |
 | GET | `/sales?locationId=&from=&to=&status=&page=&pageSize=` | admin, staff | Paginated sale list, newest first; staff are auto-scoped to their own `homeLocationId` |
 | GET | `/sales/:id` | admin, staff | Get one sale with its items and modifiers |
 | GET | `/sales/:id/receipt` | admin, staff | Download the sale as a PDF receipt |
