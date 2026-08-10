@@ -5,6 +5,7 @@ const { logAction } = require("../lib/audit");
 const { applyStockMovement, InsufficientStockError } = require("../lib/stock");
 const { getShopSettings, calculateTax } = require("../lib/tax");
 const { toDecimal, money } = require("../lib/money");
+const { findOpenShift } = require("./cashShifts");
 const { generateReceiptPdf } = require("../lib/pdf");
 
 const router = express.Router();
@@ -126,6 +127,12 @@ router.post("/", requireRole("admin", "staff"), async (req, res) => {
     changeDue = money(toDecimal(tendered).minus(total));
   }
 
+  // Attach the sale to whatever drawer session is open at this branch, so the
+  // close-out can total the cash it actually took. Selling without an open
+  // shift stays allowed — a shop that doesn't reconcile shouldn't be blocked
+  // from trading — those sales simply aren't counted in any variance.
+  const openShift = await findOpenShift(location.id);
+
   const stockResults = [];
   let sale;
   try {
@@ -134,6 +141,7 @@ router.post("/", requireRole("admin", "staff"), async (req, res) => {
         data: {
           locationId: location.id,
           cashierId: req.user.id,
+          cashShiftId: openShift ? openShift.id : null,
           subtotal,
           taxRate,
           taxAmount,

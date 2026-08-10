@@ -14,7 +14,7 @@
     "prisma:generate": "prisma generate",
     "seed": "node prisma/seed.js",
     "seed:menu": "node prisma/seed-menu.js",
-    "dev:fresh": "prisma migrate reset --force --skip-seed && node prisma/seed.js && node prisma/seed-menu.js && node --watch src/server.js"
+    "dev:fresh": "prisma migrate reset --force && node prisma/seed.js && node prisma/seed-menu.js && node --watch src/server.js"
   },
   "repository": {
     "type": "git",

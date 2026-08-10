@@ -33,6 +33,11 @@ enum PaymentMethod {
   card
 }
 
+enum CashShiftStatus {
+  open
+  closed
+}
+
 enum SaleStatus {
   completed
   voided
@@ -59,6 +64,8 @@ model User {
   stockMovements        StockMovement[] @relation("MovementCreatedBy")
   auditLogs             AuditLog[]
   createdPurchaseOrders PurchaseOrder[] @relation("PurchaseOrderCreatedBy")
+  openedCashShifts      CashShift[]     @relation("ShiftOpenedBy")
+  closedCashShifts      CashShift[]     @relation("ShiftClosedBy")
   homeLocation          Location?       @relation(fields: [homeLocationId], references: [id])
   sales                 Sale[]          @relation("SaleCashier")
   voidedSales           Sale[]          @relation("SaleVoidedBy")
@@ -139,6 +146,7 @@ model Location {
   homeStaff      User[]
   locationStock  LocationStock[]
   sales          Sale[]
+  cashShifts     CashShift[]
 
   @@map("locations")
 }
@@ -195,6 +203,7 @@ model Sale {
   taxInclusive   Boolean       @default(true)
   total          Decimal       @db.Decimal(12, 2)
   receiptNumber  String?       @unique
+  cashShiftId    Int?
   paymentMethod  PaymentMethod
   amountTendered Decimal?      @db.Decimal(12, 2)
   changeDue      Decimal?      @db.Decimal(12, 2)
@@ -203,10 +212,11 @@ model Sale {
   voidedById     Int?
   createdAt      DateTime      @default(now())
 
-  location Location   @relation(fields: [locationId], references: [id])
-  cashier  User       @relation("SaleCashier", fields: [cashierId], references: [id])
-  voidedBy User?      @relation("SaleVoidedBy", fields: [voidedById], references: [id])
-  items    SaleItem[]
+  location  Location   @relation(fields: [locationId], references: [id])
+  cashier   User       @relation("SaleCashier", fields: [cashierId], references: [id])
+  voidedBy  User?      @relation("SaleVoidedBy", fields: [voidedById], references: [id])
+  cashShift CashShift? @relation(fields: [cashShiftId], references: [id])
+  items     SaleItem[]
 
   @@map("sales")
 }
@@ -301,4 +311,31 @@ model ShopSetting {
   updatedAt        DateTime @updatedAt
 
   @@map("shop_settings")
+}
+
+/// One cashier's session at one branch's drawer. Opened with the float that is
+/// physically in the till and closed with what is physically counted, so the
+/// difference against what the system expected surfaces as a real number
+/// instead of being discovered days later in the bank deposit.
+model CashShift {
+  id           Int             @id @default(autoincrement())
+  locationId   Int
+  openedById   Int
+  closedById   Int?
+  status       CashShiftStatus @default(open)
+  openingFloat Decimal         @db.Decimal(12, 2)
+  countedCash  Decimal?        @db.Decimal(12, 2)
+  /// countedCash - (openingFloat + cash sales); negative means the drawer is short.
+  variance     Decimal?        @db.Decimal(12, 2)
+  openingNote  String?
+  closingNote  String?
+  openedAt     DateTime        @default(now())
+  closedAt     DateTime?
+
+  location Location @relation(fields: [locationId], references: [id])
+  openedBy User     @relation("ShiftOpenedBy", fields: [openedById], references: [id])
+  closedBy User?    @relation("ShiftClosedBy", fields: [closedById], references: [id])
+  sales    Sale[]
+
+  @@map("cash_shifts")
 }
