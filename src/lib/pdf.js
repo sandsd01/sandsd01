@@ -47,4 +47,59 @@ function buildSummaryPdf(summary) {
   });
 }
 
-module.exports = { buildSummaryPdf };
+function generateReceiptPdf(sale) {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ margin: 40 });
+    const chunks = [];
+    doc.on("data", (chunk) => chunks.push(chunk));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+
+    doc.fontSize(20).text("Receipt", { underline: true });
+    doc.moveDown();
+    doc.fontSize(12).text(`Sale #${sale.id}`);
+    doc.text(`Branch: ${sale.location?.name || "-"}`);
+    doc.text(`Date: ${new Date(sale.createdAt).toLocaleString()}`);
+    doc.text(`Cashier: ${sale.cashier?.email || "-"}`);
+    if (sale.status === "voided") {
+      doc.text(`Status: VOIDED`);
+    }
+    doc.moveDown();
+
+    doc.fontSize(14).text("Items");
+    sale.items.forEach((item) => {
+      doc
+        .fontSize(11)
+        .text(`${item.productName} x${item.quantity} @ ${item.unitPrice.toFixed(2)} = ${item.lineTotal.toFixed(2)}`);
+      (item.modifiers || []).forEach((mod) => {
+        doc.fontSize(10).text(`   + ${mod.name} (${mod.priceDelta >= 0 ? "+" : ""}${mod.priceDelta.toFixed(2)})`);
+      });
+    });
+    doc.moveDown();
+
+    doc.fontSize(14).text("Payment");
+    doc.fontSize(12).text(`Subtotal: ${sale.subtotal.toFixed(2)}`);
+    doc.text(`Total: ${sale.total.toFixed(2)}`);
+    doc.text(`Payment method: ${sale.paymentMethod}`);
+    if (sale.amountTendered != null) {
+      doc.text(`Amount tendered: ${sale.amountTendered.toFixed(2)}`);
+    }
+    if (sale.changeDue != null) {
+      doc.text(`Change due: ${sale.changeDue.toFixed(2)}`);
+    }
+    if (sale.note) {
+      doc.moveDown();
+      doc.text(`Note: ${sale.note}`);
+    }
+    if (sale.status === "voided") {
+      doc.moveDown();
+      doc
+        .fontSize(12)
+        .text(`Voided ${sale.voidedAt ? new Date(sale.voidedAt).toLocaleString() : ""} by ${sale.voidedBy?.email || "-"}`);
+    }
+
+    doc.end();
+  });
+}
+
+module.exports = { buildSummaryPdf, generateReceiptPdf };

@@ -119,6 +119,87 @@ router.get("/activity-log", requireRole("admin"), async (req, res) => {
   });
 });
 
+router.get("/sales-summary", async (req, res) => {
+  const { locationId, from, to } = req.query;
+  const where = { status: "completed" };
+  if (locationId) where.locationId = Number(locationId);
+  if (from || to) {
+    where.createdAt = {};
+    if (from) where.createdAt.gte = new Date(from);
+    if (to) where.createdAt.lte = new Date(to);
+  }
+
+  let scopedLocationId = null;
+  if (req.user.role === "staff") {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { homeLocationId: true },
+    });
+    if (user?.homeLocationId) {
+      scopedLocationId = user.homeLocationId;
+      where.locationId = scopedLocationId;
+    }
+  }
+
+  const sales = await prisma.sale.findMany({
+    where,
+    select: { id: true, total: true, locationId: true },
+  });
+  const totalRevenue = sales.reduce((sum, s) => sum + s.total, 0);
+  const totalSaleCount = sales.length;
+
+  let revenueByLocation = [];
+  if (!scopedLocationId) {
+    const byLocation = new Map();
+    for (const s of sales) {
+      const entry = byLocation.get(s.locationId) || { locationId: s.locationId, revenue: 0, count: 0 };
+      entry.revenue += s.total;
+      entry.count += 1;
+      byLocation.set(s.locationId, entry);
+    }
+    const locations = await prisma.location.findMany({
+      where: { id: { in: [...byLocation.keys()] } },
+      select: { id: true, name: true },
+    });
+    const nameById = new Map(locations.map((l) => [l.id, l.name]));
+    revenueByLocation = [...byLocation.values()].map((entry) => ({
+      ...entry,
+      name: nameById.get(entry.locationId) ?? "Unknown",
+    }));
+  }
+
+  const saleIds = sales.map((s) => s.id);
+  const topProductsRaw = saleIds.length
+    ? await prisma.saleItem.groupBy({
+        by: ["productId"],
+        where: { saleId: { in: saleIds } },
+        _sum: { quantity: true, lineTotal: true },
+        orderBy: { _sum: { lineTotal: "desc" } },
+        take: 10,
+      })
+    : [];
+
+  const products = await prisma.product.findMany({
+    where: { id: { in: topProductsRaw.map((p) => p.productId) } },
+    select: { id: true, sku: true, name: true },
+  });
+  const productById = new Map(products.map((p) => [p.id, p]));
+
+  const topProducts = topProductsRaw.map((p) => ({
+    productId: p.productId,
+    product: productById.get(p.productId) ?? null,
+    quantitySold: p._sum.quantity ?? 0,
+    revenue: p._sum.lineTotal ?? 0,
+  }));
+
+  res.json({
+    totalRevenue,
+    totalSaleCount,
+    revenueByLocation,
+    topProducts,
+  });
+});
+
 router.post("/send-low-stock-alert", requireRole("admin"), async (_req, res) => {
   const summary = await getSummary();
   const result = await sendLowStockAlert(summary.lowStockProducts);
