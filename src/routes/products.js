@@ -1,5 +1,3 @@
-const path = require("path");
-const fs = require("fs");
 const express = require("express");
 const QRCode = require("qrcode");
 const prisma = require("../../prisma/client");
@@ -7,6 +5,7 @@ const { authenticate, requireRole } = require("../middleware/auth");
 const { toCsv, parseCsv } = require("../lib/csv");
 const { logAction } = require("../lib/audit");
 const { upload } = require("../lib/upload");
+const { saveUpload, deleteUpload } = require("../lib/storage");
 const { applyStockMovement, InsufficientStockError } = require("../lib/stock");
 
 const router = express.Router();
@@ -547,10 +546,7 @@ router.delete("/:id/permanent", requireRole("admin"), async (req, res) => {
     prisma.product.delete({ where: { id } }),
   ]);
 
-  if (existing.imageUrl) {
-    const imagePath = path.join(__dirname, "../..", existing.imageUrl.replace(/^\//, ""));
-    fs.unlink(imagePath, () => {});
-  }
+  await deleteUpload(existing.imageUrl);
 
   await logAction({
     userId: req.user.id,
@@ -578,12 +574,13 @@ router.post(
     if (!existing) return res.status(404).json({ error: "Product not found" });
     if (!req.file) return res.status(400).json({ error: "image file is required" });
 
-    if (existing.imageUrl) {
-      const oldPath = path.join(__dirname, "../..", existing.imageUrl.replace(/^\//, ""));
-      fs.unlink(oldPath, () => {});
-    }
+    const imageUrl = await saveUpload({
+      buffer: req.file.buffer,
+      originalName: req.file.originalname,
+      prefix: `product-${id}`,
+    });
+    await deleteUpload(existing.imageUrl);
 
-    const imageUrl = `/uploads/${req.file.filename}`;
     const product = await prisma.product.update({ where: { id }, data: { imageUrl } });
     res.json(product);
   }

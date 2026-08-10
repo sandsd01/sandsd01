@@ -1,10 +1,9 @@
-const path = require("path");
-const fs = require("fs");
 const express = require("express");
 const prisma = require("../../prisma/client");
 const { authenticate, requireRole } = require("../middleware/auth");
 const { logAction } = require("../lib/audit");
 const { upload } = require("../lib/upload");
+const { saveUpload, deleteUpload } = require("../lib/storage");
 
 const router = express.Router();
 
@@ -138,12 +137,13 @@ router.post(
     if (!existing) return res.status(404).json({ error: "Location not found" });
     if (!req.file) return res.status(400).json({ error: "qr file is required" });
 
-    if (existing.promptPayQrUrl) {
-      const oldPath = path.join(__dirname, "../..", existing.promptPayQrUrl.replace(/^\//, ""));
-      fs.unlink(oldPath, () => {});
-    }
+    const promptPayQrUrl = await saveUpload({
+      buffer: req.file.buffer,
+      originalName: req.file.originalname,
+      prefix: `location-${id}-qr`,
+    });
+    await deleteUpload(existing.promptPayQrUrl);
 
-    const promptPayQrUrl = `/uploads/${req.file.filename}`;
     const location = await prisma.location.update({ where: { id }, data: { promptPayQrUrl } });
 
     await logAction({
@@ -166,8 +166,7 @@ router.delete("/:id/promptpay-qr", requireRole("admin"), async (req, res) => {
     return res.status(400).json({ error: "Location has no PromptPay QR to delete" });
   }
 
-  const oldPath = path.join(__dirname, "../..", existing.promptPayQrUrl.replace(/^\//, ""));
-  fs.unlink(oldPath, () => {});
+  await deleteUpload(existing.promptPayQrUrl);
 
   const location = await prisma.location.update({ where: { id }, data: { promptPayQrUrl: null } });
 
