@@ -253,6 +253,60 @@ describe("Sales API", () => {
     assert.ok(!res.body.data.some((s) => s.id === saleB.body.id));
   });
 
+  test("staff assigned to a branch cannot record a sale at a different branch", async () => {
+    const product = await createProduct(adminToken, { sku: "SKU-SALE-CROSS", sellingPrice: 10 });
+    const home = await createLocation(adminToken, { name: "Branch Home" });
+    const other = await createLocation(adminToken, { name: "Branch Other" });
+    await stockIn(adminToken, product.body.id, 10, home.body.id);
+    await stockIn(adminToken, product.body.id, 10, other.body.id);
+
+    await prisma.user.update({ where: { id: staffUser.id }, data: { homeLocationId: home.body.id } });
+
+    const res = await request(app)
+      .post("/sales")
+      .set("Authorization", `Bearer ${staffToken}`)
+      .send({
+        locationId: other.body.id,
+        items: [{ productId: product.body.id, quantity: 1 }],
+        paymentMethod: "cash",
+      });
+    assert.equal(res.status, 403);
+
+    // The other branch's stock must be untouched, and no sale recorded there.
+    const otherStock = await prisma.locationStock.findUnique({
+      where: { productId_locationId: { productId: product.body.id, locationId: other.body.id } },
+    });
+    assert.equal(otherStock.quantity, 10);
+    assert.equal(await prisma.sale.count({ where: { locationId: other.body.id } }), 0);
+
+    // ...but their own branch still works.
+    const ok = await request(app)
+      .post("/sales")
+      .set("Authorization", `Bearer ${staffToken}`)
+      .send({
+        locationId: home.body.id,
+        items: [{ productId: product.body.id, quantity: 1 }],
+        paymentMethod: "cash",
+      });
+    assert.equal(ok.status, 201);
+  });
+
+  test("admins can record a sale at any branch", async () => {
+    const product = await createProduct(adminToken, { sku: "SKU-SALE-ANY", sellingPrice: 10 });
+    const branch = await createLocation(adminToken, { name: "Branch Anywhere" });
+    await stockIn(adminToken, product.body.id, 5, branch.body.id);
+
+    const res = await request(app)
+      .post("/sales")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        locationId: branch.body.id,
+        items: [{ productId: product.body.id, quantity: 1 }],
+        paymentMethod: "cash",
+      });
+    assert.equal(res.status, 201);
+  });
+
   test("rejects a cash sale with amountTendered below the total, and computes changeDue for a valid tender", async () => {
     const product = await createProduct(adminToken, { sku: "SKU-SALE-7", sellingPrice: 30 });
     const location = await createLocation(adminToken, { name: "Branch H" });
