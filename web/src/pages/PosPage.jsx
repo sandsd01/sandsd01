@@ -13,11 +13,18 @@ function cartKey(productId, modifierOptionIds) {
 }
 
 export function PosPage() {
-  const { token } = useAuth()
+  const { token, user } = useAuth()
   const { t } = useLanguage()
 
+  // Staff assigned to a home branch always ring up sales there — the backend
+  // scopes their sales to it anyway, so don't let them pick a different one.
+  const lockedLocationId =
+    user?.role === 'staff' && user?.homeLocationId ? String(user.homeLocationId) : null
+
   const [locations, setLocations] = useState([])
-  const [locationId, setLocationId] = useState(() => localStorage.getItem(LOCATION_STORAGE_KEY) || '')
+  const [locationId, setLocationId] = useState(
+    () => lockedLocationId || localStorage.getItem(LOCATION_STORAGE_KEY) || ''
+  )
   const [locationsError, setLocationsError] = useState(null)
 
   const [products, setProducts] = useState([])
@@ -47,6 +54,7 @@ export function PosPage() {
       .then((locs) => {
         const active = locs.filter((l) => l.isActive)
         setLocations(active)
+        if (lockedLocationId) return
         const saved = localStorage.getItem(LOCATION_STORAGE_KEY)
         if (saved && !active.some((l) => String(l.id) === saved)) {
           localStorage.removeItem(LOCATION_STORAGE_KEY)
@@ -90,6 +98,11 @@ export function PosPage() {
       .then((stock) => setStockMap(new Map(stock.map((s) => [s.productId, s.quantity]))))
       .catch((err) => setGridError(err.message))
   }, [locationId, token])
+
+  // /auth/me may resolve after the first render, so re-apply the lock when it lands.
+  useEffect(() => {
+    if (lockedLocationId) setLocationId(lockedLocationId)
+  }, [lockedLocationId])
 
   function handleLocationChange(value) {
     setLocationId(value)
@@ -315,7 +328,11 @@ export function PosPage() {
 
       <label>
         {t('pos.branch')}
-        <select value={locationId} onChange={(e) => handleLocationChange(e.target.value)}>
+        <select
+          value={locationId}
+          onChange={(e) => handleLocationChange(e.target.value)}
+          disabled={Boolean(lockedLocationId)}
+        >
           <option value="">{t('pos.selectBranch')}</option>
           {locations.map((l) => (
             <option key={l.id} value={l.id}>
@@ -324,6 +341,7 @@ export function PosPage() {
           ))}
         </select>
       </label>
+      {lockedLocationId && <p className="hint">{t('pos.branchLockedToHome')}</p>}
       {locations.length === 0 && !locationsError && <p className="hint">{t('pos.noActiveBranches')}</p>}
 
       <form className="inline-form" onSubmit={handleScan}>

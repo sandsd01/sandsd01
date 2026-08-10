@@ -64,6 +64,7 @@ All endpoints except `/health` and `/auth/login` require `Authorization: Bearer 
 | Method | Path | Role | Description |
 | --- | --- | --- | --- |
 | POST | `/auth/login` | — | Log in, returns `{ token, user }`. Locks the account for 15 minutes after 5 consecutive failed attempts (`423`) |
+| GET | `/auth/me` | any | Your own profile (`id`, `email`, `role`, `homeLocationId`) — the POS page uses it to pin a staff cashier to their assigned branch |
 | POST | `/auth/logout` | any | No-op; client discards the token |
 | PATCH | `/auth/password` | any | Change your own password (`{ currentPassword, newPassword }`) |
 | POST | `/auth/forgot-password` | — | `{ email }` — always returns a generic success message; emails a reset link if the account exists |
