@@ -56,31 +56,33 @@ export function TrashPage() {
       {products.length === 0 ? (
         <p>{t('trash.empty')}</p>
       ) : (
-        <table className="table">
-          <thead>
-            <tr>
-              <th>{t('products.sku')}</th>
-              <th>{t('common.name')}</th>
-              <th>{t('trash.deletedAt')}</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {products.map((p) => (
-              <tr key={p.id}>
-                <td>{p.sku}</td>
-                <td>{p.name}</td>
-                <td>{new Date(p.deletedAt).toLocaleString()}</td>
-                <td className="actions">
-                  <button onClick={() => handleRestore(p.id)}>{t('trash.restore')}</button>
-                  <button onClick={() => handlePermanentDelete(p.id, p.sku)}>
-                    {t('trash.permanentDelete')}
-                  </button>
-                </td>
+        <div className="table-scroll">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>{t('products.sku')}</th>
+                <th>{t('common.name')}</th>
+                <th>{t('trash.deletedAt')}</th>
+                <th></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {products.map((p) => (
+                <tr key={p.id}>
+                  <td>{p.sku}</td>
+                  <td>{p.name}</td>
+                  <td>{new Date(p.deletedAt).toLocaleString()}</td>
+                  <td className="actions">
+                    <button onClick={() => handleRestore(p.id)}>{t('trash.restore')}</button>
+                    <button onClick={() => handlePermanentDelete(p.id, p.sku)}>
+                      {t('trash.permanentDelete')}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   )

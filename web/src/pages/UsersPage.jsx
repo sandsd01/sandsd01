@@ -132,45 +132,47 @@ export function UsersPage() {
         <button type="submit">{t('users.addUser')}</button>
       </form>
 
-      <table className="table">
-        <thead>
-          <tr>
-            <th>{t('common.email')}</th>
-            <th>{t('common.role')}</th>
-            <th>{t('users.homeBranch')}</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {users.map((u) => (
-            <tr key={u.id}>
-              <td>{u.email}</td>
-              <td>
-                <select value={u.role} onChange={(e) => handleRoleChange(u.id, e.target.value)}>
-                  <option value="staff">staff</option>
-                  <option value="admin">admin</option>
-                </select>
-              </td>
-              <td>
-                <select
-                  value={u.homeLocationId ?? ''}
-                  onChange={(e) => handleHomeLocationChange(u.id, e.target.value)}
-                >
-                  <option value="">{t('users.noHomeBranch')}</option>
-                  {locations.map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.name}
-                    </option>
-                  ))}
-                </select>
-              </td>
-              <td className="actions">
-                <button onClick={() => handleDelete(u.id)}>{t('common.delete')}</button>
-              </td>
+      <div className="table-scroll">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>{t('common.email')}</th>
+              <th>{t('common.role')}</th>
+              <th>{t('users.homeBranch')}</th>
+              <th></th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {users.map((u) => (
+              <tr key={u.id}>
+                <td>{u.email}</td>
+                <td>
+                  <select value={u.role} onChange={(e) => handleRoleChange(u.id, e.target.value)}>
+                    <option value="staff">staff</option>
+                    <option value="admin">admin</option>
+                  </select>
+                </td>
+                <td>
+                  <select
+                    value={u.homeLocationId ?? ''}
+                    onChange={(e) => handleHomeLocationChange(u.id, e.target.value)}
+                  >
+                    <option value="">{t('users.noHomeBranch')}</option>
+                    {locations.map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.name}
+                      </option>
+                    ))}
+                  </select>
+                </td>
+                <td className="actions">
+                  <button onClick={() => handleDelete(u.id)}>{t('common.delete')}</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }

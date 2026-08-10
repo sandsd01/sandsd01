@@ -144,22 +144,24 @@ export function ProductMovementsPage() {
       {byLocation.length > 0 && (
         <>
           <h2>{t('movements.byLocation')}</h2>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>{t('movements.location')}</th>
-                <th>{t('products.quantity')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {byLocation.map((l) => (
-                <tr key={l.locationId ?? 'unassigned'}>
-                  <td>{l.name}</td>
-                  <td>{l.quantity}</td>
+          <div className="table-scroll">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>{t('movements.location')}</th>
+                  <th>{t('products.quantity')}</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {byLocation.map((l) => (
+                  <tr key={l.locationId ?? 'unassigned'}>
+                    <td>{l.name}</td>
+                    <td>{l.quantity}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </>
       )}
 
@@ -170,34 +172,36 @@ export function ProductMovementsPage() {
       {movements.length === 0 ? (
         <p>{t('movements.none')}</p>
       ) : (
-        <table className="table">
-          <thead>
-            <tr>
-              <th>{t('movements.date')}</th>
-              <th>{t('movements.type.col')}</th>
-              <th>{t('movements.quantity')}</th>
-              <th>{t('movements.location')}</th>
-              <th>{t('movements.note')}</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {movements.map((m) => (
-              <tr key={m.id}>
-                <td>{new Date(m.createdAt).toLocaleString()}</td>
-                <td>{m.type}</td>
-                <td>{m.quantity}</td>
-                <td>{m.location?.name || t('movements.noLocation')}</td>
-                <td>{m.note || '-'}</td>
-                <td>
-                  {user?.role === 'admin' && (
-                    <button onClick={() => handleDeleteMovement(m.id)}>{t('common.delete')}</button>
-                  )}
-                </td>
+        <div className="table-scroll">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>{t('movements.date')}</th>
+                <th>{t('movements.type.col')}</th>
+                <th>{t('movements.quantity')}</th>
+                <th>{t('movements.location')}</th>
+                <th>{t('movements.note')}</th>
+                <th></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {movements.map((m) => (
+                <tr key={m.id}>
+                  <td>{new Date(m.createdAt).toLocaleString()}</td>
+                  <td>{m.type}</td>
+                  <td>{m.quantity}</td>
+                  <td>{m.location?.name || t('movements.noLocation')}</td>
+                  <td>{m.note || '-'}</td>
+                  <td>
+                    {user?.role === 'admin' && (
+                      <button onClick={() => handleDeleteMovement(m.id)}>{t('common.delete')}</button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   )

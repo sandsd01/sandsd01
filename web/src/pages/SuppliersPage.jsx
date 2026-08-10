@@ -90,28 +90,30 @@ export function SuppliersPage() {
       {suppliers.length === 0 ? (
         <p>{t('products.noneFound')}</p>
       ) : (
-        <table className="table">
-          <thead>
-            <tr>
-              <th>{t('common.name')}</th>
-              <th>{t('suppliers.contactEmail')}</th>
-              <th>{t('suppliers.contactPhone')}</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {suppliers.map((s) => (
-              <tr key={s.id}>
-                <td>{s.name}</td>
-                <td>{s.contactEmail || '-'}</td>
-                <td>{s.contactPhone || '-'}</td>
-                <td className="actions">
-                  <button onClick={() => handleDelete(s.id)}>{t('common.delete')}</button>
-                </td>
+        <div className="table-scroll">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>{t('common.name')}</th>
+                <th>{t('suppliers.contactEmail')}</th>
+                <th>{t('suppliers.contactPhone')}</th>
+                <th></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {suppliers.map((s) => (
+                <tr key={s.id}>
+                  <td>{s.name}</td>
+                  <td>{s.contactEmail || '-'}</td>
+                  <td>{s.contactPhone || '-'}</td>
+                  <td className="actions">
+                    <button onClick={() => handleDelete(s.id)}>{t('common.delete')}</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   )

@@ -307,13 +307,19 @@ button:disabled {
 }
 
 .stat-row {
-  display: flex;
+  /* Grid rather than a flex row: the tiles hold a figure that can't wrap, so
+     on a narrow screen a non-wrapping row pushes them past the viewport and
+     the whole page scrolls sideways. auto-fit drops them onto a new line
+     instead, and keeps them side by side wherever they fit. */
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 16px;
   margin-bottom: 24px;
 }
 
 .stat-tile {
   flex: 1;
+  min-width: 0;
   background: var(--bg-subtle);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -1341,5 +1347,23 @@ th.money-cell {
 @media (max-width: 860px) {
   .shift-columns {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Below this the two POS columns can't both hold their minimums: the cart
+   keeps its 280px and the product side gets squeezed under its content's
+   min-width, which then spills out sideways — and because the cart is
+   sticky (its own stacking context) it paints over the spill. Stack them. */
+@media (max-width: 780px) {
+  .pos-layout {
+    flex-direction: column;
+  }
+
+  .pos-cart-column {
+    /* Sticky is what makes the cart follow a long product list on a wide
+       screen. Stacked, it would pin the cart over the products instead. */
+    position: static;
+    min-width: 0;
+    width: 100%;
   }
 }

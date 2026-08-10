@@ -136,60 +136,64 @@ export function ReportsPage() {
       {summary.lowStockProducts.length === 0 ? (
         <p>{t('reports.nothingLow')}</p>
       ) : (
-        <table className="table">
-          <thead>
-            <tr>
-              <th>{t('products.sku')}</th>
-              <th>{t('common.name')}</th>
-              <th>{t('products.quantity')}</th>
-              <th>{t('products.reorderLevel')}</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {summary.lowStockProducts.map((p) => (
-              <tr key={p.id} className="low-stock">
-                <td>{p.sku}</td>
-                <td>{p.name}</td>
-                <td>{p.quantity}</td>
-                <td>{p.reorderLevel}</td>
-                <td>
-                  <Link to={`/products/${p.id}/movements`}>{t('products.recordMovement')}</Link>
-                </td>
+        <div className="table-scroll">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>{t('products.sku')}</th>
+                <th>{t('common.name')}</th>
+                <th>{t('products.quantity')}</th>
+                <th>{t('products.reorderLevel')}</th>
+                <th></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {summary.lowStockProducts.map((p) => (
+                <tr key={p.id} className="low-stock">
+                  <td>{p.sku}</td>
+                  <td>{p.name}</td>
+                  <td>{p.quantity}</td>
+                  <td>{p.reorderLevel}</td>
+                  <td>
+                    <Link to={`/products/${p.id}/movements`}>{t('products.recordMovement')}</Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
       <h2>{t('reports.recentMovements')}</h2>
       {summary.recentMovements.length === 0 ? (
         <p>{t('reports.noMovements')}</p>
       ) : (
-        <table className="table">
-          <thead>
-            <tr>
-              <th>{t('movements.date')}</th>
-              <th>{t('common.name')}</th>
-              <th>{t('movements.type.col')}</th>
-              <th>{t('movements.quantity')}</th>
-              <th>{t('activityLog.user')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {summary.recentMovements.map((m) => (
-              <tr key={m.id}>
-                <td>{new Date(m.createdAt).toLocaleString()}</td>
-                <td>
-                  {m.product.name} ({m.product.sku})
-                </td>
-                <td>{m.type}</td>
-                <td>{m.quantity}</td>
-                <td>{m.createdByEmail}</td>
+        <div className="table-scroll">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>{t('movements.date')}</th>
+                <th>{t('common.name')}</th>
+                <th>{t('movements.type.col')}</th>
+                <th>{t('movements.quantity')}</th>
+                <th>{t('activityLog.user')}</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {summary.recentMovements.map((m) => (
+                <tr key={m.id}>
+                  <td>{new Date(m.createdAt).toLocaleString()}</td>
+                  <td>
+                    {m.product.name} ({m.product.sku})
+                  </td>
+                  <td>{m.type}</td>
+                  <td>{m.quantity}</td>
+                  <td>{m.createdByEmail}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
       <h2>{t('reports.salesTitle')}</h2>
@@ -222,24 +226,26 @@ export function ReportsPage() {
           {isAdmin && salesSummary.revenueByLocation.length > 0 && (
             <>
               <h3>{t('reports.revenueByBranch')}</h3>
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>{t('reports.branch')}</th>
-                    <th>{t('reports.revenue')}</th>
-                    <th>{t('sales.title')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {salesSummary.revenueByLocation.map((l) => (
-                    <tr key={l.locationId}>
-                      <td>{l.name}</td>
-                      <td>{l.revenue.toFixed(2)}</td>
-                      <td>{l.count}</td>
+              <div className="table-scroll">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>{t('reports.branch')}</th>
+                      <th>{t('reports.revenue')}</th>
+                      <th>{t('sales.title')}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {salesSummary.revenueByLocation.map((l) => (
+                      <tr key={l.locationId}>
+                        <td>{l.name}</td>
+                        <td>{l.revenue.toFixed(2)}</td>
+                        <td>{l.count}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </>
           )}
 
@@ -247,26 +253,28 @@ export function ReportsPage() {
           {salesSummary.topProducts.length === 0 ? (
             <p>{t('reports.noSales')}</p>
           ) : (
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>{t('products.sku')}</th>
-                  <th>{t('common.name')}</th>
-                  <th>{t('reports.quantitySold')}</th>
-                  <th>{t('reports.revenue')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {salesSummary.topProducts.map((p) => (
-                  <tr key={p.productId}>
-                    <td>{p.product?.sku ?? '-'}</td>
-                    <td>{p.product?.name ?? '-'}</td>
-                    <td>{p.quantitySold}</td>
-                    <td>{p.revenue.toFixed(2)}</td>
+            <div className="table-scroll">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>{t('products.sku')}</th>
+                    <th>{t('common.name')}</th>
+                    <th>{t('reports.quantitySold')}</th>
+                    <th>{t('reports.revenue')}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {salesSummary.topProducts.map((p) => (
+                    <tr key={p.productId}>
+                      <td>{p.product?.sku ?? '-'}</td>
+                      <td>{p.product?.name ?? '-'}</td>
+                      <td>{p.quantitySold}</td>
+                      <td>{p.revenue.toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </>
       )}

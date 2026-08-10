@@ -266,77 +266,79 @@ export function ProductsPage() {
         <p>{t('products.noneFound')}</p>
       ) : (
         <>
-          <table className="table">
-            <thead>
-              <tr>
-                {isAdmin && (
-                  <th>
-                    <input
-                      type="checkbox"
-                      checked={selected.size === products.length}
-                      onChange={toggleSelectAll}
-                    />
-                  </th>
-                )}
-                <th></th>
-                <th className="sortable" onClick={() => toggleSort('sku')}>
-                  {t('products.sku')}
-                  {sortIndicator('sku')}
-                </th>
-                <th className="sortable" onClick={() => toggleSort('name')}>
-                  {t('common.name')}
-                  {sortIndicator('name')}
-                </th>
-                <th className="sortable" onClick={() => toggleSort('category')}>
-                  {t('products.category')}
-                  {sortIndicator('category')}
-                </th>
-                <th>{t('products.unit')}</th>
-                <th className="sortable" onClick={() => toggleSort('quantity')}>
-                  {t('products.quantity')}
-                  {sortIndicator('quantity')}
-                </th>
-                <th className="sortable" onClick={() => toggleSort('reorderLevel')}>
-                  {t('products.reorderLevel')}
-                  {sortIndicator('reorderLevel')}
-                </th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {products.map((p) => (
-                <tr key={p.id} className={p.quantity <= p.reorderLevel ? 'low-stock' : ''}>
+          <div className="table-scroll">
+            <table className="table">
+              <thead>
+                <tr>
                   {isAdmin && (
-                    <td>
+                    <th>
                       <input
                         type="checkbox"
-                        checked={selected.has(p.id)}
-                        onChange={() => toggleSelected(p.id)}
+                        checked={selected.size === products.length}
+                        onChange={toggleSelectAll}
                       />
-                    </td>
+                    </th>
                   )}
-                  <td>
-                    {p.imageUrl && <img src={p.imageUrl} alt={p.name} className="thumb" />}
-                  </td>
-                  <td>{p.sku}</td>
-                  <td>{p.name}</td>
-                  <td>{p.category || '-'}</td>
-                  <td>{p.unit}</td>
-                  <td>{p.quantity}</td>
-                  <td>{p.reorderLevel}</td>
-                  <td className="actions">
-                    <Link to={`/products/${p.id}/movements`}>{t('products.recordMovement')}</Link>
-                    {isAdmin && (
-                      <>
-                        <Link to={`/products/${p.id}/edit`}>{t('common.edit')}</Link>
-                        <button onClick={() => handleDelete(p.id)}>{t('common.delete')}</button>
-                      </>
-                    )}
-                  </td>
+                  <th></th>
+                  <th className="sortable" onClick={() => toggleSort('sku')}>
+                    {t('products.sku')}
+                    {sortIndicator('sku')}
+                  </th>
+                  <th className="sortable" onClick={() => toggleSort('name')}>
+                    {t('common.name')}
+                    {sortIndicator('name')}
+                  </th>
+                  <th className="sortable" onClick={() => toggleSort('category')}>
+                    {t('products.category')}
+                    {sortIndicator('category')}
+                  </th>
+                  <th>{t('products.unit')}</th>
+                  <th className="sortable" onClick={() => toggleSort('quantity')}>
+                    {t('products.quantity')}
+                    {sortIndicator('quantity')}
+                  </th>
+                  <th className="sortable" onClick={() => toggleSort('reorderLevel')}>
+                    {t('products.reorderLevel')}
+                    {sortIndicator('reorderLevel')}
+                  </th>
+                  <th></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {products.map((p) => (
+                  <tr key={p.id} className={p.quantity <= p.reorderLevel ? 'low-stock' : ''}>
+                    {isAdmin && (
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={selected.has(p.id)}
+                          onChange={() => toggleSelected(p.id)}
+                        />
+                      </td>
+                    )}
+                    <td>
+                      {p.imageUrl && <img src={p.imageUrl} alt={p.name} className="thumb" />}
+                    </td>
+                    <td>{p.sku}</td>
+                    <td>{p.name}</td>
+                    <td>{p.category || '-'}</td>
+                    <td>{p.unit}</td>
+                    <td>{p.quantity}</td>
+                    <td>{p.reorderLevel}</td>
+                    <td className="actions">
+                      <Link to={`/products/${p.id}/movements`}>{t('products.recordMovement')}</Link>
+                      {isAdmin && (
+                        <>
+                          <Link to={`/products/${p.id}/edit`}>{t('common.edit')}</Link>
+                          <button onClick={() => handleDelete(p.id)}>{t('common.delete')}</button>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
           <div className="pagination">
             <button disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>

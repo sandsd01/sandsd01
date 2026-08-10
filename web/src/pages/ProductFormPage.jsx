@@ -363,48 +363,50 @@ export function ProductFormPage() {
                 {t('modifiers.required')}
               </label>
 
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>{t('modifiers.optionName')}</th>
-                    <th>{t('modifiers.priceDelta')}</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {group.options.map((option) => (
-                    <tr key={option.id}>
-                      <td>
-                        <input
-                          key={`opt-name-${option.id}-${option.name}`}
-                          defaultValue={option.name}
-                          onBlur={(e) =>
-                            e.target.value !== option.name &&
-                            handleUpdateOption(option.id, 'name', e.target.value)
-                          }
-                        />
-                      </td>
-                      <td>
-                        <input
-                          key={`opt-price-${option.id}-${option.priceDelta}`}
-                          type="number"
-                          step="0.01"
-                          defaultValue={option.priceDelta}
-                          onBlur={(e) =>
-                            Number(e.target.value) !== option.priceDelta &&
-                            handleUpdateOption(option.id, 'priceDelta', Number(e.target.value))
-                          }
-                        />
-                      </td>
-                      <td>
-                        <button type="button" onClick={() => handleDeleteOption(option.id)}>
-                          {t('modifiers.deleteOption')}
-                        </button>
-                      </td>
+              <div className="table-scroll">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>{t('modifiers.optionName')}</th>
+                      <th>{t('modifiers.priceDelta')}</th>
+                      <th></th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {group.options.map((option) => (
+                      <tr key={option.id}>
+                        <td>
+                          <input
+                            key={`opt-name-${option.id}-${option.name}`}
+                            defaultValue={option.name}
+                            onBlur={(e) =>
+                              e.target.value !== option.name &&
+                              handleUpdateOption(option.id, 'name', e.target.value)
+                            }
+                          />
+                        </td>
+                        <td>
+                          <input
+                            key={`opt-price-${option.id}-${option.priceDelta}`}
+                            type="number"
+                            step="0.01"
+                            defaultValue={option.priceDelta}
+                            onBlur={(e) =>
+                              Number(e.target.value) !== option.priceDelta &&
+                              handleUpdateOption(option.id, 'priceDelta', Number(e.target.value))
+                            }
+                          />
+                        </td>
+                        <td>
+                          <button type="button" onClick={() => handleDeleteOption(option.id)}>
+                            {t('modifiers.deleteOption')}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
 
               <form className="inline-form" onSubmit={(e) => handleAddOption(group.id, e)}>
                 <label>

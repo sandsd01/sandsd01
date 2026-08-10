@@ -110,28 +110,30 @@ export function SaleDetailPage() {
       )}
 
       <h2>{t('sales.items')}</h2>
-      <table className="table">
-        <thead>
-          <tr>
-            <th>{t('sales.product')}</th>
-            <th>{t('sales.modifiers')}</th>
-            <th>{t('sales.unitPrice')}</th>
-            <th>{t('sales.quantity')}</th>
-            <th>{t('sales.lineTotal')}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sale.items.map((item) => (
-            <tr key={item.id}>
-              <td>{item.productName}</td>
-              <td>{item.modifiers.length > 0 ? item.modifiers.map((m) => m.name).join(', ') : '-'}</td>
-              <td>{item.unitPrice.toFixed(2)}</td>
-              <td>{item.quantity}</td>
-              <td>{item.lineTotal.toFixed(2)}</td>
+      <div className="table-scroll">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>{t('sales.product')}</th>
+              <th>{t('sales.modifiers')}</th>
+              <th>{t('sales.unitPrice')}</th>
+              <th>{t('sales.quantity')}</th>
+              <th>{t('sales.lineTotal')}</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {sale.items.map((item) => (
+              <tr key={item.id}>
+                <td>{item.productName}</td>
+                <td>{item.modifiers.length > 0 ? item.modifiers.map((m) => m.name).join(', ') : '-'}</td>
+                <td>{item.unitPrice.toFixed(2)}</td>
+                <td>{item.quantity}</td>
+                <td>{item.lineTotal.toFixed(2)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       <p className="cart-totals">
         <span>{t('pos.total')}</span>

@@ -62,30 +62,32 @@ export function PurchaseOrdersPage() {
       ) : orders.length === 0 ? (
         <p>{t('po.noneFound')}</p>
       ) : (
-        <table className="table">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>{t('po.supplier')}</th>
-              <th>{t('po.status')}</th>
-              <th>{t('po.items')}</th>
-              <th>{t('po.createdAt')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {orders.map((o) => (
-              <tr key={o.id}>
-                <td>
-                  <Link to={`/purchase-orders/${o.id}`}>PO-{o.id}</Link>
-                </td>
-                <td>{o.supplier.name}</td>
-                <td>{t(`po.status.${o.status}`)}</td>
-                <td>{o.items.length}</td>
-                <td>{new Date(o.createdAt).toLocaleString()}</td>
+        <div className="table-scroll">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>{t('po.supplier')}</th>
+                <th>{t('po.status')}</th>
+                <th>{t('po.items')}</th>
+                <th>{t('po.createdAt')}</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {orders.map((o) => (
+                <tr key={o.id}>
+                  <td>
+                    <Link to={`/purchase-orders/${o.id}`}>PO-{o.id}</Link>
+                  </td>
+                  <td>{o.supplier.name}</td>
+                  <td>{t(`po.status.${o.status}`)}</td>
+                  <td>{o.items.length}</td>
+                  <td>{new Date(o.createdAt).toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   )

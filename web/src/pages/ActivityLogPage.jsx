@@ -39,31 +39,33 @@ export function ActivityLogPage() {
         <p>{t('products.noneFound')}</p>
       ) : (
         <>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>{t('activityLog.time')}</th>
-                <th>{t('activityLog.user')}</th>
-                <th>{t('activityLog.action')}</th>
-                <th>{t('activityLog.entity')}</th>
-                <th>Details</th>
-              </tr>
-            </thead>
-            <tbody>
-              {entries.map((e) => (
-                <tr key={e.id}>
-                  <td>{new Date(e.createdAt).toLocaleString()}</td>
-                  <td>{e.userEmail}</td>
-                  <td>{e.action}</td>
-                  <td>
-                    {e.entityType}
-                    {e.entityId ? ` #${e.entityId}` : ''}
-                  </td>
-                  <td>{e.details ? JSON.stringify(e.details) : '-'}</td>
+          <div className="table-scroll">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>{t('activityLog.time')}</th>
+                  <th>{t('activityLog.user')}</th>
+                  <th>{t('activityLog.action')}</th>
+                  <th>{t('activityLog.entity')}</th>
+                  <th>Details</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {entries.map((e) => (
+                  <tr key={e.id}>
+                    <td>{new Date(e.createdAt).toLocaleString()}</td>
+                    <td>{e.userEmail}</td>
+                    <td>{e.action}</td>
+                    <td>
+                      {e.entityType}
+                      {e.entityId ? ` #${e.entityId}` : ''}
+                    </td>
+                    <td>{e.details ? JSON.stringify(e.details) : '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
           <div className="pagination">
             <button disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
