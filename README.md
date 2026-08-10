@@ -57,6 +57,42 @@ npm test            # migrates the test database and runs the full backend suite
 | `npm run seed:menu` | Seed 2 sample branches and a burger/fries/drinks menu (with modifiers and initial stock) — safe to re-run |
 | `npm run dev:fresh` | Reset the database (`prisma migrate reset`), re-migrate, run `seed` + `seed:menu`, then start the API — a one-command reset for local testing |
 
+## Deploying
+
+The app ships as a single container: the API serves the built SPA from the same
+origin, so there is one service and one URL to manage.
+
+```bash
+docker build -t pos .
+docker run -p 3000:3000 \
+  -e DATABASE_URL="postgresql://user:pass@host:5432/pos" \
+  -e JWT_SECRET="$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")" \
+  -e TRUST_PROXY=1 \
+  pos
+```
+
+The container runs `prisma migrate deploy` before starting, so a fresh database
+is migrated on first boot.
+
+Required in production:
+
+| Variable | Why |
+| --- | --- |
+| `DATABASE_URL` | PostgreSQL connection string. The app refuses to start without it |
+| `JWT_SECRET` | Random, 32+ characters. The app refuses to start on a missing, placeholder, or short value |
+| `TRUST_PROXY` | Set to the number of proxy hops (usually `1`) behind a load balancer, so rate limiting sees real client IPs |
+
+Strongly recommended:
+
+| Variable | Why |
+| --- | --- |
+| `S3_BUCKET` + `S3_PUBLIC_BASE_URL` | Product images and branch PromptPay QR codes are otherwise written to the container filesystem and **lost on every redeploy**. Mount a persistent volume at `/app/uploads` if you'd rather not use object storage |
+| `CRON_TIMEZONE` | Defaults to `Asia/Bangkok`; the daily summary fires at 8am in this zone |
+| `CORS_ORIGIN` | Only needed if the frontend is hosted separately from the API |
+
+Serve it behind TLS. The JWT lives in `localStorage` and is sent on every
+request, so plain HTTP exposes it to anyone on the network path.
+
 ## API overview
 
 All API routes are namespaced under `/api` (so client-side SPA routes like `/sales` can't collide with them). All endpoints except `/api/auth/login` require `Authorization: Bearer <token>`. `/health` (unprefixed) is available for load-balancer health checks.

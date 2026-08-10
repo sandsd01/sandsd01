@@ -1,0 +1,13 @@
+node_modules
+web/node_modules
+web/dist
+.git
+.github
+.env
+*.db
+*.db-journal
+uploads/*
+!uploads/.gitkeep
+tests
+coverage
+npm-debug.log*
