@@ -29,6 +29,7 @@ Frontend (`cd web` first):
 npm install
 npm run dev     # http://localhost:5173, proxies /api/* to the backend
 npm run build   # production build, also run in CI
+npm run lint    # oxlint
 ```
 
 ## Architecture
