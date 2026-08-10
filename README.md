@@ -7,9 +7,9 @@ Basic stock management system with two roles — **admin** and **staff**. Includ
 
 ## Stack
 
-- **Backend**: Node.js + Express 5, Prisma ORM + SQLite (`@prisma/adapter-better-sqlite3`), JWT auth
+- **Backend**: Node.js + Express 5, Prisma ORM + PostgreSQL (`@prisma/adapter-pg`), JWT auth
 - **Frontend**: React + Vite SPA (`web/`), React Router
-- **Tests**: `node:test` + Supertest against a dedicated SQLite test database
+- **Tests**: `node:test` + Supertest against a dedicated PostgreSQL test database
 - **CI**: GitHub Actions (`.github/workflows/ci.yml`) — runs backend tests and builds the frontend on every push/PR
 
 ## Setup
@@ -17,7 +17,7 @@ Basic stock management system with two roles — **admin** and **staff**. Includ
 ```bash
 npm install                 # installs deps and generates the Prisma client (postinstall)
 cp .env.example .env        # set JWT_SECRET to a real random value for anything beyond local dev
-npx prisma migrate deploy   # create dev.db and apply migrations
+npx prisma migrate deploy   # apply migrations to the database in DATABASE_URL
 npm run seed                # creates the initial admin user (admin@example.com / changeme123 by default)
 npm run seed:menu           # optional: seeds 2 branches + a sample burger/fries/drinks menu with modifiers and stock
 ```
@@ -41,7 +41,7 @@ Open `http://localhost:5173` and log in with the seeded admin account (or whatev
 ## Tests
 
 ```bash
-npm test            # migrates test.db and runs the full backend test suite (node:test)
+npm test            # migrates the test database and runs the full backend suite (node:test)
 ```
 
 ## Scripts
@@ -50,12 +50,12 @@ npm test            # migrates test.db and runs the full backend test suite (nod
 | --- | --- |
 | `npm start` | Run the API once (production-style) |
 | `npm run dev` | Run the API with auto-restart on file changes |
-| `npm test` | Migrate `test.db` and run backend tests |
+| `npm test` | Migrate the test database and run backend tests (override the URL with `TEST_DATABASE_URL`) |
 | `npm run prisma:migrate` | Create/apply a new dev migration |
 | `npm run prisma:generate` | Regenerate the Prisma client |
-| `npm run seed` | Create the initial admin user in `dev.db` |
-| `npm run seed:menu` | Seed 2 sample branches and a burger/fries/drinks menu (with modifiers and initial stock) into `dev.db` — safe to re-run |
-| `npm run dev:fresh` | Delete `dev.db`, re-migrate, run `seed` + `seed:menu`, then start the API — a one-command reset for local testing |
+| `npm run seed` | Create the initial admin user |
+| `npm run seed:menu` | Seed 2 sample branches and a burger/fries/drinks menu (with modifiers and initial stock) — safe to re-run |
+| `npm run dev:fresh` | Reset the database (`prisma migrate reset`), re-migrate, run `seed` + `seed:menu`, then start the API — a one-command reset for local testing |
 
 ## API overview
 
