@@ -68,7 +68,28 @@ router.post("/login", authLimiter, async (req, res) => {
     { expiresIn: "8h" }
   );
 
-  res.json({ token, user: { id: user.id, email: user.email, role: user.role } });
+  res.json({
+    token,
+    user: {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      homeLocationId: user.homeLocationId,
+    },
+  });
+});
+
+router.get("/me", authenticate, async (req, res) => {
+  const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+  if (!user) return res.status(404).json({ error: "User not found" });
+
+  res.json({
+    id: user.id,
+    email: user.email,
+    role: user.role,
+    homeLocationId: user.homeLocationId,
+    createdAt: user.createdAt,
+  });
 });
 
 router.post("/logout", (_req, res) => {

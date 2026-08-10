@@ -46,6 +46,60 @@ describe("POST /auth/login", () => {
   });
 });
 
+describe("GET /auth/me", () => {
+  beforeEach(async () => {
+    await resetDb();
+  });
+
+  test("requires authentication", async () => {
+    const res = await request(app).get("/auth/me");
+    assert.equal(res.status, 401);
+  });
+
+  test("returns the caller's own profile without the password hash", async () => {
+    await createUser({ email: "admin@test.com", password: "adminpass1", role: "admin" });
+    const login = await request(app)
+      .post("/auth/login")
+      .send({ email: "admin@test.com", password: "adminpass1" });
+
+    const res = await request(app)
+      .get("/auth/me")
+      .set("Authorization", `Bearer ${login.body.token}`);
+
+    assert.equal(res.status, 200);
+    assert.equal(res.body.email, "admin@test.com");
+    assert.equal(res.body.role, "admin");
+    assert.equal(res.body.homeLocationId, null);
+    assert.equal(res.body.passwordHash, undefined);
+  });
+
+  test("exposes a staff member's home branch, and login returns it too", async () => {
+    const location = await prisma.location.create({ data: { name: "Siam Branch" } });
+    const staff = await createUser({
+      email: "staff@test.com",
+      password: "staffpass1",
+      role: "staff",
+    });
+    await prisma.user.update({
+      where: { id: staff.id },
+      data: { homeLocationId: location.id },
+    });
+
+    const login = await request(app)
+      .post("/auth/login")
+      .send({ email: "staff@test.com", password: "staffpass1" });
+    assert.equal(login.body.user.homeLocationId, location.id);
+
+    const res = await request(app)
+      .get("/auth/me")
+      .set("Authorization", `Bearer ${login.body.token}`);
+
+    assert.equal(res.status, 200);
+    assert.equal(res.body.homeLocationId, location.id);
+    assert.equal(res.body.role, "staff");
+  });
+});
+
 describe("PATCH /auth/password", () => {
   let token;
 

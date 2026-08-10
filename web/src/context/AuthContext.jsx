@@ -31,6 +31,15 @@ export function AuthProvider({ children }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Refresh the cached user on load so sessions stored before a field was added
+  // (e.g. homeLocationId) pick it up without needing to log out and back in.
+  useEffect(() => {
+    if (!token) return
+    apiFetch('/auth/me', { token })
+      .then(setUser)
+      .catch(() => {})
+  }, [token])
+
   async function login(email, password) {
     const data = await apiFetch('/auth/login', { method: 'POST', body: { email, password } })
     setToken(data.token)
