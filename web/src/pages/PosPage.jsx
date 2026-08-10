@@ -311,31 +311,33 @@ export function PosPage() {
             {t('pos.total')}: <strong>{completedSale.total.toFixed(2)}</strong>
           </p>
 
-          <table className="table">
-            <thead>
-              <tr>
-                <th>{t('sales.product')}</th>
-                <th>{t('sales.quantity')}</th>
-                <th>{t('sales.lineTotal')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {completedSale.items.map((item) => (
-                <tr key={item.id}>
-                  <td>
-                    {item.productName}
-                    {item.modifiers.length > 0 && (
-                      <div className="cart-line-modifiers">
-                        {item.modifiers.map((m) => m.name).join(', ')}
-                      </div>
-                    )}
-                  </td>
-                  <td>{item.quantity}</td>
-                  <td>{item.lineTotal.toFixed(2)}</td>
+          <div className="table-scroll">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>{t('sales.product')}</th>
+                  <th>{t('sales.quantity')}</th>
+                  <th>{t('sales.lineTotal')}</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {completedSale.items.map((item) => (
+                  <tr key={item.id}>
+                    <td>
+                      {item.productName}
+                      {item.modifiers.length > 0 && (
+                        <div className="cart-line-modifiers">
+                          {item.modifiers.map((m) => m.name).join(', ')}
+                        </div>
+                      )}
+                    </td>
+                    <td>{item.quantity}</td>
+                    <td>{item.lineTotal.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
           {checkoutError && <p className="error">{checkoutError}</p>}
 

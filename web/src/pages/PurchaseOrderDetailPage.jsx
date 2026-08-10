@@ -155,49 +155,51 @@ export function PurchaseOrderDetailPage() {
             </select>
           </label>
         )}
-        <table className="table">
-          <thead>
-            <tr>
-              <th>{t('products.sku')}</th>
-              <th>{t('common.name')}</th>
-              <th>{t('po.quantityOrdered')}</th>
-              <th>{t('po.quantityReceived')}</th>
-              <th>{t('po.remaining')}</th>
-              <th>{t('po.unitCost')}</th>
-              {canReceive && <th>{t('po.receive')}</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {order.items.map((item) => {
-              const remaining = item.quantityOrdered - item.quantityReceived
-              return (
-                <tr key={item.id}>
-                  <td>{item.product.sku}</td>
-                  <td>{item.product.name}</td>
-                  <td>{item.quantityOrdered}</td>
-                  <td>{item.quantityReceived}</td>
-                  <td>{remaining}</td>
-                  <td>{item.unitCost ?? '-'}</td>
-                  {canReceive && (
-                    <td>
-                      {remaining > 0 && (
-                        <input
-                          type="number"
-                          min="0"
-                          max={remaining}
-                          value={receiveQuantities[item.id] ?? ''}
-                          onChange={(e) =>
-                            setReceiveQuantities((prev) => ({ ...prev, [item.id]: e.target.value }))
-                          }
-                        />
-                      )}
-                    </td>
-                  )}
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+        <div className="table-scroll">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>{t('products.sku')}</th>
+                <th>{t('common.name')}</th>
+                <th>{t('po.quantityOrdered')}</th>
+                <th>{t('po.quantityReceived')}</th>
+                <th>{t('po.remaining')}</th>
+                <th>{t('po.unitCost')}</th>
+                {canReceive && <th>{t('po.receive')}</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {order.items.map((item) => {
+                const remaining = item.quantityOrdered - item.quantityReceived
+                return (
+                  <tr key={item.id}>
+                    <td>{item.product.sku}</td>
+                    <td>{item.product.name}</td>
+                    <td>{item.quantityOrdered}</td>
+                    <td>{item.quantityReceived}</td>
+                    <td>{remaining}</td>
+                    <td>{item.unitCost ?? '-'}</td>
+                    {canReceive && (
+                      <td>
+                        {remaining > 0 && (
+                          <input
+                            type="number"
+                            min="0"
+                            max={remaining}
+                            value={receiveQuantities[item.id] ?? ''}
+                            onChange={(e) =>
+                              setReceiveQuantities((prev) => ({ ...prev, [item.id]: e.target.value }))
+                            }
+                          />
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
         {canReceive && <button type="submit">{t('po.receiveStock')}</button>}
       </form>
     </div>

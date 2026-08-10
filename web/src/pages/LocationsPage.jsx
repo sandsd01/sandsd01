@@ -143,59 +143,61 @@ export function LocationsPage() {
       {locations.length === 0 ? (
         <p>{t('products.noneFound')}</p>
       ) : (
-        <table className="table">
-          <thead>
-            <tr>
-              <th>{t('common.name')}</th>
-              <th>{t('locations.address')}</th>
-              <th>{t('locations.phone')}</th>
-              <th>{t('locations.status')}</th>
-              <th>{t('locations.promptPayQr')}</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {locations.map((l) => (
-              <tr key={l.id}>
-                <td>{l.name}</td>
-                <td>{l.address || '-'}</td>
-                <td>{l.phone || '-'}</td>
-                <td>{l.isActive ? t('locations.active') : t('locations.inactive')}</td>
-                <td className="qr-cell">
-                  {l.promptPayQrUrl ? (
-                    <img src={l.promptPayQrUrl} alt="" className="location-qr-thumb" />
-                  ) : (
-                    <span className="hint">{t('locations.promptPayQrNone')}</span>
-                  )}
-                  <label className="file-input-label">
-                    {l.promptPayQrUrl ? t('locations.promptPayQrReplace') : t('locations.promptPayQrUpload')}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      disabled={qrBusyId === l.id}
-                      onChange={(e) => handleQrUpload(l.id, e)}
-                    />
-                  </label>
-                  {l.promptPayQrUrl && (
-                    <button
-                      type="button"
-                      disabled={qrBusyId === l.id}
-                      onClick={() => handleQrRemove(l.id)}
-                    >
-                      {t('locations.promptPayQrRemove')}
-                    </button>
-                  )}
-                </td>
-                <td className="actions">
-                  <button onClick={() => handleToggleActive(l)}>
-                    {l.isActive ? t('locations.deactivate') : t('locations.activate')}
-                  </button>
-                  <button onClick={() => handleDelete(l.id)}>{t('common.delete')}</button>
-                </td>
+        <div className="table-scroll">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>{t('common.name')}</th>
+                <th>{t('locations.address')}</th>
+                <th>{t('locations.phone')}</th>
+                <th>{t('locations.status')}</th>
+                <th>{t('locations.promptPayQr')}</th>
+                <th></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {locations.map((l) => (
+                <tr key={l.id}>
+                  <td>{l.name}</td>
+                  <td>{l.address || '-'}</td>
+                  <td>{l.phone || '-'}</td>
+                  <td>{l.isActive ? t('locations.active') : t('locations.inactive')}</td>
+                  <td className="qr-cell">
+                    {l.promptPayQrUrl ? (
+                      <img src={l.promptPayQrUrl} alt="" className="location-qr-thumb" />
+                    ) : (
+                      <span className="hint">{t('locations.promptPayQrNone')}</span>
+                    )}
+                    <label className="file-input-label">
+                      {l.promptPayQrUrl ? t('locations.promptPayQrReplace') : t('locations.promptPayQrUpload')}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        disabled={qrBusyId === l.id}
+                        onChange={(e) => handleQrUpload(l.id, e)}
+                      />
+                    </label>
+                    {l.promptPayQrUrl && (
+                      <button
+                        type="button"
+                        disabled={qrBusyId === l.id}
+                        onClick={() => handleQrRemove(l.id)}
+                      >
+                        {t('locations.promptPayQrRemove')}
+                      </button>
+                    )}
+                  </td>
+                  <td className="actions">
+                    <button onClick={() => handleToggleActive(l)}>
+                      {l.isActive ? t('locations.deactivate') : t('locations.activate')}
+                    </button>
+                    <button onClick={() => handleDelete(l.id)}>{t('common.delete')}</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   )

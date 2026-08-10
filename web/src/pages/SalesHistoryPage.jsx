@@ -109,36 +109,38 @@ export function SalesHistoryPage() {
         <p>{t('sales.noneFound')}</p>
       ) : (
         <>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>{t('sales.id')}</th>
-                <th>{t('sales.date')}</th>
-                <th>{t('sales.branch')}</th>
-                <th>{t('sales.cashier')}</th>
-                <th>{t('sales.total')}</th>
-                <th>{t('sales.status')}</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {sales.map((s) => (
-                <tr key={s.id}>
-                  <td>#{s.id}</td>
-                  <td>{new Date(s.createdAt).toLocaleString()}</td>
-                  <td>{s.location.name}</td>
-                  <td>{s.cashier.email}</td>
-                  <td>{s.total.toFixed(2)}</td>
-                  <td>
-                    <span className={`status-badge ${s.status}`}>{t(`sales.status.${s.status}`)}</span>
-                  </td>
-                  <td>
-                    <Link to={`/sales/${s.id}`}>{t('sales.view')}</Link>
-                  </td>
+          <div className="table-scroll">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>{t('sales.id')}</th>
+                  <th>{t('sales.date')}</th>
+                  <th>{t('sales.branch')}</th>
+                  <th>{t('sales.cashier')}</th>
+                  <th>{t('sales.total')}</th>
+                  <th>{t('sales.status')}</th>
+                  <th></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {sales.map((s) => (
+                  <tr key={s.id}>
+                    <td>#{s.id}</td>
+                    <td>{new Date(s.createdAt).toLocaleString()}</td>
+                    <td>{s.location.name}</td>
+                    <td>{s.cashier.email}</td>
+                    <td>{s.total.toFixed(2)}</td>
+                    <td>
+                      <span className={`status-badge ${s.status}`}>{t(`sales.status.${s.status}`)}</span>
+                    </td>
+                    <td>
+                      <Link to={`/sales/${s.id}`}>{t('sales.view')}</Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
           <div className="pagination">
             <button disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
