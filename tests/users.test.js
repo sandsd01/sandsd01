@@ -5,7 +5,7 @@ const { resetDb, createUser } = require("./helpers/db");
 const app = require("../src/app");
 
 async function login(email, password) {
-  const res = await request(app).post("/auth/login").send({ email, password });
+  const res = await request(app).post("/api/auth/login").send({ email, password });
   return res.body.token;
 }
 
@@ -22,7 +22,7 @@ describe("Users API", () => {
   });
 
   test("admin can list users without exposing password hashes", async () => {
-    const res = await request(app).get("/users").set("Authorization", `Bearer ${adminToken}`);
+    const res = await request(app).get("/api/users").set("Authorization", `Bearer ${adminToken}`);
     assert.equal(res.status, 200);
     assert.equal(res.body.length, 2);
     for (const user of res.body) {
@@ -31,13 +31,13 @@ describe("Users API", () => {
   });
 
   test("staff cannot list users", async () => {
-    const res = await request(app).get("/users").set("Authorization", `Bearer ${staffToken}`);
+    const res = await request(app).get("/api/users").set("Authorization", `Bearer ${staffToken}`);
     assert.equal(res.status, 403);
   });
 
   test("admin can create a new user", async () => {
     const res = await request(app)
-      .post("/users")
+      .post("/api/users")
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ email: "new@test.com", password: "newpass123", role: "staff" });
     assert.equal(res.status, 201);
@@ -47,7 +47,7 @@ describe("Users API", () => {
 
   test("rejects creating a user with a duplicate email", async () => {
     const res = await request(app)
-      .post("/users")
+      .post("/api/users")
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ email: "admin@test.com", password: "whatever1" });
     assert.equal(res.status, 409);
@@ -55,12 +55,12 @@ describe("Users API", () => {
 
   test("admin can change a user's role", async () => {
     const created = await request(app)
-      .post("/users")
+      .post("/api/users")
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ email: "promote@test.com", password: "pass12345", role: "staff" });
 
     const updated = await request(app)
-      .patch(`/users/${created.body.id}`)
+      .patch(`/api/users/${created.body.id}`)
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ role: "admin" });
     assert.equal(updated.status, 200);
@@ -69,19 +69,19 @@ describe("Users API", () => {
 
   test("admin can delete a user", async () => {
     const created = await request(app)
-      .post("/users")
+      .post("/api/users")
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ email: "temp@test.com", password: "pass12345" });
 
     const deleted = await request(app)
-      .delete(`/users/${created.body.id}`)
+      .delete(`/api/users/${created.body.id}`)
       .set("Authorization", `Bearer ${adminToken}`);
     assert.equal(deleted.status, 204);
   });
 
   test("staff cannot create, update, or delete users", async () => {
     const create = await request(app)
-      .post("/users")
+      .post("/api/users")
       .set("Authorization", `Bearer ${staffToken}`)
       .send({ email: "blocked@test.com", password: "pass12345" });
     assert.equal(create.status, 403);

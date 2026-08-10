@@ -5,27 +5,27 @@ const { resetDb, createUser, prisma } = require("./helpers/db");
 const app = require("../src/app");
 
 async function login(email, password) {
-  const res = await request(app).post("/auth/login").send({ email, password });
+  const res = await request(app).post("/api/auth/login").send({ email, password });
   return res.body.token;
 }
 
 async function createProduct(token, overrides = {}) {
   return request(app)
-    .post("/products")
+    .post("/api/products")
     .set("Authorization", `Bearer ${token}`)
     .send({ sku: "SKU-1", name: "Widget", unit: "pcs", ...overrides });
 }
 
 async function createLocation(token, overrides = {}) {
   return request(app)
-    .post("/locations")
+    .post("/api/locations")
     .set("Authorization", `Bearer ${token}`)
     .send({ name: "Branch", ...overrides });
 }
 
 async function stockIn(token, productId, quantity, locationId) {
   return request(app)
-    .post(`/products/${productId}/movements`)
+    .post(`/api/products/${productId}/movements`)
     .set("Authorization", `Bearer ${token}`)
     .send({ type: "in", quantity, locationId });
 }
@@ -44,7 +44,7 @@ describe("Sales API", () => {
   });
 
   test("requires authentication to create a sale", async () => {
-    const res = await request(app).post("/sales").send({});
+    const res = await request(app).post("/api/sales").send({});
     assert.equal(res.status, 401);
   });
 
@@ -54,7 +54,7 @@ describe("Sales API", () => {
     await stockIn(adminToken, product.body.id, 10, location.body.id);
 
     const res = await request(app)
-      .post("/sales")
+      .post("/api/sales")
       .set("Authorization", `Bearer ${staffToken}`)
       .send({
         locationId: location.body.id,
@@ -93,7 +93,7 @@ describe("Sales API", () => {
     await stockIn(adminToken, product.body.id, 5, branchA.body.id);
 
     const res = await request(app)
-      .post("/sales")
+      .post("/api/sales")
       .set("Authorization", `Bearer ${staffToken}`)
       .send({
         locationId: branchB.body.id,
@@ -126,19 +126,19 @@ describe("Sales API", () => {
     await stockIn(adminToken, product.body.id, 10, location.body.id);
 
     const group = await request(app)
-      .post(`/products/${product.body.id}/modifier-groups`)
+      .post(`/api/products/${product.body.id}/modifier-groups`)
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ name: "Size", selectionType: "single" });
     assert.equal(group.status, 201);
 
     const option = await request(app)
-      .post(`/products/modifier-groups/${group.body.id}/options`)
+      .post(`/api/products/modifier-groups/${group.body.id}/options`)
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ name: "Large", priceDelta: 20 });
     assert.equal(option.status, 201);
 
     const res = await request(app)
-      .post("/sales")
+      .post("/api/sales")
       .set("Authorization", `Bearer ${staffToken}`)
       .send({
         locationId: location.body.id,
@@ -161,7 +161,7 @@ describe("Sales API", () => {
     await stockIn(adminToken, product.body.id, 10, location.body.id);
 
     const sale = await request(app)
-      .post("/sales")
+      .post("/api/sales")
       .set("Authorization", `Bearer ${staffToken}`)
       .send({
         locationId: location.body.id,
@@ -171,7 +171,7 @@ describe("Sales API", () => {
     assert.equal(sale.status, 201);
 
     const voided = await request(app)
-      .post(`/sales/${sale.body.id}/void`)
+      .post(`/api/sales/${sale.body.id}/void`)
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ reason: "Customer changed their mind" });
     assert.equal(voided.status, 200);
@@ -186,7 +186,7 @@ describe("Sales API", () => {
     assert.equal(updatedProduct.quantity, 10);
 
     const secondVoid = await request(app)
-      .post(`/sales/${sale.body.id}/void`)
+      .post(`/api/sales/${sale.body.id}/void`)
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ reason: "Again" });
     assert.equal(secondVoid.status, 400);
@@ -198,7 +198,7 @@ describe("Sales API", () => {
     await stockIn(adminToken, product.body.id, 10, location.body.id);
 
     const sale = await request(app)
-      .post("/sales")
+      .post("/api/sales")
       .set("Authorization", `Bearer ${staffToken}`)
       .send({
         locationId: location.body.id,
@@ -207,14 +207,14 @@ describe("Sales API", () => {
       });
 
     const res = await request(app)
-      .post(`/sales/${sale.body.id}/void`)
+      .post(`/api/sales/${sale.body.id}/void`)
       .set("Authorization", `Bearer ${staffToken}`)
       .send({ reason: "test" });
     assert.equal(res.status, 403);
   });
 
   test("unauthenticated requests to void a sale are rejected", async () => {
-    const res = await request(app).post("/sales/1/void").send({ reason: "x" });
+    const res = await request(app).post("/api/sales/1/void").send({ reason: "x" });
     assert.equal(res.status, 401);
   });
 
@@ -226,7 +226,7 @@ describe("Sales API", () => {
     await stockIn(adminToken, product.body.id, 10, branchB.body.id);
 
     const saleA = await request(app)
-      .post("/sales")
+      .post("/api/sales")
       .set("Authorization", `Bearer ${adminToken}`)
       .send({
         locationId: branchA.body.id,
@@ -234,7 +234,7 @@ describe("Sales API", () => {
         paymentMethod: "card",
       });
     const saleB = await request(app)
-      .post("/sales")
+      .post("/api/sales")
       .set("Authorization", `Bearer ${adminToken}`)
       .send({
         locationId: branchB.body.id,
@@ -246,7 +246,7 @@ describe("Sales API", () => {
 
     await prisma.user.update({ where: { id: staffUser.id }, data: { homeLocationId: branchA.body.id } });
 
-    const res = await request(app).get("/sales").set("Authorization", `Bearer ${staffToken}`);
+    const res = await request(app).get("/api/sales").set("Authorization", `Bearer ${staffToken}`);
     assert.equal(res.status, 200);
     assert.equal(res.body.data.length, 1);
     assert.equal(res.body.data[0].id, saleA.body.id);
@@ -263,7 +263,7 @@ describe("Sales API", () => {
     await prisma.user.update({ where: { id: staffUser.id }, data: { homeLocationId: home.body.id } });
 
     const res = await request(app)
-      .post("/sales")
+      .post("/api/sales")
       .set("Authorization", `Bearer ${staffToken}`)
       .send({
         locationId: other.body.id,
@@ -281,7 +281,7 @@ describe("Sales API", () => {
 
     // ...but their own branch still works.
     const ok = await request(app)
-      .post("/sales")
+      .post("/api/sales")
       .set("Authorization", `Bearer ${staffToken}`)
       .send({
         locationId: home.body.id,
@@ -297,7 +297,7 @@ describe("Sales API", () => {
     await stockIn(adminToken, product.body.id, 5, branch.body.id);
 
     const res = await request(app)
-      .post("/sales")
+      .post("/api/sales")
       .set("Authorization", `Bearer ${adminToken}`)
       .send({
         locationId: branch.body.id,
@@ -313,7 +313,7 @@ describe("Sales API", () => {
     await stockIn(adminToken, product.body.id, 10, location.body.id);
 
     const short = await request(app)
-      .post("/sales")
+      .post("/api/sales")
       .set("Authorization", `Bearer ${staffToken}`)
       .send({
         locationId: location.body.id,
@@ -324,7 +324,7 @@ describe("Sales API", () => {
     assert.equal(short.status, 400);
 
     const valid = await request(app)
-      .post("/sales")
+      .post("/api/sales")
       .set("Authorization", `Bearer ${staffToken}`)
       .send({
         locationId: location.body.id,
@@ -342,11 +342,11 @@ describe("Sales API", () => {
     const location = await createLocation(adminToken, { name: "Branch I" });
     await stockIn(adminToken, product.body.id, 10, location.body.id);
     await request(app)
-      .delete(`/products/${product.body.id}`)
+      .delete(`/api/products/${product.body.id}`)
       .set("Authorization", `Bearer ${adminToken}`);
 
     const res = await request(app)
-      .post("/sales")
+      .post("/api/sales")
       .set("Authorization", `Bearer ${staffToken}`)
       .send({
         locationId: location.body.id,
@@ -359,7 +359,7 @@ describe("Sales API", () => {
   test("rejects a sale with a nonexistent locationId", async () => {
     const product = await createProduct(adminToken, { sku: "SKU-SALE-9", sellingPrice: 10 });
     const res = await request(app)
-      .post("/sales")
+      .post("/api/sales")
       .set("Authorization", `Bearer ${staffToken}`)
       .send({
         locationId: 999999,
@@ -372,7 +372,7 @@ describe("Sales API", () => {
   test("rejects a sale with a nonexistent productId", async () => {
     const location = await createLocation(adminToken, { name: "Branch J" });
     const res = await request(app)
-      .post("/sales")
+      .post("/api/sales")
       .set("Authorization", `Bearer ${staffToken}`)
       .send({
         locationId: location.body.id,
@@ -388,7 +388,7 @@ describe("Sales API", () => {
     await stockIn(adminToken, product.body.id, 10, location.body.id);
 
     const res = await request(app)
-      .post("/sales")
+      .post("/api/sales")
       .set("Authorization", `Bearer ${staffToken}`)
       .send({
         locationId: location.body.id,

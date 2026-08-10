@@ -5,13 +5,13 @@ const { resetDb, createUser, prisma } = require("./helpers/db");
 const app = require("../src/app");
 
 async function login(email, password) {
-  const res = await request(app).post("/auth/login").send({ email, password });
+  const res = await request(app).post("/api/auth/login").send({ email, password });
   return res.body.token;
 }
 
 async function createProduct(token, overrides = {}) {
   return request(app)
-    .post("/products")
+    .post("/api/products")
     .set("Authorization", `Bearer ${token}`)
     .send({ sku: "SKU-1", name: "Widget", unit: "pcs", ...overrides });
 }
@@ -29,7 +29,7 @@ describe("Products API", () => {
   });
 
   test("requires authentication to list products", async () => {
-    const res = await request(app).get("/products");
+    const res = await request(app).get("/api/products");
     assert.equal(res.status, 401);
   });
 
@@ -45,13 +45,13 @@ describe("Products API", () => {
     assert.equal(created.body.unitCost, 12.5);
 
     const updated = await request(app)
-      .patch(`/products/${created.body.id}`)
+      .patch(`/api/products/${created.body.id}`)
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ unitCost: 20 });
     assert.equal(updated.body.unitCost, 20);
 
     const cleared = await request(app)
-      .patch(`/products/${created.body.id}`)
+      .patch(`/api/products/${created.body.id}`)
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ unitCost: null });
     assert.equal(cleared.body.unitCost, null);
@@ -66,7 +66,7 @@ describe("Products API", () => {
     assert.equal(conflict.status, 409);
 
     const updateConflict = await request(app)
-      .patch(`/products/${created.body.id}`)
+      .patch(`/api/products/${created.body.id}`)
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ barcode: "1234567890" });
     assert.equal(updateConflict.status, 200, "updating to its own existing barcode is fine");
@@ -76,19 +76,19 @@ describe("Products API", () => {
     const created = await createProduct(adminToken, { sku: "SKU-LOOKUP", barcode: "9998887776" });
 
     const bySku = await request(app)
-      .get("/products/lookup?code=SKU-LOOKUP")
+      .get("/api/products/lookup?code=SKU-LOOKUP")
       .set("Authorization", `Bearer ${staffToken}`);
     assert.equal(bySku.status, 200);
     assert.equal(bySku.body.id, created.body.id);
 
     const byBarcode = await request(app)
-      .get("/products/lookup?code=9998887776")
+      .get("/api/products/lookup?code=9998887776")
       .set("Authorization", `Bearer ${staffToken}`);
     assert.equal(byBarcode.status, 200);
     assert.equal(byBarcode.body.id, created.body.id);
 
     const notFound = await request(app)
-      .get("/products/lookup?code=nonexistent")
+      .get("/api/products/lookup?code=nonexistent")
       .set("Authorization", `Bearer ${staffToken}`);
     assert.equal(notFound.status, 404);
   });
@@ -96,7 +96,7 @@ describe("Products API", () => {
   test("returns a PNG QR code for a product", async () => {
     const created = await createProduct(adminToken, { sku: "SKU-QR" });
     const res = await request(app)
-      .get(`/products/${created.body.id}/qrcode`)
+      .get(`/api/products/${created.body.id}/qrcode`)
       .set("Authorization", `Bearer ${staffToken}`);
     assert.equal(res.status, 200);
     assert.match(res.headers["content-type"], /image\/png/);
@@ -117,14 +117,14 @@ describe("Products API", () => {
     const created = await createProduct(adminToken, { sku: "SKU-C" });
 
     const updated = await request(app)
-      .patch(`/products/${created.body.id}`)
+      .patch(`/api/products/${created.body.id}`)
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ name: "Renamed" });
     assert.equal(updated.status, 200);
     assert.equal(updated.body.name, "Renamed");
 
     const deleted = await request(app)
-      .delete(`/products/${created.body.id}`)
+      .delete(`/api/products/${created.body.id}`)
       .set("Authorization", `Bearer ${adminToken}`);
     assert.equal(deleted.status, 204);
   });
@@ -133,13 +133,13 @@ describe("Products API", () => {
     const created = await createProduct(adminToken, { sku: "SKU-D" });
 
     const updated = await request(app)
-      .patch(`/products/${created.body.id}`)
+      .patch(`/api/products/${created.body.id}`)
       .set("Authorization", `Bearer ${staffToken}`)
       .send({ name: "Renamed" });
     assert.equal(updated.status, 403);
 
     const deleted = await request(app)
-      .delete(`/products/${created.body.id}`)
+      .delete(`/api/products/${created.body.id}`)
       .set("Authorization", `Bearer ${staffToken}`);
     assert.equal(deleted.status, 403);
   });
@@ -148,7 +148,7 @@ describe("Products API", () => {
     const created = await createProduct(adminToken, { sku: "SKU-E" });
 
     const res = await request(app)
-      .post(`/products/${created.body.id}/movements`)
+      .post(`/api/products/${created.body.id}/movements`)
       .set("Authorization", `Bearer ${staffToken}`)
       .send({ type: "in", quantity: 10, note: "initial stock" });
     assert.equal(res.status, 201);
@@ -160,29 +160,29 @@ describe("Products API", () => {
   test("records a movement against a location and aggregates quantity by location", async () => {
     const created = await createProduct(adminToken, { sku: "SKU-LOC-2" });
     const locationA = await request(app)
-      .post("/locations")
+      .post("/api/locations")
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ name: "Warehouse A" });
     const locationB = await request(app)
-      .post("/locations")
+      .post("/api/locations")
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ name: "Warehouse B" });
 
     await request(app)
-      .post(`/products/${created.body.id}/movements`)
+      .post(`/api/products/${created.body.id}/movements`)
       .set("Authorization", `Bearer ${staffToken}`)
       .send({ type: "in", quantity: 10, locationId: locationA.body.id });
     await request(app)
-      .post(`/products/${created.body.id}/movements`)
+      .post(`/api/products/${created.body.id}/movements`)
       .set("Authorization", `Bearer ${staffToken}`)
       .send({ type: "in", quantity: 4, locationId: locationB.body.id });
     await request(app)
-      .post(`/products/${created.body.id}/movements`)
+      .post(`/api/products/${created.body.id}/movements`)
       .set("Authorization", `Bearer ${staffToken}`)
       .send({ type: "out", quantity: 3, locationId: locationA.body.id });
 
     const byLocation = await request(app)
-      .get(`/products/${created.body.id}/movements/by-location`)
+      .get(`/api/products/${created.body.id}/movements/by-location`)
       .set("Authorization", `Bearer ${staffToken}`);
     assert.equal(byLocation.status, 200);
     const a = byLocation.body.find((l) => l.locationId === locationA.body.id);
@@ -191,7 +191,7 @@ describe("Products API", () => {
     assert.equal(b.quantity, 4);
 
     const movements = await request(app)
-      .get(`/products/${created.body.id}/movements`)
+      .get(`/api/products/${created.body.id}/movements`)
       .set("Authorization", `Bearer ${staffToken}`);
     assert.ok(movements.body.every((m) => m.location));
   });
@@ -199,7 +199,7 @@ describe("Products API", () => {
   test("rejects a movement with an unknown locationId", async () => {
     const created = await createProduct(adminToken, { sku: "SKU-LOC-3" });
     const res = await request(app)
-      .post(`/products/${created.body.id}/movements`)
+      .post(`/api/products/${created.body.id}/movements`)
       .set("Authorization", `Bearer ${staffToken}`)
       .send({ type: "in", quantity: 1, locationId: 999999 });
     assert.equal(res.status, 400);
@@ -208,12 +208,12 @@ describe("Products API", () => {
   test("rejects a stock-out movement that exceeds the current quantity", async () => {
     const created = await createProduct(adminToken, { sku: "SKU-F" });
     await request(app)
-      .post(`/products/${created.body.id}/movements`)
+      .post(`/api/products/${created.body.id}/movements`)
       .set("Authorization", `Bearer ${staffToken}`)
       .send({ type: "in", quantity: 5 });
 
     const res = await request(app)
-      .post(`/products/${created.body.id}/movements`)
+      .post(`/api/products/${created.body.id}/movements`)
       .set("Authorization", `Bearer ${staffToken}`)
       .send({ type: "out", quantity: 999 });
     assert.equal(res.status, 400);
@@ -225,7 +225,7 @@ describe("Products API", () => {
   test("rejects a movement with an invalid type", async () => {
     const created = await createProduct(adminToken, { sku: "SKU-G" });
     const res = await request(app)
-      .post(`/products/${created.body.id}/movements`)
+      .post(`/api/products/${created.body.id}/movements`)
       .set("Authorization", `Bearer ${staffToken}`)
       .send({ type: "sideways", quantity: 1 });
     assert.equal(res.status, 400);
@@ -234,7 +234,7 @@ describe("Products API", () => {
   test("rejects a movement with a non-positive quantity", async () => {
     const created = await createProduct(adminToken, { sku: "SKU-H" });
     const res = await request(app)
-      .post(`/products/${created.body.id}/movements`)
+      .post(`/api/products/${created.body.id}/movements`)
       .set("Authorization", `Bearer ${staffToken}`)
       .send({ type: "in", quantity: 0 });
     assert.equal(res.status, 400);
@@ -242,7 +242,7 @@ describe("Products API", () => {
 
   test("404s for movements on a non-existent product", async () => {
     const res = await request(app)
-      .post("/products/999999/movements")
+      .post("/api/products/999999/movements")
       .set("Authorization", `Bearer ${staffToken}`)
       .send({ type: "in", quantity: 1 });
     assert.equal(res.status, 404);
@@ -253,7 +253,7 @@ describe("Products API", () => {
     await createProduct(adminToken, { sku: "SKU-GADGET", name: "Red Gadget" });
 
     const bySku = await request(app)
-      .get("/products?search=WIDGET")
+      .get("/api/products?search=WIDGET")
       .set("Authorization", `Bearer ${staffToken}`);
     assert.equal(bySku.status, 200);
     assert.equal(bySku.body.data.length, 1);
@@ -261,13 +261,13 @@ describe("Products API", () => {
     assert.equal(bySku.body.total, 1);
 
     const byName = await request(app)
-      .get("/products?search=Red")
+      .get("/api/products?search=Red")
       .set("Authorization", `Bearer ${staffToken}`);
     assert.equal(byName.body.data.length, 1);
     assert.equal(byName.body.data[0].sku, "SKU-GADGET");
 
     const noMatch = await request(app)
-      .get("/products?search=nonexistent")
+      .get("/api/products?search=nonexistent")
       .set("Authorization", `Bearer ${staffToken}`);
     assert.equal(noMatch.body.data.length, 0);
   });
@@ -277,7 +277,7 @@ describe("Products API", () => {
     await createProduct(adminToken, { sku: "SKU-CAT-B", category: "Electronics" });
 
     const res = await request(app)
-      .get("/products?category=Apparel")
+      .get("/api/products?category=Apparel")
       .set("Authorization", `Bearer ${staffToken}`);
     assert.equal(res.body.data.length, 1);
     assert.equal(res.body.data[0].sku, "SKU-CAT-A");
@@ -289,7 +289,7 @@ describe("Products API", () => {
     await createProduct(adminToken, { sku: "SKU-CAT-E", category: null });
 
     const res = await request(app)
-      .get("/products/categories")
+      .get("/api/products/categories")
       .set("Authorization", `Bearer ${staffToken}`);
     assert.deepEqual(res.body, ["Apparel"]);
   });
@@ -300,7 +300,7 @@ describe("Products API", () => {
     await createProduct(adminToken, { sku: "SKU-P3", name: "Gamma" });
 
     const page1 = await request(app)
-      .get("/products?pageSize=2&page=1&sortBy=name&sortDir=asc")
+      .get("/api/products?pageSize=2&page=1&sortBy=name&sortDir=asc")
       .set("Authorization", `Bearer ${staffToken}`);
     assert.equal(page1.body.data.length, 2);
     assert.equal(page1.body.total, 3);
@@ -310,7 +310,7 @@ describe("Products API", () => {
     );
 
     const page2 = await request(app)
-      .get("/products?pageSize=2&page=2&sortBy=name&sortDir=asc")
+      .get("/api/products?pageSize=2&page=2&sortBy=name&sortDir=asc")
       .set("Authorization", `Bearer ${staffToken}`);
     assert.equal(page2.body.data.length, 1);
     assert.equal(page2.body.data[0].name, "Gamma");
@@ -320,7 +320,7 @@ describe("Products API", () => {
     await createProduct(adminToken, { sku: "SKU-CSV", name: "CSV Widget", reorderLevel: 3 });
 
     const res = await request(app)
-      .get("/products/export")
+      .get("/api/products/export")
       .set("Authorization", `Bearer ${staffToken}`);
 
     assert.equal(res.status, 200);
@@ -332,12 +332,12 @@ describe("Products API", () => {
   test("exports a product's movement history as CSV", async () => {
     const created = await createProduct(adminToken, { sku: "SKU-HIST" });
     await request(app)
-      .post(`/products/${created.body.id}/movements`)
+      .post(`/api/products/${created.body.id}/movements`)
       .set("Authorization", `Bearer ${staffToken}`)
       .send({ type: "in", quantity: 7, note: "restock" });
 
     const res = await request(app)
-      .get(`/products/${created.body.id}/movements/export`)
+      .get(`/api/products/${created.body.id}/movements/export`)
       .set("Authorization", `Bearer ${staffToken}`);
 
     assert.equal(res.status, 200);
@@ -348,7 +348,7 @@ describe("Products API", () => {
 
   test("404s exporting movements for a non-existent product", async () => {
     const res = await request(app)
-      .get("/products/999999/movements/export")
+      .get("/api/products/999999/movements/export")
       .set("Authorization", `Bearer ${staffToken}`);
     assert.equal(res.status, 404);
   });
@@ -356,12 +356,12 @@ describe("Products API", () => {
   test("admin can delete a movement, reversing the quantity change", async () => {
     const created = await createProduct(adminToken, { sku: "SKU-DEL" });
     const movement = await request(app)
-      .post(`/products/${created.body.id}/movements`)
+      .post(`/api/products/${created.body.id}/movements`)
       .set("Authorization", `Bearer ${staffToken}`)
       .send({ type: "in", quantity: 10 });
 
     const res = await request(app)
-      .delete(`/products/${created.body.id}/movements/${movement.body.id}`)
+      .delete(`/api/products/${created.body.id}/movements/${movement.body.id}`)
       .set("Authorization", `Bearer ${adminToken}`);
     assert.equal(res.status, 204);
 
@@ -375,12 +375,12 @@ describe("Products API", () => {
   test("staff cannot delete a movement", async () => {
     const created = await createProduct(adminToken, { sku: "SKU-DEL2" });
     const movement = await request(app)
-      .post(`/products/${created.body.id}/movements`)
+      .post(`/api/products/${created.body.id}/movements`)
       .set("Authorization", `Bearer ${staffToken}`)
       .send({ type: "in", quantity: 10 });
 
     const res = await request(app)
-      .delete(`/products/${created.body.id}/movements/${movement.body.id}`)
+      .delete(`/api/products/${created.body.id}/movements/${movement.body.id}`)
       .set("Authorization", `Bearer ${staffToken}`);
     assert.equal(res.status, 403);
   });
@@ -388,16 +388,16 @@ describe("Products API", () => {
   test("rejects deleting a movement that would take quantity negative", async () => {
     const created = await createProduct(adminToken, { sku: "SKU-DEL3" });
     const inMovement = await request(app)
-      .post(`/products/${created.body.id}/movements`)
+      .post(`/api/products/${created.body.id}/movements`)
       .set("Authorization", `Bearer ${staffToken}`)
       .send({ type: "in", quantity: 10 });
     await request(app)
-      .post(`/products/${created.body.id}/movements`)
+      .post(`/api/products/${created.body.id}/movements`)
       .set("Authorization", `Bearer ${staffToken}`)
       .send({ type: "out", quantity: 8 });
 
     const res = await request(app)
-      .delete(`/products/${created.body.id}/movements/${inMovement.body.id}`)
+      .delete(`/api/products/${created.body.id}/movements/${inMovement.body.id}`)
       .set("Authorization", `Bearer ${adminToken}`);
     assert.equal(res.status, 400);
   });
@@ -405,7 +405,7 @@ describe("Products API", () => {
   test("404s deleting a non-existent movement", async () => {
     const created = await createProduct(adminToken, { sku: "SKU-DEL4" });
     const res = await request(app)
-      .delete(`/products/${created.body.id}/movements/999999`)
+      .delete(`/api/products/${created.body.id}/movements/999999`)
       .set("Authorization", `Bearer ${adminToken}`);
     assert.equal(res.status, 404);
   });
@@ -419,7 +419,7 @@ describe("Products API", () => {
       "SKU-IMP-2,New Product,box,Electronics,2\n";
 
     const res = await request(app)
-      .post("/products/import")
+      .post("/api/products/import")
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ csv });
 
@@ -442,7 +442,7 @@ describe("Products API", () => {
     const csv = "sku,name,unit\n" + ",Missing Sku,pcs\n" + "SKU-IMP-OK,Valid,pcs\n";
 
     const res = await request(app)
-      .post("/products/import")
+      .post("/api/products/import")
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ csv });
 
@@ -454,7 +454,7 @@ describe("Products API", () => {
 
   test("staff cannot import products", async () => {
     const res = await request(app)
-      .post("/products/import")
+      .post("/api/products/import")
       .set("Authorization", `Bearer ${staffToken}`)
       .send({ csv: "sku,name,unit\nSKU-X,X,pcs\n" });
     assert.equal(res.status, 403);
@@ -464,23 +464,23 @@ describe("Products API", () => {
     const created = await createProduct(adminToken, { sku: "SKU-SOFT" });
 
     const del = await request(app)
-      .delete(`/products/${created.body.id}`)
+      .delete(`/api/products/${created.body.id}`)
       .set("Authorization", `Bearer ${adminToken}`);
     assert.equal(del.status, 204);
 
     const get = await request(app)
-      .get(`/products/${created.body.id}`)
+      .get(`/api/products/${created.body.id}`)
       .set("Authorization", `Bearer ${staffToken}`);
     assert.equal(get.status, 404);
 
-    const list = await request(app).get("/products").set("Authorization", `Bearer ${staffToken}`);
+    const list = await request(app).get("/api/products").set("Authorization", `Bearer ${staffToken}`);
     assert.ok(!list.body.data.some((p) => p.sku === "SKU-SOFT"));
 
-    const trash = await request(app).get("/products/trash").set("Authorization", `Bearer ${adminToken}`);
+    const trash = await request(app).get("/api/products/trash").set("Authorization", `Bearer ${adminToken}`);
     assert.ok(trash.body.some((p) => p.sku === "SKU-SOFT"));
 
     const staffTrash = await request(app)
-      .get("/products/trash")
+      .get("/api/products/trash")
       .set("Authorization", `Bearer ${staffToken}`);
     assert.equal(staffTrash.status, 403);
   });
@@ -488,17 +488,17 @@ describe("Products API", () => {
   test("admin can restore a soft-deleted product", async () => {
     const created = await createProduct(adminToken, { sku: "SKU-RESTORE" });
     await request(app)
-      .delete(`/products/${created.body.id}`)
+      .delete(`/api/products/${created.body.id}`)
       .set("Authorization", `Bearer ${adminToken}`);
 
     const restore = await request(app)
-      .post(`/products/${created.body.id}/restore`)
+      .post(`/api/products/${created.body.id}/restore`)
       .set("Authorization", `Bearer ${adminToken}`);
     assert.equal(restore.status, 200);
     assert.equal(restore.body.deletedAt, null);
 
     const get = await request(app)
-      .get(`/products/${created.body.id}`)
+      .get(`/api/products/${created.body.id}`)
       .set("Authorization", `Bearer ${staffToken}`);
     assert.equal(get.status, 200);
   });
@@ -506,7 +506,7 @@ describe("Products API", () => {
   test("404s restoring a product that isn't deleted", async () => {
     const created = await createProduct(adminToken, { sku: "SKU-NOTDELETED" });
     const res = await request(app)
-      .post(`/products/${created.body.id}/restore`)
+      .post(`/api/products/${created.body.id}/restore`)
       .set("Authorization", `Bearer ${adminToken}`);
     assert.equal(res.status, 404);
   });
@@ -514,20 +514,20 @@ describe("Products API", () => {
   test("admin can permanently delete a soft-deleted product, including its movement history", async () => {
     const created = await createProduct(adminToken, { sku: "SKU-PURGE" });
     await request(app)
-      .post(`/products/${created.body.id}/movements`)
+      .post(`/api/products/${created.body.id}/movements`)
       .set("Authorization", `Bearer ${staffToken}`)
       .send({ type: "in", quantity: 5 });
     await request(app)
-      .delete(`/products/${created.body.id}`)
+      .delete(`/api/products/${created.body.id}`)
       .set("Authorization", `Bearer ${adminToken}`);
 
     const purge = await request(app)
-      .delete(`/products/${created.body.id}/permanent`)
+      .delete(`/api/products/${created.body.id}/permanent`)
       .set("Authorization", `Bearer ${adminToken}`);
     assert.equal(purge.status, 204);
 
     const trash = await request(app)
-      .get("/products/trash")
+      .get("/api/products/trash")
       .set("Authorization", `Bearer ${adminToken}`);
     assert.ok(!trash.body.some((p) => p.sku === "SKU-PURGE"));
   });
@@ -535,7 +535,7 @@ describe("Products API", () => {
   test("404s permanently deleting a product that isn't in the trash", async () => {
     const created = await createProduct(adminToken, { sku: "SKU-NOTTRASHED" });
     const res = await request(app)
-      .delete(`/products/${created.body.id}/permanent`)
+      .delete(`/api/products/${created.body.id}/permanent`)
       .set("Authorization", `Bearer ${adminToken}`);
     assert.equal(res.status, 404);
   });
@@ -543,11 +543,11 @@ describe("Products API", () => {
   test("staff cannot permanently delete a product", async () => {
     const created = await createProduct(adminToken, { sku: "SKU-PURGE-STAFF" });
     await request(app)
-      .delete(`/products/${created.body.id}`)
+      .delete(`/api/products/${created.body.id}`)
       .set("Authorization", `Bearer ${adminToken}`);
 
     const res = await request(app)
-      .delete(`/products/${created.body.id}/permanent`)
+      .delete(`/api/products/${created.body.id}/permanent`)
       .set("Authorization", `Bearer ${staffToken}`);
     assert.equal(res.status, 403);
   });
@@ -557,20 +557,20 @@ describe("Products API", () => {
     const b = await createProduct(adminToken, { sku: "SKU-BULK-B" });
 
     const res = await request(app)
-      .post("/products/bulk-delete")
+      .post("/api/products/bulk-delete")
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ ids: [a.body.id, b.body.id] });
     assert.equal(res.status, 200);
     assert.equal(res.body.deleted, 2);
 
-    const list = await request(app).get("/products").set("Authorization", `Bearer ${staffToken}`);
+    const list = await request(app).get("/api/products").set("Authorization", `Bearer ${staffToken}`);
     assert.equal(list.body.data.length, 0);
   });
 
   test("staff cannot bulk-delete products", async () => {
     const a = await createProduct(adminToken, { sku: "SKU-BULK-C" });
     const res = await request(app)
-      .post("/products/bulk-delete")
+      .post("/api/products/bulk-delete")
       .set("Authorization", `Bearer ${staffToken}`)
       .send({ ids: [a.body.id] });
     assert.equal(res.status, 403);
@@ -581,7 +581,7 @@ describe("Products API", () => {
     const b = await createProduct(adminToken, { sku: "SKU-BULK-E" });
 
     const res = await request(app)
-      .post("/products/bulk-category")
+      .post("/api/products/bulk-category")
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ ids: [a.body.id, b.body.id], category: "Electronics" });
     assert.equal(res.status, 200);
@@ -600,7 +600,7 @@ describe("Products API", () => {
     );
 
     const res = await request(app)
-      .post(`/products/${created.body.id}/image`)
+      .post(`/api/products/${created.body.id}/image`)
       .set("Authorization", `Bearer ${adminToken}`)
       .attach("image", tinyPng, "test.png");
 
@@ -611,7 +611,7 @@ describe("Products API", () => {
   test("rejects a product image upload with an unsupported extension", async () => {
     const created = await createProduct(adminToken, { sku: "SKU-IMG2" });
     const res = await request(app)
-      .post(`/products/${created.body.id}/image`)
+      .post(`/api/products/${created.body.id}/image`)
       .set("Authorization", `Bearer ${adminToken}`)
       .attach("image", Buffer.from("not an image"), "test.txt");
     assert.equal(res.status, 400);
@@ -620,7 +620,7 @@ describe("Products API", () => {
   test("staff cannot upload a product image", async () => {
     const created = await createProduct(adminToken, { sku: "SKU-IMG3" });
     const res = await request(app)
-      .post(`/products/${created.body.id}/image`)
+      .post(`/api/products/${created.body.id}/image`)
       .set("Authorization", `Bearer ${staffToken}`)
       .attach("image", Buffer.from("fake"), "test.png");
     assert.equal(res.status, 403);
@@ -632,14 +632,14 @@ describe("Products API", () => {
     assert.equal(created.body.sellingPrice, 19.99);
 
     const updated = await request(app)
-      .patch(`/products/${created.body.id}`)
+      .patch(`/api/products/${created.body.id}`)
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ sellingPrice: 24.5 });
     assert.equal(updated.status, 200);
     assert.equal(updated.body.sellingPrice, 24.5);
 
     const cleared = await request(app)
-      .patch(`/products/${created.body.id}`)
+      .patch(`/api/products/${created.body.id}`)
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ sellingPrice: null });
     assert.equal(cleared.status, 200);
@@ -650,13 +650,13 @@ describe("Products API", () => {
     const created = await createProduct(adminToken, { sku: "SKU-MOD-1" });
 
     const staffCreateGroup = await request(app)
-      .post(`/products/${created.body.id}/modifier-groups`)
+      .post(`/api/products/${created.body.id}/modifier-groups`)
       .set("Authorization", `Bearer ${staffToken}`)
       .send({ name: "Size", selectionType: "single" });
     assert.equal(staffCreateGroup.status, 403);
 
     const group = await request(app)
-      .post(`/products/${created.body.id}/modifier-groups`)
+      .post(`/api/products/${created.body.id}/modifier-groups`)
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ name: "Size", selectionType: "single", required: true });
     assert.equal(group.status, 201);
@@ -665,13 +665,13 @@ describe("Products API", () => {
     assert.equal(group.body.required, true);
 
     const staffCreateOption = await request(app)
-      .post(`/products/modifier-groups/${group.body.id}/options`)
+      .post(`/api/products/modifier-groups/${group.body.id}/options`)
       .set("Authorization", `Bearer ${staffToken}`)
       .send({ name: "Large", priceDelta: 20 });
     assert.equal(staffCreateOption.status, 403);
 
     const option = await request(app)
-      .post(`/products/modifier-groups/${group.body.id}/options`)
+      .post(`/api/products/modifier-groups/${group.body.id}/options`)
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ name: "Large", priceDelta: 20 });
     assert.equal(option.status, 201);
@@ -679,7 +679,7 @@ describe("Products API", () => {
     assert.equal(option.body.priceDelta, 20);
 
     const staffGet = await request(app)
-      .get(`/products/${created.body.id}/modifier-groups`)
+      .get(`/api/products/${created.body.id}/modifier-groups`)
       .set("Authorization", `Bearer ${staffToken}`);
     assert.equal(staffGet.status, 200);
     assert.equal(staffGet.body.length, 1);
@@ -687,26 +687,26 @@ describe("Products API", () => {
     assert.equal(staffGet.body[0].options[0].name, "Large");
 
     const staffUpdateGroup = await request(app)
-      .patch(`/products/modifier-groups/${group.body.id}`)
+      .patch(`/api/products/modifier-groups/${group.body.id}`)
       .set("Authorization", `Bearer ${staffToken}`)
       .send({ name: "Renamed" });
     assert.equal(staffUpdateGroup.status, 403);
 
     const updateGroup = await request(app)
-      .patch(`/products/modifier-groups/${group.body.id}`)
+      .patch(`/api/products/modifier-groups/${group.body.id}`)
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ name: "Portion Size" });
     assert.equal(updateGroup.status, 200);
     assert.equal(updateGroup.body.name, "Portion Size");
 
     const staffUpdateOption = await request(app)
-      .patch(`/products/modifier-options/${option.body.id}`)
+      .patch(`/api/products/modifier-options/${option.body.id}`)
       .set("Authorization", `Bearer ${staffToken}`)
       .send({ priceDelta: 30 });
     assert.equal(staffUpdateOption.status, 403);
 
     const updateOption = await request(app)
-      .patch(`/products/modifier-options/${option.body.id}`)
+      .patch(`/api/products/modifier-options/${option.body.id}`)
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ priceDelta: 30 });
     assert.equal(updateOption.status, 200);
@@ -716,21 +716,21 @@ describe("Products API", () => {
   test("deleting a modifier group cascades its options", async () => {
     const created = await createProduct(adminToken, { sku: "SKU-MOD-2" });
     const group = await request(app)
-      .post(`/products/${created.body.id}/modifier-groups`)
+      .post(`/api/products/${created.body.id}/modifier-groups`)
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ name: "Toppings", selectionType: "multiple" });
     const option = await request(app)
-      .post(`/products/modifier-groups/${group.body.id}/options`)
+      .post(`/api/products/modifier-groups/${group.body.id}/options`)
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ name: "Cheese", priceDelta: 5 });
 
     const staffDelete = await request(app)
-      .delete(`/products/modifier-groups/${group.body.id}`)
+      .delete(`/api/products/modifier-groups/${group.body.id}`)
       .set("Authorization", `Bearer ${staffToken}`);
     assert.equal(staffDelete.status, 403);
 
     const del = await request(app)
-      .delete(`/products/modifier-groups/${group.body.id}`)
+      .delete(`/api/products/modifier-groups/${group.body.id}`)
       .set("Authorization", `Bearer ${adminToken}`);
     assert.equal(del.status, 204);
 
@@ -738,7 +738,7 @@ describe("Products API", () => {
     assert.equal(remainingOptions.length, 0, "options must cascade-delete with their group");
 
     const groups = await request(app)
-      .get(`/products/${created.body.id}/modifier-groups`)
+      .get(`/api/products/${created.body.id}/modifier-groups`)
       .set("Authorization", `Bearer ${staffToken}`);
     assert.equal(groups.body.length, 0);
   });
@@ -746,12 +746,12 @@ describe("Products API", () => {
   test("a movement with a locationId creates/increments LocationStock on 'in' and decrements on 'out'", async () => {
     const created = await createProduct(adminToken, { sku: "SKU-LOC-MOV-1" });
     const location = await request(app)
-      .post("/locations")
+      .post("/api/locations")
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ name: "LS Warehouse A" });
 
     await request(app)
-      .post(`/products/${created.body.id}/movements`)
+      .post(`/api/products/${created.body.id}/movements`)
       .set("Authorization", `Bearer ${staffToken}`)
       .send({ type: "in", quantity: 10, locationId: location.body.id });
 
@@ -761,7 +761,7 @@ describe("Products API", () => {
     assert.equal(stock.quantity, 10);
 
     await request(app)
-      .post(`/products/${created.body.id}/movements`)
+      .post(`/api/products/${created.body.id}/movements`)
       .set("Authorization", `Bearer ${staffToken}`)
       .send({ type: "out", quantity: 4, locationId: location.body.id });
 
@@ -774,26 +774,26 @@ describe("Products API", () => {
   test("rejects a branch-scoped stock-out movement that would go negative at that branch, even when company-wide quantity is sufficient", async () => {
     const created = await createProduct(adminToken, { sku: "SKU-LOC-MOV-2" });
     const branchA = await request(app)
-      .post("/locations")
+      .post("/api/locations")
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ name: "LS Warehouse B" });
     const branchB = await request(app)
-      .post("/locations")
+      .post("/api/locations")
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ name: "LS Warehouse C" });
 
     // Company-wide quantity ends up at 8 (5 + 3), but branch B only has 3.
     await request(app)
-      .post(`/products/${created.body.id}/movements`)
+      .post(`/api/products/${created.body.id}/movements`)
       .set("Authorization", `Bearer ${staffToken}`)
       .send({ type: "in", quantity: 5, locationId: branchA.body.id });
     await request(app)
-      .post(`/products/${created.body.id}/movements`)
+      .post(`/api/products/${created.body.id}/movements`)
       .set("Authorization", `Bearer ${staffToken}`)
       .send({ type: "in", quantity: 3, locationId: branchB.body.id });
 
     const res = await request(app)
-      .post(`/products/${created.body.id}/movements`)
+      .post(`/api/products/${created.body.id}/movements`)
       .set("Authorization", `Bearer ${staffToken}`)
       .send({ type: "out", quantity: 5, locationId: branchB.body.id });
     assert.equal(res.status, 400);

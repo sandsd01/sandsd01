@@ -5,7 +5,7 @@ const { resetDb, createUser, prisma } = require("./helpers/db");
 const app = require("../src/app");
 
 async function login(email, password) {
-  const res = await request(app).post("/auth/login").send({ email, password });
+  const res = await request(app).post("/api/auth/login").send({ email, password });
   return res.body.token;
 }
 
@@ -23,13 +23,13 @@ describe("Purchase Orders API", () => {
     staffToken = await login("staff@test.com", "staffpass1");
 
     const supplierRes = await request(app)
-      .post("/suppliers")
+      .post("/api/suppliers")
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ name: "Acme Supplies" });
     supplier = supplierRes.body;
 
     const productRes = await request(app)
-      .post("/products")
+      .post("/api/products")
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ sku: "SKU-PO", name: "PO Widget", unit: "pcs", reorderLevel: 5, unitCost: 2 });
     product = productRes.body;
@@ -37,7 +37,7 @@ describe("Purchase Orders API", () => {
 
   function createOrder(overrides = {}) {
     return request(app)
-      .post("/purchase-orders")
+      .post("/api/purchase-orders")
       .set("Authorization", `Bearer ${adminToken}`)
       .send({
         supplierId: supplier.id,
@@ -47,7 +47,7 @@ describe("Purchase Orders API", () => {
   }
 
   test("requires authentication", async () => {
-    const res = await request(app).get("/purchase-orders");
+    const res = await request(app).get("/api/purchase-orders");
     assert.equal(res.status, 401);
   });
 
@@ -78,7 +78,7 @@ describe("Purchase Orders API", () => {
   test("admin can edit a draft order's items", async () => {
     const created = await createOrder();
     const res = await request(app)
-      .patch(`/purchase-orders/${created.body.id}`)
+      .patch(`/api/purchase-orders/${created.body.id}`)
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ items: [{ productId: product.id, quantityOrdered: 20 }] });
     assert.equal(res.status, 200);
@@ -89,12 +89,12 @@ describe("Purchase Orders API", () => {
   test("admin can delete a draft order", async () => {
     const created = await createOrder();
     const res = await request(app)
-      .delete(`/purchase-orders/${created.body.id}`)
+      .delete(`/api/purchase-orders/${created.body.id}`)
       .set("Authorization", `Bearer ${adminToken}`);
     assert.equal(res.status, 204);
 
     const get = await request(app)
-      .get(`/purchase-orders/${created.body.id}`)
+      .get(`/api/purchase-orders/${created.body.id}`)
       .set("Authorization", `Bearer ${adminToken}`);
     assert.equal(get.status, 404);
   });
@@ -102,7 +102,7 @@ describe("Purchase Orders API", () => {
   test("marks a draft order as ordered", async () => {
     const created = await createOrder();
     const res = await request(app)
-      .post(`/purchase-orders/${created.body.id}/mark-ordered`)
+      .post(`/api/purchase-orders/${created.body.id}/mark-ordered`)
       .set("Authorization", `Bearer ${adminToken}`);
     assert.equal(res.status, 200);
     assert.equal(res.body.status, "ordered");
@@ -112,17 +112,17 @@ describe("Purchase Orders API", () => {
   test("cannot edit or delete an order once it's ordered", async () => {
     const created = await createOrder();
     await request(app)
-      .post(`/purchase-orders/${created.body.id}/mark-ordered`)
+      .post(`/api/purchase-orders/${created.body.id}/mark-ordered`)
       .set("Authorization", `Bearer ${adminToken}`);
 
     const patch = await request(app)
-      .patch(`/purchase-orders/${created.body.id}`)
+      .patch(`/api/purchase-orders/${created.body.id}`)
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ notes: "changed" });
     assert.equal(patch.status, 400);
 
     const del = await request(app)
-      .delete(`/purchase-orders/${created.body.id}`)
+      .delete(`/api/purchase-orders/${created.body.id}`)
       .set("Authorization", `Bearer ${adminToken}`);
     assert.equal(del.status, 400);
   });
@@ -130,11 +130,11 @@ describe("Purchase Orders API", () => {
   test("cancels a draft or ordered purchase order", async () => {
     const created = await createOrder();
     await request(app)
-      .post(`/purchase-orders/${created.body.id}/mark-ordered`)
+      .post(`/api/purchase-orders/${created.body.id}/mark-ordered`)
       .set("Authorization", `Bearer ${adminToken}`);
 
     const res = await request(app)
-      .post(`/purchase-orders/${created.body.id}/cancel`)
+      .post(`/api/purchase-orders/${created.body.id}/cancel`)
       .set("Authorization", `Bearer ${adminToken}`);
     assert.equal(res.status, 200);
     assert.equal(res.body.status, "cancelled");
@@ -145,13 +145,13 @@ describe("Purchase Orders API", () => {
       items: [{ productId: product.id, quantityOrdered: 10 }],
     });
     await request(app)
-      .post(`/purchase-orders/${created.body.id}/mark-ordered`)
+      .post(`/api/purchase-orders/${created.body.id}/mark-ordered`)
       .set("Authorization", `Bearer ${adminToken}`);
 
     const itemId = created.body.items[0].id;
 
     const partial = await request(app)
-      .post(`/purchase-orders/${created.body.id}/receive`)
+      .post(`/api/purchase-orders/${created.body.id}/receive`)
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ items: [{ itemId, quantity: 4 }] });
     assert.equal(partial.status, 200);
@@ -162,7 +162,7 @@ describe("Purchase Orders API", () => {
     assert.equal(updatedProduct.quantity, 4);
 
     const full = await request(app)
-      .post(`/purchase-orders/${created.body.id}/receive`)
+      .post(`/api/purchase-orders/${created.body.id}/receive`)
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ items: [{ itemId, quantity: 6 }] });
     assert.equal(full.status, 200);
@@ -179,17 +179,17 @@ describe("Purchase Orders API", () => {
 
   test("receiving stock against a location tags the resulting movement", async () => {
     const location = await request(app)
-      .post("/locations")
+      .post("/api/locations")
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ name: "Receiving Dock" });
 
     const created = await createOrder({ items: [{ productId: product.id, quantityOrdered: 5 }] });
     await request(app)
-      .post(`/purchase-orders/${created.body.id}/mark-ordered`)
+      .post(`/api/purchase-orders/${created.body.id}/mark-ordered`)
       .set("Authorization", `Bearer ${adminToken}`);
 
     await request(app)
-      .post(`/purchase-orders/${created.body.id}/receive`)
+      .post(`/api/purchase-orders/${created.body.id}/receive`)
       .set("Authorization", `Bearer ${adminToken}`)
       .send({
         items: [{ itemId: created.body.items[0].id, quantity: 5 }],
@@ -206,11 +206,11 @@ describe("Purchase Orders API", () => {
       items: [{ productId: product.id, quantityOrdered: 5 }],
     });
     await request(app)
-      .post(`/purchase-orders/${created.body.id}/mark-ordered`)
+      .post(`/api/purchase-orders/${created.body.id}/mark-ordered`)
       .set("Authorization", `Bearer ${adminToken}`);
 
     const res = await request(app)
-      .post(`/purchase-orders/${created.body.id}/receive`)
+      .post(`/api/purchase-orders/${created.body.id}/receive`)
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ items: [{ itemId: created.body.items[0].id, quantity: 999 }] });
     assert.equal(res.status, 400);
@@ -222,7 +222,7 @@ describe("Purchase Orders API", () => {
   test("cannot receive stock on a draft order", async () => {
     const created = await createOrder();
     const res = await request(app)
-      .post(`/purchase-orders/${created.body.id}/receive`)
+      .post(`/api/purchase-orders/${created.body.id}/receive`)
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ items: [{ itemId: created.body.items[0].id, quantity: 1 }] });
     assert.equal(res.status, 400);
@@ -231,17 +231,17 @@ describe("Purchase Orders API", () => {
   test("staff cannot receive stock, cancel, or mark an order as ordered", async () => {
     const created = await createOrder();
     const markOrdered = await request(app)
-      .post(`/purchase-orders/${created.body.id}/mark-ordered`)
+      .post(`/api/purchase-orders/${created.body.id}/mark-ordered`)
       .set("Authorization", `Bearer ${staffToken}`);
     assert.equal(markOrdered.status, 403);
 
     const cancel = await request(app)
-      .post(`/purchase-orders/${created.body.id}/cancel`)
+      .post(`/api/purchase-orders/${created.body.id}/cancel`)
       .set("Authorization", `Bearer ${staffToken}`);
     assert.equal(cancel.status, 403);
 
     const receive = await request(app)
-      .post(`/purchase-orders/${created.body.id}/receive`)
+      .post(`/api/purchase-orders/${created.body.id}/receive`)
       .set("Authorization", `Bearer ${staffToken}`)
       .send({ items: [{ itemId: created.body.items[0].id, quantity: 1 }] });
     assert.equal(receive.status, 403);
@@ -250,7 +250,7 @@ describe("Purchase Orders API", () => {
   test("cannot delete a supplier that has purchase orders", async () => {
     await createOrder();
     const res = await request(app)
-      .delete(`/suppliers/${supplier.id}`)
+      .delete(`/api/suppliers/${supplier.id}`)
       .set("Authorization", `Bearer ${adminToken}`);
     assert.equal(res.status, 409);
   });
@@ -258,11 +258,11 @@ describe("Purchase Orders API", () => {
   test("cannot permanently delete a product referenced by a purchase order", async () => {
     await createOrder();
     await request(app)
-      .delete(`/products/${product.id}`)
+      .delete(`/api/products/${product.id}`)
       .set("Authorization", `Bearer ${adminToken}`);
 
     const res = await request(app)
-      .delete(`/products/${product.id}/permanent`)
+      .delete(`/api/products/${product.id}/permanent`)
       .set("Authorization", `Bearer ${adminToken}`);
     assert.equal(res.status, 409);
   });
@@ -270,18 +270,18 @@ describe("Purchase Orders API", () => {
   test("filters the list by status and supplier", async () => {
     const created = await createOrder();
     await request(app)
-      .post(`/purchase-orders/${created.body.id}/mark-ordered`)
+      .post(`/api/purchase-orders/${created.body.id}/mark-ordered`)
       .set("Authorization", `Bearer ${adminToken}`);
     await createOrder();
 
     const byStatus = await request(app)
-      .get("/purchase-orders?status=draft")
+      .get("/api/purchase-orders?status=draft")
       .set("Authorization", `Bearer ${adminToken}`);
     assert.equal(byStatus.body.data.length, 1);
     assert.equal(byStatus.body.data[0].status, "draft");
 
     const bySupplier = await request(app)
-      .get(`/purchase-orders?supplierId=${supplier.id}`)
+      .get(`/api/purchase-orders?supplierId=${supplier.id}`)
       .set("Authorization", `Bearer ${adminToken}`);
     assert.equal(bySupplier.body.total, 2);
   });

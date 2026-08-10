@@ -5,7 +5,7 @@ const { resetDb, createUser, prisma } = require("./helpers/db");
 const app = require("../src/app");
 
 async function login(email, password) {
-  const res = await request(app).post("/auth/login").send({ email, password });
+  const res = await request(app).post("/api/auth/login").send({ email, password });
   return res.body.token;
 }
 
@@ -22,13 +22,13 @@ describe("Suppliers API", () => {
   });
 
   test("requires authentication to list suppliers", async () => {
-    const res = await request(app).get("/suppliers");
+    const res = await request(app).get("/api/suppliers");
     assert.equal(res.status, 401);
   });
 
   test("admin can create a supplier", async () => {
     const res = await request(app)
-      .post("/suppliers")
+      .post("/api/suppliers")
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ name: "Acme Corp", contactEmail: "sales@acme.test" });
     assert.equal(res.status, 201);
@@ -37,7 +37,7 @@ describe("Suppliers API", () => {
 
   test("staff cannot create a supplier", async () => {
     const res = await request(app)
-      .post("/suppliers")
+      .post("/api/suppliers")
       .set("Authorization", `Bearer ${staffToken}`)
       .send({ name: "Acme Corp" });
     assert.equal(res.status, 403);
@@ -45,11 +45,11 @@ describe("Suppliers API", () => {
 
   test("rejects a duplicate supplier name", async () => {
     await request(app)
-      .post("/suppliers")
+      .post("/api/suppliers")
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ name: "Acme Corp" });
     const res = await request(app)
-      .post("/suppliers")
+      .post("/api/suppliers")
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ name: "Acme Corp" });
     assert.equal(res.status, 409);
@@ -57,11 +57,11 @@ describe("Suppliers API", () => {
 
   test("admin can update a supplier", async () => {
     const created = await request(app)
-      .post("/suppliers")
+      .post("/api/suppliers")
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ name: "Acme Corp" });
     const res = await request(app)
-      .patch(`/suppliers/${created.body.id}`)
+      .patch(`/api/suppliers/${created.body.id}`)
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ contactPhone: "555-1234" });
     assert.equal(res.status, 200);
@@ -70,17 +70,17 @@ describe("Suppliers API", () => {
 
   test("deleting a supplier unlinks it from products instead of failing", async () => {
     const supplier = await request(app)
-      .post("/suppliers")
+      .post("/api/suppliers")
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ name: "Acme Corp" });
     const product = await request(app)
-      .post("/products")
+      .post("/api/products")
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ sku: "SKU-SUP", name: "Widget", unit: "pcs", supplierId: supplier.body.id });
     assert.equal(product.body.supplierId, supplier.body.id);
 
     const del = await request(app)
-      .delete(`/suppliers/${supplier.body.id}`)
+      .delete(`/api/suppliers/${supplier.body.id}`)
       .set("Authorization", `Bearer ${adminToken}`);
     assert.equal(del.status, 204);
 
