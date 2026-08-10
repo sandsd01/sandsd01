@@ -17,7 +17,12 @@ const SUPPLIER_SELECT = { select: { id: true, name: true } };
 function buildWhere({ search, category }) {
   const where = { deletedAt: null };
   if (search) {
-    where.OR = [{ sku: { contains: search } }, { name: { contains: search } }];
+    // `mode: "insensitive"` is required on PostgreSQL: unlike SQLite, `contains`
+    // is case-sensitive there by default.
+    where.OR = [
+      { sku: { contains: search, mode: "insensitive" } },
+      { name: { contains: search, mode: "insensitive" } },
+    ];
   }
   if (category) {
     where.category = category;
