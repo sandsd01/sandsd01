@@ -3,6 +3,7 @@ const prisma = require("../../prisma/client");
 const { authenticate, requireRole } = require("../middleware/auth");
 const { logAction } = require("../lib/audit");
 const { applyStockMovement, InsufficientStockError } = require("../lib/stock");
+const { getShopSettings, calculateTax, round2 } = require("../lib/tax");
 const { generateReceiptPdf } = require("../lib/pdf");
 
 const router = express.Router();
@@ -100,8 +101,11 @@ router.post("/", requireRole("admin", "staff"), async (req, res) => {
     preparedItems.push({ product, quantity, options, unitPrice, lineTotal });
   }
 
-  const subtotal = preparedItems.reduce((sum, i) => sum + i.lineTotal, 0);
-  const total = subtotal;
+  const subtotal = round2(preparedItems.reduce((sum, i) => sum + i.lineTotal, 0));
+  // Snapshotted onto the sale so changing the shop's VAT settings later never
+  // rewrites what past receipts said.
+  const shopSettings = await getShopSettings();
+  const { taxRate, taxAmount, taxInclusive, total } = calculateTax(subtotal, shopSettings);
 
   let resolvedAmountTendered = null;
   let changeDue = null;
@@ -118,7 +122,7 @@ router.post("/", requireRole("admin", "staff"), async (req, res) => {
         .json({ error: "amountTendered must be a number greater than or equal to the total" });
     }
     resolvedAmountTendered = tendered;
-    changeDue = tendered - total;
+    changeDue = round2(tendered - total);
   }
 
   const stockResults = [];
@@ -130,12 +134,25 @@ router.post("/", requireRole("admin", "staff"), async (req, res) => {
           locationId: location.id,
           cashierId: req.user.id,
           subtotal,
+          taxRate,
+          taxAmount,
+          taxInclusive,
           total,
           paymentMethod,
           amountTendered: resolvedAmountTendered,
           changeDue,
           note: note || null,
         },
+      });
+
+      // Derived from the row's own id, which Postgres already serialises, so
+      // numbering stays unique and gapless under concurrent checkouts without
+      // a separate counter table to contend on.
+      const issued = new Date(created.createdAt);
+      const receiptNumber = `${issued.getUTCFullYear()}${String(issued.getUTCMonth() + 1).padStart(2, "0")}-${String(created.id).padStart(6, "0")}`;
+      const withReceipt = await tx.sale.update({
+        where: { id: created.id },
+        data: { receiptNumber },
       });
 
       for (const item of preparedItems) {
@@ -172,7 +189,7 @@ router.post("/", requireRole("admin", "staff"), async (req, res) => {
         stockResults.push({ updatedProduct, previousQuantity });
       }
 
-      return created;
+      return withReceipt;
     });
   } catch (err) {
     if (err instanceof InsufficientStockError) {
@@ -253,7 +270,7 @@ router.get("/:id/receipt", async (req, res) => {
     return res.status(404).json({ error: "Sale not found" });
   }
 
-  const pdf = await generateReceiptPdf(sale);
+  const pdf = await generateReceiptPdf(sale, await getShopSettings());
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `attachment; filename="receipt-${sale.id}.pdf"`);
   res.send(pdf);

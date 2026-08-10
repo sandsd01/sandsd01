@@ -36,7 +36,7 @@ router.get("/:id/stock", async (req, res) => {
 });
 
 router.post("/", requireRole("admin"), async (req, res) => {
-  const { name, address, phone, isActive } = req.body || {};
+  const { name, address, phone, isActive, taxBranchCode } = req.body || {};
   if (!name) {
     return res.status(400).json({ error: "name is required" });
   }
@@ -51,6 +51,7 @@ router.post("/", requireRole("admin"), async (req, res) => {
       name,
       address: address || null,
       phone: phone || null,
+      taxBranchCode: taxBranchCode || null,
       ...(isActive !== undefined && { isActive: Boolean(isActive) }),
     },
   });
@@ -68,7 +69,7 @@ router.post("/", requireRole("admin"), async (req, res) => {
 
 router.patch("/:id", requireRole("admin"), async (req, res) => {
   const id = Number(req.params.id);
-  const { name, address, phone, isActive } = req.body || {};
+  const { name, address, phone, isActive, taxBranchCode } = req.body || {};
 
   const existing = await prisma.location.findUnique({ where: { id } });
   if (!existing) return res.status(404).json({ error: "Location not found" });
@@ -79,6 +80,7 @@ router.patch("/:id", requireRole("admin"), async (req, res) => {
       ...(name !== undefined && { name }),
       ...(address !== undefined && { address: address || null }),
       ...(phone !== undefined && { phone: phone || null }),
+      ...(taxBranchCode !== undefined && { taxBranchCode: taxBranchCode || null }),
       ...(isActive !== undefined && { isActive: Boolean(isActive) }),
     },
   });

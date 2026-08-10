@@ -155,6 +155,8 @@ All API routes are namespaced under `/api` (so client-side SPA routes like `/sal
 | POST | `/api/sales` | admin, staff | Checkout — `{ locationId, items: [{ productId, quantity, modifierOptionIds? }], paymentMethod: "cash"\|"promptpay"\|"card", amountTendered?, note? }`; prices each line as `sellingPrice + Σ priceDelta`, then decrements stock (company-wide `Product.quantity` and that branch's `LocationStock`). Staff with a `homeLocationId` get `403` for any other branch |
 | GET | `/api/sales?locationId=&from=&to=&status=&page=&pageSize=` | admin, staff | Paginated sale list, newest first; staff are auto-scoped to their own `homeLocationId` |
 | GET | `/api/sales/:id` | admin, staff | Get one sale with its items and modifiers |
+| GET | `/api/settings/shop` | any | Shop VAT/tax-invoice settings (the POS and receipts read these) |
+| PATCH | `/api/settings/shop` | admin | Update the shop's legal name, tax ID, address, and VAT settings |
 | GET | `/api/sales/:id/receipt` | admin, staff | Download the sale as a PDF receipt |
 | POST | `/api/sales/:id/void` | admin | Void a completed sale (`{ reason }`); restocks each item via an `in` movement at the sale's location |
 | GET | `/api/reports/summary` | any | Product/quantity/value/low-stock counts and the 10 most recent movements |
