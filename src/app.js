@@ -15,6 +15,7 @@ const salesRoutes = require("./routes/sales");
 const settingsRoutes = require("./routes/settings");
 const { uploadDir, isRemote: usingObjectStorage, publicBaseUrl } = require("./lib/storage");
 const { apiLimiter } = require("./middleware/rateLimit");
+const { decimalsToNumbers } = require("./lib/money");
 
 const app = express();
 
@@ -63,6 +64,14 @@ if (corsOrigin) {
 }
 
 app.use(express.json());
+
+// Money is Prisma.Decimal in the database layer but plain numbers on the wire.
+// Converting in one place means no route can forget and start emitting strings.
+app.use((_req, res, next) => {
+  const sendJson = res.json.bind(res);
+  res.json = (body) => sendJson(decimalsToNumbers(body));
+  next();
+});
 
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 

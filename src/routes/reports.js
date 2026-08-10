@@ -1,5 +1,6 @@
 const express = require("express");
 const prisma = require("../../prisma/client");
+const { toDecimal, money } = require("../lib/money");
 const { authenticate, requireRole } = require("../middleware/auth");
 const { sendLowStockAlert, sendDailySummary } = require("../lib/email");
 const { buildSummaryPdf } = require("../lib/pdf");
@@ -12,7 +13,9 @@ async function getSummary() {
   const products = await prisma.product.findMany({ where: { deletedAt: null } });
   const totalProducts = products.length;
   const totalQuantity = products.reduce((sum, p) => sum + p.quantity, 0);
-  const totalValue = products.reduce((sum, p) => sum + p.quantity * (p.unitCost || 0), 0);
+  const totalValue = money(
+    products.reduce((sum, p) => sum.plus(toDecimal(p.unitCost || 0).times(p.quantity)), toDecimal(0))
+  );
   const lowStockProducts = products
     .filter((p) => p.quantity <= p.reorderLevel)
     .map((p) => ({
@@ -145,15 +148,19 @@ router.get("/sales-summary", async (req, res) => {
     where,
     select: { id: true, total: true, locationId: true },
   });
-  const totalRevenue = sales.reduce((sum, s) => sum + s.total, 0);
+  const totalRevenue = money(sales.reduce((sum, s) => sum.plus(toDecimal(s.total)), toDecimal(0)));
   const totalSaleCount = sales.length;
 
   let revenueByLocation = [];
   if (!scopedLocationId) {
     const byLocation = new Map();
     for (const s of sales) {
-      const entry = byLocation.get(s.locationId) || { locationId: s.locationId, revenue: 0, count: 0 };
-      entry.revenue += s.total;
+      const entry = byLocation.get(s.locationId) || {
+        locationId: s.locationId,
+        revenue: toDecimal(0),
+        count: 0,
+      };
+      entry.revenue = entry.revenue.plus(toDecimal(s.total));
       entry.count += 1;
       byLocation.set(s.locationId, entry);
     }
@@ -164,6 +171,7 @@ router.get("/sales-summary", async (req, res) => {
     const nameById = new Map(locations.map((l) => [l.id, l.name]));
     revenueByLocation = [...byLocation.values()].map((entry) => ({
       ...entry,
+      revenue: money(entry.revenue),
       name: nameById.get(entry.locationId) ?? "Unknown",
     }));
   }
@@ -189,7 +197,7 @@ router.get("/sales-summary", async (req, res) => {
     productId: p.productId,
     product: productById.get(p.productId) ?? null,
     quantitySold: p._sum.quantity ?? 0,
-    revenue: p._sum.lineTotal ?? 0,
+    revenue: money(p._sum.lineTotal ?? 0),
   }));
 
   res.json({

@@ -4,6 +4,7 @@ const request = require("supertest");
 const { resetDb, createUser, prisma } = require("./helpers/db");
 const app = require("../src/app");
 const { calculateTax } = require("../src/lib/tax");
+const { isDecimal, toNumber } = require("../src/lib/money");
 
 async function login(email, password) {
   const res = await request(app).post("/api/auth/login").send({ email, password });
@@ -11,34 +12,52 @@ async function login(email, password) {
 }
 
 describe("VAT calculation", () => {
+  // calculateTax works in Prisma.Decimal so the arithmetic is exact; the API
+  // converts to numbers at the response boundary. These tests call it directly,
+  // so they compare numerically and assert the Decimal contract explicitly.
+  test("returns Decimals, not floats", () => {
+    const r = calculateTax(107, { vatRegistered: true, vatRate: 0.07, pricesIncludeVat: true });
+    assert.ok(isDecimal(r.total), "total must be a Decimal");
+    assert.ok(isDecimal(r.taxAmount), "taxAmount must be a Decimal");
+    assert.ok(isDecimal(r.taxRate), "taxRate must be a Decimal");
+  });
+
   test("no VAT when the shop isn't VAT-registered", () => {
     const r = calculateTax(100, { vatRegistered: false, vatRate: 0.07, pricesIncludeVat: true });
-    assert.equal(r.taxAmount, 0);
-    assert.equal(r.taxRate, 0);
-    assert.equal(r.total, 100);
+    assert.equal(toNumber(r.taxAmount), 0);
+    assert.equal(toNumber(r.taxRate), 0);
+    assert.equal(toNumber(r.total), 100);
   });
 
   test("inclusive pricing backs VAT out of the menu price", () => {
     // 107 gross at 7% => 100 net + 7 VAT; the customer still pays 107.
     const r = calculateTax(107, { vatRegistered: true, vatRate: 0.07, pricesIncludeVat: true });
-    assert.equal(r.total, 107);
-    assert.equal(r.taxAmount, 7);
+    assert.equal(toNumber(r.total), 107);
+    assert.equal(toNumber(r.taxAmount), 7);
     assert.equal(r.taxInclusive, true);
   });
 
   test("exclusive pricing adds VAT on top", () => {
     const r = calculateTax(100, { vatRegistered: true, vatRate: 0.07, pricesIncludeVat: false });
-    assert.equal(r.taxAmount, 7);
-    assert.equal(r.total, 107);
+    assert.equal(toNumber(r.taxAmount), 7);
+    assert.equal(toNumber(r.total), 107);
     assert.equal(r.taxInclusive, false);
   });
 
   test("rounds to two decimals rather than leaking float drift", () => {
     const r = calculateTax(79, { vatRegistered: true, vatRate: 0.07, pricesIncludeVat: true });
     // 79 - 79/1.07 = 5.1682...
-    assert.equal(r.taxAmount, 5.17);
-    assert.equal(r.total, 79);
-    assert.equal(Number.isInteger(r.taxAmount * 100), true);
+    assert.equal(toNumber(r.taxAmount), 5.17);
+    assert.equal(toNumber(r.total), 79);
+    assert.equal(Number.isInteger(toNumber(r.taxAmount) * 100), true);
+  });
+
+  test("summing many lines stays exact where floats would drift", () => {
+    // 0.1 + 0.2 !== 0.3 in binary floating point; Decimal must not have that
+    // problem, which is the whole reason for this migration.
+    const drifty = calculateTax(0.1, { vatRegistered: false, vatRate: 0, pricesIncludeVat: true });
+    const sum = drifty.total.plus(0.2);
+    assert.equal(sum.toString(), "0.3");
   });
 });
 
