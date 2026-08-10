@@ -12,7 +12,7 @@ const supplierRoutes = require("./routes/suppliers");
 const purchaseOrderRoutes = require("./routes/purchaseOrders");
 const locationRoutes = require("./routes/locations");
 const salesRoutes = require("./routes/sales");
-const { uploadDir } = require("./lib/upload");
+const { uploadDir, isRemote: usingObjectStorage, publicBaseUrl } = require("./lib/storage");
 const { apiLimiter } = require("./middleware/rateLimit");
 
 const app = express();
@@ -34,7 +34,9 @@ app.use(
     contentSecurityPolicy: {
       directives: {
         ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-        "img-src": ["'self'", "data:", "blob:"],
+        // The object-storage origin must be listed explicitly or the browser
+        // blocks every product image and branch QR once S3 is configured.
+        "img-src": ["'self'", "data:", "blob:", ...(publicBaseUrl ? [publicBaseUrl] : [])],
         // Vite injects the stylesheet as a file, but a few components set
         // inline style attributes, which style-src-attr covers.
         "style-src": ["'self'", "'unsafe-inline'"],
@@ -63,7 +65,11 @@ app.use(express.json());
 
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
-app.use("/uploads", express.static(uploadDir));
+// Only meaningful for local-disk storage; with object storage the images are
+// served straight from the bucket/CDN origin instead.
+if (!usingObjectStorage) {
+  app.use("/uploads", express.static(uploadDir));
+}
 
 app.use(apiLimiter);
 

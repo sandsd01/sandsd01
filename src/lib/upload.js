@@ -1,22 +1,14 @@
 const multer = require("multer");
 const path = require("path");
-const fs = require("fs");
-
-const uploadDir = path.join(__dirname, "../../uploads");
-fs.mkdirSync(uploadDir, { recursive: true });
+const { uploadDir } = require("./storage");
 
 const ALLOWED_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif"]);
 
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, uploadDir),
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, `product-${req.params.id}-${Date.now()}${ext}`);
-  },
-});
-
+// Buffered in memory (capped at 5MB below) so `src/lib/storage.js` decides
+// where the bytes actually land — local disk or object storage — rather than
+// multer writing straight to a filesystem that may not survive a redeploy.
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
