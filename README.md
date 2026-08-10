@@ -55,6 +55,7 @@ npm test            # migrates test.db and runs the full backend test suite (nod
 | `npm run prisma:generate` | Regenerate the Prisma client |
 | `npm run seed` | Create the initial admin user in `dev.db` |
 | `npm run seed:menu` | Seed 2 sample branches and a burger/fries/drinks menu (with modifiers and initial stock) into `dev.db` — safe to re-run |
+| `npm run dev:fresh` | Delete `dev.db`, re-migrate, run `seed` + `seed:menu`, then start the API — a one-command reset for local testing |
 
 ## API overview
 
