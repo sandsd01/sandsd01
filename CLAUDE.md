@@ -68,17 +68,22 @@ npm run build   # production build, also run in CI
 
 ## Subagent pipeline
 
-This project defines 7 subagents under `.claude/agents/`. For any new feature or system request, invoke them in this order:
+This project defines 8 subagents under `.claude/agents/`. For any new feature or system request, invoke them in this order:
 
 1. **planner-agent** — breaks the request into a plan and task list for the other agents. Always run first for anything beyond a trivial one-line fix.
 2. **database-agent** — designs schema, writes migrations, defines models.
 3. **backend-agent** — implements API endpoints, business logic, auth/authorization.
-4. **frontend-agent** — builds UI screens/components against the backend API.
-5. **qa-agent** — writes and runs tests covering the golden path and edge cases.
-6. **devops-agent** — sets up build/run/CI/deployment configuration.
-7. **docs-agent** — updates README/API docs/CLAUDE.md to match what was actually built.
+4. **designer-agent** — decides how a screen looks and feels to operate: layout, hierarchy, type, colour, states, touch targets. Runs before frontend-agent so the build has a design to follow, and is also the right agent on its own when the ask is "make this clearer/easier to use" rather than "add this behaviour".
+5. **frontend-agent** — builds UI screens/components against the backend API.
+6. **qa-agent** — writes and runs tests covering the golden path and edge cases.
+7. **devops-agent** — sets up build/run/CI/deployment configuration.
+8. **docs-agent** — updates README/API docs/CLAUDE.md to match what was actually built.
 
 Each agent should hand off to the next once its stage is done, rather than trying to do the whole feature itself. Skip stages that clearly don't apply to a given request (e.g. a pure copy change doesn't need database-agent), but default to running planner-agent first so that decision is made explicitly rather than skipped by accident.
+
+### Design work
+
+The POS is operated at a counter, not read at a desk: interactive targets are ≥44px, the primary action on a screen is visibly larger than the rest, money is set in tabular figures, and no state is carried by colour alone. `web/src/index.css` holds all tokens and component styles — plain CSS on purpose, no framework and no webfont CDN (a blocked font URL fails silently). Verify design changes by driving the real screens in a browser and measuring rendered sizes, not by reading the diff; a taller control can wrap the nav or clip a fixed-height box in ways CSS review misses. See designer-agent for the full brief.
 
 ### Role-based access
 

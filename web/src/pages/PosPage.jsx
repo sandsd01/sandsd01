@@ -445,6 +445,7 @@ export function PosPage() {
 
             <button
               type="button"
+              className="btn-checkout"
               onClick={handleCheckout}
               disabled={checkingOut || cart.length === 0 || !locationId}
             >

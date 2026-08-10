@@ -1,14 +1,27 @@
 :root {
-  --text: #2d2d34;
-  --text-muted: #6b6375;
+  --text: #1c1b22;
+  --text-muted: #57525f;
   --bg: #fff;
-  --bg-subtle: #f6f5f8;
-  --border: #e5e4e7;
+  --bg-subtle: #f5f4f8;
+  --bg-raised: #fff;
+  --border: #d9d7de;
+  --border-strong: #b9b6c2;
   --accent: #6d28d9;
-  --danger: #b91c1c;
-  --danger-bg: #fee2e2;
+  --accent-hover: #5b21b6;
+  --accent-soft: #f2ecfd;
+  --danger: #b3261e;
+  --danger-bg: #fdeceb;
+  --ok: #17643f;
+  --ok-bg: #e6f4ec;
+  --warn-bg: #fdf1dc;
+  --ring: #6d28d9;
 
-  font: 16px/1.5 system-ui, 'Segoe UI', Roboto, sans-serif;
+  /* Every control is at least this tall: a cashier taps these on a tablet at
+     speed, and 36px targets get mis-hit. */
+  --tap: 46px;
+  --radius: 10px;
+
+  font: 17px/1.55 system-ui, 'Segoe UI', Roboto, sans-serif;
   color-scheme: light dark;
   color: var(--text);
   background: var(--bg);
@@ -16,14 +29,22 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --text: #e5e4e7;
-    --text-muted: #9ca3af;
-    --bg: #16171d;
-    --bg-subtle: #1f2028;
-    --border: #2e303a;
-    --accent: #c084fc;
-    --danger: #f87171;
-    --danger-bg: #3f1d1d;
+    --text: #edecf1;
+    --text-muted: #a8a3b3;
+    --bg: #15161c;
+    --bg-subtle: #1e1f27;
+    --bg-raised: #24252f;
+    --border: #34363f;
+    --border-strong: #4a4c58;
+    --accent: #c4a2fd;
+    --accent-hover: #d3bafe;
+    --accent-soft: #2a2140;
+    --danger: #ff9d95;
+    --danger-bg: #3d1f1d;
+    --ok: #7fdcab;
+    --ok-bg: #14301f;
+    --warn-bg: #3a2f16;
+    --ring: #c4a2fd;
   }
 }
 
@@ -124,26 +145,59 @@ label {
 
 input,
 select,
-button {
+button,
+textarea {
   font: inherit;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  min-height: var(--tap);
+  padding: 10px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
   background: var(--bg);
   color: var(--text);
+}
+
+input:hover,
+select:hover {
+  border-color: var(--accent);
+}
+
+/* One visible focus treatment for every control, so keyboard and switch users
+   can always tell where they are. */
+:where(input, select, button, textarea, a):focus-visible {
+  outline: 3px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: var(--radius);
 }
 
 button {
   cursor: pointer;
   background: var(--accent);
-  color: white;
-  border: none;
-  font-weight: 500;
+  color: #fff;
+  border: 1px solid var(--accent);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  transition: background-color 0.12s ease, transform 0.06s ease;
+}
+
+button:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+button:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 button:disabled {
-  opacity: 0.6;
-  cursor: default;
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
 }
 
 .button {
@@ -382,41 +436,76 @@ button:disabled {
 
 .product-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(176px, 1fr));
+  gap: 14px;
 }
 
 .product-card {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 4px;
+  gap: 6px;
+  min-height: 128px;
   text-align: left;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 12px;
-  background: var(--bg-subtle);
+  border-radius: var(--radius);
+  padding: 16px;
+  background: var(--bg-raised);
   color: var(--text);
   font-weight: normal;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 6%);
+}
+
+.product-card:hover:not(:disabled) {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  transform: none;
 }
 
 .product-card-name {
-  font-weight: 600;
+  font-weight: 650;
+  font-size: 17px;
+  line-height: 1.3;
 }
 
-.product-card-sku,
-.product-card .stock {
-  font-size: 12px;
+.product-card-sku {
+  font-size: 13px;
   color: var(--text-muted);
 }
 
-.product-card .price {
+/* Stock reads as a chip rather than grey micro-text: at a till it is the
+   thing a cashier checks before promising an order. */
+.product-card .stock {
+  font-size: 13px;
   font-weight: 600;
-  color: var(--accent);
+  color: var(--ok);
+  background: var(--ok-bg);
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+
+.product-card .price {
+  font-weight: 700;
+  font-size: 21px;
+  color: var(--text);
+  margin-top: auto;
+  font-variant-numeric: tabular-nums;
 }
 
 .product-card.out-of-stock {
-  opacity: 0.5;
+  opacity: 1;
+  background: var(--bg-subtle);
+  border-style: dashed;
+}
+
+.product-card.out-of-stock .stock {
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+
+.product-card.out-of-stock .product-card-name,
+.product-card.out-of-stock .price {
+  color: var(--text-muted);
 }
 
 .pos-cart {
@@ -456,11 +545,23 @@ button:disabled {
 .cart-totals {
   display: flex;
   justify-content: space-between;
-  font-weight: 600;
-  font-size: 16px;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 2px solid var(--border);
+  align-items: baseline;
+  font-weight: 700;
+  font-size: 26px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 2px solid var(--border-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.cart-line {
+  min-height: 56px;
+}
+
+.cart-empty {
+  font-size: 15px;
+  padding: 20px 0;
+  text-align: center;
 }
 
 .qty-stepper {
@@ -470,33 +571,57 @@ button:disabled {
 }
 
 .qty-stepper button {
-  padding: 2px 10px;
-  font-size: 15px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  font-size: 22px;
+  line-height: 1;
+  font-weight: 700;
 }
 
 .qty-stepper input {
-  width: 48px;
+  width: 60px;
+  min-height: 44px;
   text-align: center;
   padding: 4px;
+  font-size: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .payment-methods {
   display: flex;
-  gap: 8px;
-  margin: 8px 0 12px;
+  gap: 10px;
+  margin: 10px 0 16px;
 }
 
 .payment-methods button {
   flex: 1;
+  min-height: 56px;
   background: var(--bg);
   color: var(--text);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
+  font-weight: 600;
 }
 
+.payment-methods button:hover:not(.selected) {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+/* Selected payment is carried by a ring and a check, not colour alone —
+   colour-blind cashiers must be able to tell at a glance too. */
 .payment-methods button.selected {
   background: var(--accent);
-  color: white;
+  color: #fff;
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.payment-methods button.selected::before {
+  content: '✓ ';
+  font-weight: 700;
 }
 
 .promptpay-qr-panel {
@@ -606,4 +731,208 @@ button:disabled {
 .status-badge.voided {
   background: var(--danger-bg);
   color: var(--danger);
+}
+
+/* ---- Clarity pass -------------------------------------------------------
+   Aimed at the till: the primary action has to be unmistakable, numbers have
+   to be readable across a counter, and every row/label needs enough contrast
+   and size to be scanned quickly rather than read carefully. */
+
+/* Checkout is the one action on the screen that takes money — size it that way. */
+.btn-checkout {
+  width: 100%;
+  min-height: 64px;
+  font-size: 20px;
+  font-weight: 700;
+  margin-top: 4px;
+  border-radius: var(--radius);
+  box-shadow: 0 2px 8px rgb(109 40 217 / 25%);
+}
+
+.btn-checkout:disabled {
+  box-shadow: none;
+}
+
+/* Secondary actions read as secondary instead of competing with the primary one. */
+.btn-secondary,
+button.secondary {
+  background: var(--bg);
+  color: var(--accent);
+  border: 1px solid var(--border-strong);
+}
+
+.btn-secondary:hover:not(:disabled),
+button.secondary:hover:not(:disabled) {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Destructive actions must never be a one-tap mistake in an unlabelled colour. */
+button.danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+
+/* Labels were 14px and easy to skip past when filling a form in a hurry. */
+label {
+  font-size: 15px;
+  font-weight: 550;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+/* Tables are scanned, not read: roomier rows, a header that reads as a header,
+   and a hover cue so the eye can track across a wide row. */
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  font-weight: 700;
+  border-bottom: 2px solid var(--border-strong);
+  padding: 12px 10px;
+  text-align: left;
+}
+
+td {
+  padding: 14px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+tbody tr:hover {
+  background: var(--bg-subtle);
+}
+
+/* Money lines up in columns wherever it appears. */
+td:has(+ td),
+.price,
+.cart-totals span {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Nav: show where you are, and give links a real hit area. Scrolls sideways
+   rather than wrapping — a wrapped nav pushed Logout onto its own line and
+   shifted the whole page down. */
+.navbar {
+  gap: 2px;
+  padding: 8px 16px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.navbar > * {
+  flex: none;
+}
+
+.navbar a {
+  padding: 9px 11px;
+  border-radius: 8px;
+  color: var(--text);
+  line-height: 1.2;
+  font-size: 15.5px;
+  white-space: nowrap;
+}
+
+.navbar button {
+  min-height: 40px;
+  padding: 8px 14px;
+  white-space: nowrap;
+}
+
+.navbar select {
+  min-height: 40px;
+  padding: 6px 8px;
+}
+
+/* The scan box holds a long placeholder; let it show the whole hint. */
+.inline-form input {
+  min-width: min(380px, 100%);
+}
+
+.navbar a:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.navbar a.active {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 650;
+}
+
+/* Feedback messages need to be noticed, not blend into the page. */
+.error,
+.notice,
+.hint {
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.error {
+  background: var(--danger-bg);
+  color: var(--danger);
+  border: 1px solid currentColor;
+  font-weight: 600;
+}
+
+.notice {
+  background: var(--ok-bg);
+  color: var(--ok);
+  border: 1px solid currentColor;
+  font-weight: 600;
+}
+
+.hint {
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+/* Receipt: the total is the answer to "how much?" — let it dominate. */
+.centered .card {
+  max-width: 460px;
+  background: var(--bg-raised);
+  gap: 4px;
+}
+
+.centered .card p {
+  margin: 0;
+  padding: 7px 0;
+  color: var(--text-muted);
+  font-size: 15px;
+}
+
+.centered .card p strong {
+  color: var(--text);
+  font-size: 17px;
+}
+
+.centered .card h1 {
+  margin-bottom: 8px;
+}
+
+/* Forms and cards get room to breathe on small screens too. */
+@media (max-width: 640px) {
+  .content {
+    padding: 16px;
+  }
+
+  .payment-methods {
+    flex-wrap: wrap;
+  }
+
+  .payment-methods button {
+    flex: 1 1 30%;
+  }
 }

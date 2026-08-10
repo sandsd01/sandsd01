@@ -1,4 +1,4 @@
-import { Link, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
 
@@ -15,19 +15,19 @@ export function Layout() {
   return (
     <div className="layout">
       <nav className="navbar">
-        <Link to="/">{t('nav.products')}</Link>
-        <Link to="/pos">{t('nav.pos')}</Link>
-        <Link to="/sales">{t('nav.sales')}</Link>
-        <Link to="/reports">{t('nav.reports')}</Link>
+        <NavLink to="/" end className={({isActive}) => isActive ? "active" : undefined}>{t('nav.products')}</NavLink>
+        <NavLink to="/pos" className={({isActive}) => isActive ? "active" : undefined}>{t('nav.pos')}</NavLink>
+        <NavLink to="/sales" className={({isActive}) => isActive ? "active" : undefined}>{t('nav.sales')}</NavLink>
+        <NavLink to="/reports" className={({isActive}) => isActive ? "active" : undefined}>{t('nav.reports')}</NavLink>
         {user?.role === 'admin' && (
           <>
-            <Link to="/users">{t('nav.users')}</Link>
-            <Link to="/suppliers">{t('nav.suppliers')}</Link>
-            <Link to="/purchase-orders">{t('nav.purchaseOrders')}</Link>
-            <Link to="/locations">{t('nav.locations')}</Link>
-            <Link to="/settings">{t('nav.settings')}</Link>
-            <Link to="/trash">{t('nav.trash')}</Link>
-            <Link to="/activity-log">{t('nav.activityLog')}</Link>
+            <NavLink to="/users" className={({isActive}) => isActive ? "active" : undefined}>{t('nav.users')}</NavLink>
+            <NavLink to="/suppliers" className={({isActive}) => isActive ? "active" : undefined}>{t('nav.suppliers')}</NavLink>
+            <NavLink to="/purchase-orders" className={({isActive}) => isActive ? "active" : undefined}>{t('nav.purchaseOrders')}</NavLink>
+            <NavLink to="/locations" className={({isActive}) => isActive ? "active" : undefined}>{t('nav.locations')}</NavLink>
+            <NavLink to="/settings" className={({isActive}) => isActive ? "active" : undefined}>{t('nav.settings')}</NavLink>
+            <NavLink to="/trash" className={({isActive}) => isActive ? "active" : undefined}>{t('nav.trash')}</NavLink>
+            <NavLink to="/activity-log" className={({isActive}) => isActive ? "active" : undefined}>{t('nav.activityLog')}</NavLink>
           </>
         )}
         <span className="spacer" />
@@ -42,9 +42,9 @@ export function Layout() {
         </select>
         {user && (
           <>
-            <Link to="/account" className="user-badge">
+            <NavLink to="/account" className="user-badge">
               {user.email} ({user.role})
-            </Link>
+            </NavLink>
             <button onClick={handleLogout}>{t('nav.logout')}</button>
           </>
         )}
