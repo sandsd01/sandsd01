@@ -13,7 +13,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:generate": "prisma generate",
     "seed": "node prisma/seed.js",
-    "seed:menu": "node prisma/seed-menu.js"
+    "seed:menu": "node prisma/seed-menu.js",
+    "dev:fresh": "rm -f dev.db dev.db-journal dev.db-wal dev.db-shm && prisma migrate deploy && node prisma/seed.js && node prisma/seed-menu.js && node --watch src/server.js"
   },
   "repository": {
     "type": "git",
