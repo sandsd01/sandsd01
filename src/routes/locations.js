@@ -12,8 +12,29 @@ router.get("/", async (_req, res) => {
   res.json(locations);
 });
 
+router.get("/:id/stock", async (req, res) => {
+  const locationId = Number(req.params.id);
+  const location = await prisma.location.findUnique({ where: { id: locationId } });
+  if (!location) return res.status(404).json({ error: "Location not found" });
+
+  const stock = await prisma.locationStock.findMany({
+    where: { locationId, product: { deletedAt: null } },
+    include: { product: { select: { id: true, sku: true, name: true, sellingPrice: true } } },
+    orderBy: { product: { name: "asc" } },
+  });
+
+  res.json(
+    stock.map((s) => ({
+      productId: s.productId,
+      quantity: s.quantity,
+      updatedAt: s.updatedAt,
+      product: s.product,
+    }))
+  );
+});
+
 router.post("/", requireRole("admin"), async (req, res) => {
-  const { name } = req.body || {};
+  const { name, address, phone, isActive } = req.body || {};
   if (!name) {
     return res.status(400).json({ error: "name is required" });
   }
@@ -23,7 +44,14 @@ router.post("/", requireRole("admin"), async (req, res) => {
     return res.status(409).json({ error: "A location with this name already exists" });
   }
 
-  const location = await prisma.location.create({ data: { name } });
+  const location = await prisma.location.create({
+    data: {
+      name,
+      address: address || null,
+      phone: phone || null,
+      ...(isActive !== undefined && { isActive: Boolean(isActive) }),
+    },
+  });
 
   await logAction({
     userId: req.user.id,
@@ -38,14 +66,19 @@ router.post("/", requireRole("admin"), async (req, res) => {
 
 router.patch("/:id", requireRole("admin"), async (req, res) => {
   const id = Number(req.params.id);
-  const { name } = req.body || {};
+  const { name, address, phone, isActive } = req.body || {};
 
   const existing = await prisma.location.findUnique({ where: { id } });
   if (!existing) return res.status(404).json({ error: "Location not found" });
 
   const location = await prisma.location.update({
     where: { id },
-    data: { ...(name !== undefined && { name }) },
+    data: {
+      ...(name !== undefined && { name }),
+      ...(address !== undefined && { address: address || null }),
+      ...(phone !== undefined && { phone: phone || null }),
+      ...(isActive !== undefined && { isActive: Boolean(isActive) }),
+    },
   });
 
   await logAction({
@@ -67,6 +100,11 @@ router.delete("/:id", requireRole("admin"), async (req, res) => {
   const hasMovements = await prisma.stockMovement.findFirst({ where: { locationId: id } });
   if (hasMovements) {
     return res.status(409).json({ error: "Cannot delete a location with recorded movements" });
+  }
+
+  const hasStock = await prisma.locationStock.findFirst({ where: { locationId: id, quantity: { gt: 0 } } });
+  if (hasStock) {
+    return res.status(409).json({ error: "Cannot delete a location with remaining stock" });
   }
 
   await prisma.location.delete({ where: { id } });

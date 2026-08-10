@@ -16,6 +16,8 @@ export function Layout() {
     <div className="layout">
       <nav className="navbar">
         <Link to="/">{t('nav.products')}</Link>
+        <Link to="/pos">{t('nav.pos')}</Link>
+        <Link to="/sales">{t('nav.sales')}</Link>
         <Link to="/reports">{t('nav.reports')}</Link>
         {user?.role === 'admin' && (
           <>

@@ -8,8 +8,12 @@ import { MovementsChart } from '../components/MovementsChart'
 export function ReportsPage() {
   const { token, user } = useAuth()
   const { t } = useLanguage()
+  const isAdmin = user?.role === 'admin'
   const [summary, setSummary] = useState(null)
   const [timeseries, setTimeseries] = useState(null)
+  const [salesSummary, setSalesSummary] = useState(null)
+  const [salesLocationId, setSalesLocationId] = useState('')
+  const [locations, setLocations] = useState([])
   const [error, setError] = useState(null)
   const [message, setMessage] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -18,14 +22,32 @@ export function ReportsPage() {
     Promise.all([
       apiFetch('/reports/summary', { token }),
       apiFetch('/reports/movements-timeseries?days=30', { token }),
+      apiFetch('/reports/sales-summary', { token }),
     ])
-      .then(([summaryData, timeseriesData]) => {
+      .then(([summaryData, timeseriesData, salesSummaryData]) => {
         setSummary(summaryData)
         setTimeseries(timeseriesData)
+        setSalesSummary(salesSummaryData)
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
+    if (isAdmin) {
+      apiFetch('/locations', { token })
+        .then(setLocations)
+        .catch(() => {})
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token])
+
+  useEffect(() => {
+    if (!isAdmin) return
+    const params = new URLSearchParams()
+    if (salesLocationId) params.set('locationId', salesLocationId)
+    apiFetch(`/reports/sales-summary?${params.toString()}`, { token })
+      .then(setSalesSummary)
+      .catch((err) => setError(err.message))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [salesLocationId])
 
   async function handleSendAlert() {
     setMessage(null)
@@ -168,6 +190,85 @@ export function ReportsPage() {
             ))}
           </tbody>
         </table>
+      )}
+
+      <h2>{t('reports.salesTitle')}</h2>
+      {isAdmin && (
+        <label>
+          {t('sales.branch')}
+          <select value={salesLocationId} onChange={(e) => setSalesLocationId(e.target.value)}>
+            <option value="">{t('sales.allBranches')}</option>
+            {locations.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {salesSummary && (
+        <>
+          <div className="stat-row">
+            <div className="stat-tile">
+              <span className="stat-value">{salesSummary.totalRevenue.toFixed(2)}</span>
+              <span className="stat-label">{t('reports.totalRevenue')}</span>
+            </div>
+            <div className="stat-tile">
+              <span className="stat-value">{salesSummary.totalSaleCount}</span>
+              <span className="stat-label">{t('reports.saleCount')}</span>
+            </div>
+          </div>
+
+          {isAdmin && salesSummary.revenueByLocation.length > 0 && (
+            <>
+              <h3>{t('reports.revenueByBranch')}</h3>
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>{t('reports.branch')}</th>
+                    <th>{t('reports.revenue')}</th>
+                    <th>{t('sales.title')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {salesSummary.revenueByLocation.map((l) => (
+                    <tr key={l.locationId}>
+                      <td>{l.name}</td>
+                      <td>{l.revenue.toFixed(2)}</td>
+                      <td>{l.count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+
+          <h3>{t('reports.topProducts')}</h3>
+          {salesSummary.topProducts.length === 0 ? (
+            <p>{t('reports.noSales')}</p>
+          ) : (
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>{t('products.sku')}</th>
+                  <th>{t('common.name')}</th>
+                  <th>{t('reports.quantitySold')}</th>
+                  <th>{t('reports.revenue')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {salesSummary.topProducts.map((p) => (
+                  <tr key={p.productId}>
+                    <td>{p.product?.sku ?? '-'}</td>
+                    <td>{p.product?.name ?? '-'}</td>
+                    <td>{p.quantitySold}</td>
+                    <td>{p.revenue.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </>
       )}
     </div>
   )

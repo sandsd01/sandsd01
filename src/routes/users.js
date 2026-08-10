@@ -6,9 +6,24 @@ const { logAction } = require("../lib/audit");
 
 const router = express.Router();
 
-const publicUser = ({ id, email, role, createdAt }) => ({ id, email, role, createdAt });
+const publicUser = ({ id, email, role, homeLocationId, createdAt }) => ({
+  id,
+  email,
+  role,
+  homeLocationId,
+  createdAt,
+});
 
 router.use(authenticate, requireRole("admin"));
+
+async function resolveHomeLocationId(homeLocationId) {
+  if (homeLocationId === undefined) return { skip: true };
+  if (homeLocationId === null || homeLocationId === "") return { value: null };
+
+  const location = await prisma.location.findUnique({ where: { id: Number(homeLocationId) } });
+  if (!location) return { error: "Home location not found" };
+  return { value: location.id };
+}
 
 router.get("/", async (_req, res) => {
   const users = await prisma.user.findMany({ orderBy: { email: "asc" } });
@@ -16,7 +31,7 @@ router.get("/", async (_req, res) => {
 });
 
 router.post("/", async (req, res) => {
-  const { email, password, role } = req.body || {};
+  const { email, password, role, homeLocationId } = req.body || {};
   if (!email || !password) {
     return res.status(400).json({ error: "email and password are required" });
   }
@@ -29,9 +44,19 @@ router.post("/", async (req, res) => {
     return res.status(409).json({ error: "A user with this email already exists" });
   }
 
+  const resolvedHomeLocation = await resolveHomeLocationId(homeLocationId);
+  if (resolvedHomeLocation.error) {
+    return res.status(400).json({ error: resolvedHomeLocation.error });
+  }
+
   const passwordHash = await bcrypt.hash(password, 10);
   const user = await prisma.user.create({
-    data: { email, passwordHash, role: role || "staff" },
+    data: {
+      email,
+      passwordHash,
+      role: role || "staff",
+      ...(resolvedHomeLocation.skip ? {} : { homeLocationId: resolvedHomeLocation.value }),
+    },
   });
 
   await logAction({
@@ -47,7 +72,7 @@ router.post("/", async (req, res) => {
 
 router.patch("/:id", async (req, res) => {
   const id = Number(req.params.id);
-  const { email, password, role } = req.body || {};
+  const { email, password, role, homeLocationId } = req.body || {};
   if (role && !["admin", "staff"].includes(role)) {
     return res.status(400).json({ error: "role must be 'admin' or 'staff'" });
   }
@@ -55,9 +80,15 @@ router.patch("/:id", async (req, res) => {
   const existing = await prisma.user.findUnique({ where: { id } });
   if (!existing) return res.status(404).json({ error: "User not found" });
 
+  const resolvedHomeLocation = await resolveHomeLocationId(homeLocationId);
+  if (resolvedHomeLocation.error) {
+    return res.status(400).json({ error: resolvedHomeLocation.error });
+  }
+
   const data = {
     ...(email !== undefined && { email }),
     ...(role !== undefined && { role }),
+    ...(resolvedHomeLocation.skip ? {} : { homeLocationId: resolvedHomeLocation.value }),
   };
   if (password) {
     data.passwordHash = await bcrypt.hash(password, 10);

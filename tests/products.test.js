@@ -625,4 +625,185 @@ describe("Products API", () => {
       .attach("image", Buffer.from("fake"), "test.png");
     assert.equal(res.status, 403);
   });
+
+  test("sellingPrice round-trips through create/update, including clearing it back to null", async () => {
+    const created = await createProduct(adminToken, { sku: "SKU-SELL-1", sellingPrice: 19.99 });
+    assert.equal(created.status, 201);
+    assert.equal(created.body.sellingPrice, 19.99);
+
+    const updated = await request(app)
+      .patch(`/products/${created.body.id}`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ sellingPrice: 24.5 });
+    assert.equal(updated.status, 200);
+    assert.equal(updated.body.sellingPrice, 24.5);
+
+    const cleared = await request(app)
+      .patch(`/products/${created.body.id}`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ sellingPrice: null });
+    assert.equal(cleared.status, 200);
+    assert.equal(cleared.body.sellingPrice, null);
+  });
+
+  test("admin can create a modifier group with options; staff gets 403 on mutations but can GET", async () => {
+    const created = await createProduct(adminToken, { sku: "SKU-MOD-1" });
+
+    const staffCreateGroup = await request(app)
+      .post(`/products/${created.body.id}/modifier-groups`)
+      .set("Authorization", `Bearer ${staffToken}`)
+      .send({ name: "Size", selectionType: "single" });
+    assert.equal(staffCreateGroup.status, 403);
+
+    const group = await request(app)
+      .post(`/products/${created.body.id}/modifier-groups`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ name: "Size", selectionType: "single", required: true });
+    assert.equal(group.status, 201);
+    assert.equal(group.body.name, "Size");
+    assert.equal(group.body.selectionType, "single");
+    assert.equal(group.body.required, true);
+
+    const staffCreateOption = await request(app)
+      .post(`/products/modifier-groups/${group.body.id}/options`)
+      .set("Authorization", `Bearer ${staffToken}`)
+      .send({ name: "Large", priceDelta: 20 });
+    assert.equal(staffCreateOption.status, 403);
+
+    const option = await request(app)
+      .post(`/products/modifier-groups/${group.body.id}/options`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ name: "Large", priceDelta: 20 });
+    assert.equal(option.status, 201);
+    assert.equal(option.body.name, "Large");
+    assert.equal(option.body.priceDelta, 20);
+
+    const staffGet = await request(app)
+      .get(`/products/${created.body.id}/modifier-groups`)
+      .set("Authorization", `Bearer ${staffToken}`);
+    assert.equal(staffGet.status, 200);
+    assert.equal(staffGet.body.length, 1);
+    assert.equal(staffGet.body[0].options.length, 1);
+    assert.equal(staffGet.body[0].options[0].name, "Large");
+
+    const staffUpdateGroup = await request(app)
+      .patch(`/products/modifier-groups/${group.body.id}`)
+      .set("Authorization", `Bearer ${staffToken}`)
+      .send({ name: "Renamed" });
+    assert.equal(staffUpdateGroup.status, 403);
+
+    const updateGroup = await request(app)
+      .patch(`/products/modifier-groups/${group.body.id}`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ name: "Portion Size" });
+    assert.equal(updateGroup.status, 200);
+    assert.equal(updateGroup.body.name, "Portion Size");
+
+    const staffUpdateOption = await request(app)
+      .patch(`/products/modifier-options/${option.body.id}`)
+      .set("Authorization", `Bearer ${staffToken}`)
+      .send({ priceDelta: 30 });
+    assert.equal(staffUpdateOption.status, 403);
+
+    const updateOption = await request(app)
+      .patch(`/products/modifier-options/${option.body.id}`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ priceDelta: 30 });
+    assert.equal(updateOption.status, 200);
+    assert.equal(updateOption.body.priceDelta, 30);
+  });
+
+  test("deleting a modifier group cascades its options", async () => {
+    const created = await createProduct(adminToken, { sku: "SKU-MOD-2" });
+    const group = await request(app)
+      .post(`/products/${created.body.id}/modifier-groups`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ name: "Toppings", selectionType: "multiple" });
+    const option = await request(app)
+      .post(`/products/modifier-groups/${group.body.id}/options`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ name: "Cheese", priceDelta: 5 });
+
+    const staffDelete = await request(app)
+      .delete(`/products/modifier-groups/${group.body.id}`)
+      .set("Authorization", `Bearer ${staffToken}`);
+    assert.equal(staffDelete.status, 403);
+
+    const del = await request(app)
+      .delete(`/products/modifier-groups/${group.body.id}`)
+      .set("Authorization", `Bearer ${adminToken}`);
+    assert.equal(del.status, 204);
+
+    const remainingOptions = await prisma.modifierOption.findMany({ where: { id: option.body.id } });
+    assert.equal(remainingOptions.length, 0, "options must cascade-delete with their group");
+
+    const groups = await request(app)
+      .get(`/products/${created.body.id}/modifier-groups`)
+      .set("Authorization", `Bearer ${staffToken}`);
+    assert.equal(groups.body.length, 0);
+  });
+
+  test("a movement with a locationId creates/increments LocationStock on 'in' and decrements on 'out'", async () => {
+    const created = await createProduct(adminToken, { sku: "SKU-LOC-MOV-1" });
+    const location = await request(app)
+      .post("/locations")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ name: "LS Warehouse A" });
+
+    await request(app)
+      .post(`/products/${created.body.id}/movements`)
+      .set("Authorization", `Bearer ${staffToken}`)
+      .send({ type: "in", quantity: 10, locationId: location.body.id });
+
+    let stock = await prisma.locationStock.findUnique({
+      where: { productId_locationId: { productId: created.body.id, locationId: location.body.id } },
+    });
+    assert.equal(stock.quantity, 10);
+
+    await request(app)
+      .post(`/products/${created.body.id}/movements`)
+      .set("Authorization", `Bearer ${staffToken}`)
+      .send({ type: "out", quantity: 4, locationId: location.body.id });
+
+    stock = await prisma.locationStock.findUnique({
+      where: { productId_locationId: { productId: created.body.id, locationId: location.body.id } },
+    });
+    assert.equal(stock.quantity, 6);
+  });
+
+  test("rejects a branch-scoped stock-out movement that would go negative at that branch, even when company-wide quantity is sufficient", async () => {
+    const created = await createProduct(adminToken, { sku: "SKU-LOC-MOV-2" });
+    const branchA = await request(app)
+      .post("/locations")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ name: "LS Warehouse B" });
+    const branchB = await request(app)
+      .post("/locations")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ name: "LS Warehouse C" });
+
+    // Company-wide quantity ends up at 8 (5 + 3), but branch B only has 3.
+    await request(app)
+      .post(`/products/${created.body.id}/movements`)
+      .set("Authorization", `Bearer ${staffToken}`)
+      .send({ type: "in", quantity: 5, locationId: branchA.body.id });
+    await request(app)
+      .post(`/products/${created.body.id}/movements`)
+      .set("Authorization", `Bearer ${staffToken}`)
+      .send({ type: "in", quantity: 3, locationId: branchB.body.id });
+
+    const res = await request(app)
+      .post(`/products/${created.body.id}/movements`)
+      .set("Authorization", `Bearer ${staffToken}`)
+      .send({ type: "out", quantity: 5, locationId: branchB.body.id });
+    assert.equal(res.status, 400);
+
+    const product = await prisma.product.findUnique({ where: { id: created.body.id } });
+    assert.equal(product.quantity, 8, "company-wide quantity must be unchanged after the rejected movement");
+
+    const stockB = await prisma.locationStock.findUnique({
+      where: { productId_locationId: { productId: created.body.id, locationId: branchB.body.id } },
+    });
+    assert.equal(stockB.quantity, 3, "branch B stock must be unchanged after the rejected movement");
+  });
 });

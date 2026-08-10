@@ -7,6 +7,7 @@ const { authenticate, requireRole } = require("../middleware/auth");
 const { toCsv, parseCsv } = require("../lib/csv");
 const { logAction } = require("../lib/audit");
 const { upload } = require("../lib/upload");
+const { applyStockMovement, InsufficientStockError } = require("../lib/stock");
 
 const router = express.Router();
 
@@ -209,6 +210,185 @@ router.post("/bulk-category", requireRole("admin"), async (req, res) => {
   res.json({ updated: result.count });
 });
 
+router.get("/:id/modifier-groups", async (req, res) => {
+  const productId = Number(req.params.id);
+  const product = await prisma.product.findFirst({ where: { id: productId, deletedAt: null } });
+  if (!product) return res.status(404).json({ error: "Product not found" });
+
+  const groups = await prisma.modifierGroup.findMany({
+    where: { productId },
+    orderBy: { sortOrder: "asc" },
+    include: { options: { orderBy: { sortOrder: "asc" } } },
+  });
+  res.json(groups);
+});
+
+router.post("/:id/modifier-groups", requireRole("admin"), async (req, res) => {
+  const productId = Number(req.params.id);
+  const { name, selectionType, required, sortOrder } = req.body || {};
+
+  const product = await prisma.product.findFirst({ where: { id: productId, deletedAt: null } });
+  if (!product) return res.status(404).json({ error: "Product not found" });
+
+  if (!name) {
+    return res.status(400).json({ error: "name is required" });
+  }
+  if (!["single", "multiple"].includes(selectionType)) {
+    return res.status(400).json({ error: "selectionType must be 'single' or 'multiple'" });
+  }
+
+  const group = await prisma.modifierGroup.create({
+    data: {
+      productId,
+      name,
+      selectionType,
+      required: required !== undefined ? Boolean(required) : false,
+      sortOrder: sortOrder !== undefined && sortOrder !== null ? Number(sortOrder) : 0,
+    },
+    include: { options: true },
+  });
+
+  await logAction({
+    userId: req.user.id,
+    action: "modifier_group_create",
+    entityType: "modifier_group",
+    entityId: group.id,
+    details: { productId, name: group.name },
+  });
+
+  res.status(201).json(group);
+});
+
+router.patch("/modifier-groups/:groupId", requireRole("admin"), async (req, res) => {
+  const id = Number(req.params.groupId);
+  const { name, selectionType, required, sortOrder } = req.body || {};
+
+  const existing = await prisma.modifierGroup.findUnique({ where: { id } });
+  if (!existing) return res.status(404).json({ error: "Modifier group not found" });
+
+  if (selectionType !== undefined && !["single", "multiple"].includes(selectionType)) {
+    return res.status(400).json({ error: "selectionType must be 'single' or 'multiple'" });
+  }
+
+  const group = await prisma.modifierGroup.update({
+    where: { id },
+    data: {
+      ...(name !== undefined && { name }),
+      ...(selectionType !== undefined && { selectionType }),
+      ...(required !== undefined && { required: Boolean(required) }),
+      ...(sortOrder !== undefined && { sortOrder: Number(sortOrder) }),
+    },
+    include: { options: true },
+  });
+
+  await logAction({
+    userId: req.user.id,
+    action: "modifier_group_update",
+    entityType: "modifier_group",
+    entityId: group.id,
+    details: { name: group.name },
+  });
+
+  res.json(group);
+});
+
+router.delete("/modifier-groups/:groupId", requireRole("admin"), async (req, res) => {
+  const id = Number(req.params.groupId);
+  const existing = await prisma.modifierGroup.findUnique({ where: { id } });
+  if (!existing) return res.status(404).json({ error: "Modifier group not found" });
+
+  await prisma.modifierGroup.delete({ where: { id } });
+
+  await logAction({
+    userId: req.user.id,
+    action: "modifier_group_delete",
+    entityType: "modifier_group",
+    entityId: id,
+    details: { name: existing.name },
+  });
+
+  res.status(204).send();
+});
+
+router.post("/modifier-groups/:groupId/options", requireRole("admin"), async (req, res) => {
+  const modifierGroupId = Number(req.params.groupId);
+  const { name, priceDelta, sortOrder } = req.body || {};
+
+  const group = await prisma.modifierGroup.findUnique({ where: { id: modifierGroupId } });
+  if (!group) return res.status(404).json({ error: "Modifier group not found" });
+
+  if (!name) {
+    return res.status(400).json({ error: "name is required" });
+  }
+
+  const option = await prisma.modifierOption.create({
+    data: {
+      modifierGroupId,
+      name,
+      priceDelta:
+        priceDelta !== undefined && priceDelta !== null && priceDelta !== "" ? Number(priceDelta) : 0,
+      sortOrder: sortOrder !== undefined && sortOrder !== null ? Number(sortOrder) : 0,
+    },
+  });
+
+  await logAction({
+    userId: req.user.id,
+    action: "modifier_option_create",
+    entityType: "modifier_option",
+    entityId: option.id,
+    details: { modifierGroupId, name: option.name },
+  });
+
+  res.status(201).json(option);
+});
+
+router.patch("/modifier-options/:optionId", requireRole("admin"), async (req, res) => {
+  const id = Number(req.params.optionId);
+  const { name, priceDelta, sortOrder } = req.body || {};
+
+  const existing = await prisma.modifierOption.findUnique({ where: { id } });
+  if (!existing) return res.status(404).json({ error: "Modifier option not found" });
+
+  const option = await prisma.modifierOption.update({
+    where: { id },
+    data: {
+      ...(name !== undefined && { name }),
+      ...(priceDelta !== undefined && {
+        priceDelta: priceDelta !== null && priceDelta !== "" ? Number(priceDelta) : 0,
+      }),
+      ...(sortOrder !== undefined && { sortOrder: Number(sortOrder) }),
+    },
+  });
+
+  await logAction({
+    userId: req.user.id,
+    action: "modifier_option_update",
+    entityType: "modifier_option",
+    entityId: option.id,
+    details: { name: option.name },
+  });
+
+  res.json(option);
+});
+
+router.delete("/modifier-options/:optionId", requireRole("admin"), async (req, res) => {
+  const id = Number(req.params.optionId);
+  const existing = await prisma.modifierOption.findUnique({ where: { id } });
+  if (!existing) return res.status(404).json({ error: "Modifier option not found" });
+
+  await prisma.modifierOption.delete({ where: { id } });
+
+  await logAction({
+    userId: req.user.id,
+    action: "modifier_option_delete",
+    entityType: "modifier_option",
+    entityId: id,
+    details: { name: existing.name },
+  });
+
+  res.status(204).send();
+});
+
 router.get("/:id", async (req, res) => {
   const product = await prisma.product.findFirst({
     where: { id: Number(req.params.id), deletedAt: null },
@@ -219,7 +399,8 @@ router.get("/:id", async (req, res) => {
 });
 
 router.post("/", requireRole("admin"), async (req, res) => {
-  const { sku, name, unit, category, reorderLevel, supplierId, unitCost, barcode } = req.body || {};
+  const { sku, name, unit, category, reorderLevel, supplierId, unitCost, sellingPrice, barcode } =
+    req.body || {};
   if (!sku || !name || !unit) {
     return res.status(400).json({ error: "sku, name, and unit are required" });
   }
@@ -245,6 +426,10 @@ router.post("/", requireRole("admin"), async (req, res) => {
       reorderLevel: reorderLevel ?? 0,
       supplierId: supplierId ? Number(supplierId) : null,
       unitCost: unitCost !== undefined && unitCost !== null && unitCost !== "" ? Number(unitCost) : null,
+      sellingPrice:
+        sellingPrice !== undefined && sellingPrice !== null && sellingPrice !== ""
+          ? Number(sellingPrice)
+          : null,
       barcode: barcode || null,
       createdById: req.user.id,
     },
@@ -262,7 +447,8 @@ router.post("/", requireRole("admin"), async (req, res) => {
 });
 
 router.patch("/:id", requireRole("admin"), async (req, res) => {
-  const { name, unit, reorderLevel, sku, category, supplierId, unitCost, barcode } = req.body || {};
+  const { name, unit, reorderLevel, sku, category, supplierId, unitCost, sellingPrice, barcode } =
+    req.body || {};
   const id = Number(req.params.id);
 
   const existing = await prisma.product.findFirst({ where: { id, deletedAt: null } });
@@ -286,6 +472,9 @@ router.patch("/:id", requireRole("admin"), async (req, res) => {
       ...(supplierId !== undefined && { supplierId: supplierId ? Number(supplierId) : null }),
       ...(unitCost !== undefined && {
         unitCost: unitCost !== null && unitCost !== "" ? Number(unitCost) : null,
+      }),
+      ...(sellingPrice !== undefined && {
+        sellingPrice: sellingPrice !== null && sellingPrice !== "" ? Number(sellingPrice) : null,
       }),
       ...(barcode !== undefined && { barcode: barcode || null }),
     },
@@ -488,17 +677,24 @@ router.post("/:id/movements", requireRole("admin", "staff"), async (req, res) =>
     resolvedLocationId = location.id;
   }
 
-  const delta = type === "in" ? quantity : -quantity;
-
-  const [movement, updatedProduct] = await prisma.$transaction([
-    prisma.stockMovement.create({
-      data: { productId, type, quantity, note, locationId: resolvedLocationId, createdById: req.user.id },
-    }),
-    prisma.product.update({
-      where: { id: productId },
-      data: { quantity: { increment: delta } },
-    }),
-  ]);
+  let movement, updatedProduct;
+  try {
+    ({ movement, updatedProduct } = await prisma.$transaction((tx) =>
+      applyStockMovement(tx, {
+        productId,
+        locationId: resolvedLocationId,
+        type,
+        quantity,
+        note,
+        createdById: req.user.id,
+      })
+    ));
+  } catch (err) {
+    if (err instanceof InsufficientStockError) {
+      return res.status(400).json({ error: err.message });
+    }
+    throw err;
+  }
 
   await logAction({
     userId: req.user.id,
@@ -531,13 +727,32 @@ router.delete("/:id/movements/:movementId", requireRole("admin"), async (req, re
     });
   }
 
-  await prisma.$transaction([
-    prisma.stockMovement.delete({ where: { id: movementId } }),
-    prisma.product.update({
+  if (movement.locationId) {
+    const locationStock = await prisma.locationStock.findUnique({
+      where: { productId_locationId: { productId, locationId: movement.locationId } },
+    });
+    const currentLocationQty = locationStock?.quantity ?? 0;
+    if (currentLocationQty + reverseDelta < 0) {
+      return res.status(400).json({
+        error: "Cannot delete this movement: it would take location stock negative",
+      });
+    }
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.stockMovement.delete({ where: { id: movementId } });
+    await tx.product.update({
       where: { id: productId },
       data: { quantity: { increment: reverseDelta } },
-    }),
-  ]);
+    });
+    if (movement.locationId) {
+      await tx.locationStock.upsert({
+        where: { productId_locationId: { productId, locationId: movement.locationId } },
+        create: { productId, locationId: movement.locationId, quantity: reverseDelta },
+        update: { quantity: { increment: reverseDelta } },
+      });
+    }
+  });
 
   await logAction({
     userId: req.user.id,

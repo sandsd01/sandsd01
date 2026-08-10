@@ -19,6 +19,9 @@ import { PurchaseOrderDetailPage } from './pages/PurchaseOrderDetailPage'
 import { LocationsPage } from './pages/LocationsPage'
 import { TrashPage } from './pages/TrashPage'
 import { ActivityLogPage } from './pages/ActivityLogPage'
+import { PosPage } from './pages/PosPage'
+import { SalesHistoryPage } from './pages/SalesHistoryPage'
+import { SaleDetailPage } from './pages/SaleDetailPage'
 
 function App() {
   return (
@@ -36,6 +39,9 @@ function App() {
                 <Route path="/reports" element={<ReportsPage />} />
                 <Route path="/account" element={<AccountPage />} />
                 <Route path="/products/:id/movements" element={<ProductMovementsPage />} />
+                <Route path="/pos" element={<PosPage />} />
+                <Route path="/sales" element={<SalesHistoryPage />} />
+                <Route path="/sales/:id" element={<SaleDetailPage />} />
 
                 <Route element={<RequireRole roles={['admin']} />}>
                   <Route path="/products/new" element={<ProductFormPage />} />
