@@ -11,8 +11,16 @@ export function LanguageProvider({ children }) {
     localStorage.setItem('language', lang)
   }, [])
 
+  // Optional {placeholder} interpolation: t('pos.vatIncluded', { rate: 7 }).
+  // Callers that pass no vars behave exactly as before.
   const t = useCallback(
-    (key) => translations[language]?.[key] ?? translations.en[key] ?? key,
+    (key, vars) => {
+      const template = translations[language]?.[key] ?? translations.en[key] ?? key
+      if (!vars) return template
+      return template.replace(/\{(\w+)\}/g, (match, name) =>
+        Object.prototype.hasOwnProperty.call(vars, name) ? String(vars[name]) : match
+      )
+    },
     [language]
   )
 

@@ -254,7 +254,7 @@ export function PosPage() {
         <div className="card">
           <h1>{t('pos.saleComplete')}</h1>
           <p>
-            {t('pos.saleId')}: <strong>#{completedSale.id}</strong>
+            {t('pos.saleId')}: <strong>{completedSale.receiptNumber || `#${completedSale.id}`}</strong>
           </p>
           <p>
             {t('sales.branch')}: {completedSale.location.name}
@@ -273,6 +273,14 @@ export function PosPage() {
           {completedSale.changeDue !== null && (
             <p>
               {t('sales.changeDue')}: {completedSale.changeDue.toFixed(2)}
+            </p>
+          )}
+          {completedSale.taxAmount > 0 && (
+            <p>
+              {completedSale.taxInclusive
+                ? t('pos.vatIncluded', { rate: (completedSale.taxRate * 100).toFixed(0) })
+                : t('pos.vatAdded', { rate: (completedSale.taxRate * 100).toFixed(0) })}
+              : {completedSale.taxAmount.toFixed(2)}
             </p>
           )}
           <p>

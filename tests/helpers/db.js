@@ -6,6 +6,9 @@ const bcrypt = require("bcryptjs");
 const prisma = require("../../prisma/client");
 
 async function resetDb() {
+  // Shop settings are a singleton, not FK-linked, but must reset too or VAT
+  // config leaks between test files.
+  await prisma.shopSetting.deleteMany();
   await prisma.saleItemModifier.deleteMany();
   await prisma.saleItem.deleteMany();
   await prisma.sale.deleteMany();

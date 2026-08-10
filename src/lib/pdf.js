@@ -47,7 +47,7 @@ function buildSummaryPdf(summary) {
   });
 }
 
-function generateReceiptPdf(sale) {
+function generateReceiptPdf(sale, shop = {}) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ margin: 40 });
     const chunks = [];
@@ -55,10 +55,20 @@ function generateReceiptPdf(sale) {
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
 
-    doc.fontSize(20).text("Receipt", { underline: true });
-    doc.moveDown();
-    doc.fontSize(12).text(`Sale #${sale.id}`);
-    doc.text(`Branch: ${sale.location?.name || "-"}`);
+    // A VAT-registered shop must issue a tax invoice rather than a plain
+    // receipt, and it has to carry the legal name, tax id and branch.
+    const isTaxInvoice = Boolean(shop.vatRegistered && shop.taxId);
+    doc.fontSize(20).text(isTaxInvoice ? "Tax Invoice (Abbreviated)" : "Receipt", { underline: true });
+    doc.moveDown(0.5);
+
+    if (shop.legalName) doc.fontSize(12).text(shop.legalName);
+    if (shop.address) doc.fontSize(10).text(shop.address);
+    if (shop.taxId) doc.fontSize(10).text(`Tax ID: ${shop.taxId}`);
+    if (shop.legalName || shop.address || shop.taxId) doc.moveDown(0.5);
+
+    doc.fontSize(12).text(`Receipt no: ${sale.receiptNumber || `#${sale.id}`}`);
+    const branchCode = sale.location?.taxBranchCode;
+    doc.text(`Branch: ${sale.location?.name || "-"}${branchCode ? ` (${branchCode})` : ""}`);
     doc.text(`Date: ${new Date(sale.createdAt).toLocaleString()}`);
     doc.text(`Cashier: ${sale.cashier?.email || "-"}`);
     if (sale.status === "voided") {
@@ -78,7 +88,20 @@ function generateReceiptPdf(sale) {
     doc.moveDown();
 
     doc.fontSize(14).text("Payment");
-    doc.fontSize(12).text(`Subtotal: ${sale.subtotal.toFixed(2)}`);
+    if (sale.taxAmount) {
+      // Show the net/VAT split both ways round: with inclusive pricing the
+      // subtotal already contains the VAT, so printing them as if they summed
+      // would overstate the bill.
+      if (sale.taxInclusive) {
+        doc.fontSize(12).text(`Net of VAT: ${(sale.subtotal - sale.taxAmount).toFixed(2)}`);
+        doc.text(`VAT ${(sale.taxRate * 100).toFixed(0)}% (included): ${sale.taxAmount.toFixed(2)}`);
+      } else {
+        doc.fontSize(12).text(`Subtotal: ${sale.subtotal.toFixed(2)}`);
+        doc.text(`VAT ${(sale.taxRate * 100).toFixed(0)}%: ${sale.taxAmount.toFixed(2)}`);
+      }
+    } else {
+      doc.fontSize(12).text(`Subtotal: ${sale.subtotal.toFixed(2)}`);
+    }
     doc.text(`Total: ${sale.total.toFixed(2)}`);
     doc.text(`Payment method: ${sale.paymentMethod}`);
     if (sale.amountTendered != null) {

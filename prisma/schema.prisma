@@ -131,6 +131,7 @@ model Location {
   address        String?
   phone          String?
   isActive       Boolean  @default(true)
+  taxBranchCode  String?
   promptPayQrUrl String?
   createdAt      DateTime @default(now())
 
@@ -189,7 +190,11 @@ model Sale {
   cashierId      Int
   status         SaleStatus    @default(completed)
   subtotal       Float
+  taxRate        Float         @default(0)
+  taxAmount      Float         @default(0)
+  taxInclusive   Boolean       @default(true)
   total          Float
+  receiptNumber  String?       @unique
   paymentMethod  PaymentMethod
   amountTendered Float?
   changeDue      Float?
@@ -280,4 +285,20 @@ model AuditLog {
   user User @relation(fields: [userId], references: [id])
 
   @@map("audit_logs")
+}
+
+/// Single-row table (id is always 1) holding the shop-level details a Thai tax
+/// invoice needs, plus how VAT is applied. Kept out of Location because the
+/// legal entity and tax id are company-wide; only the branch code differs.
+model ShopSetting {
+  id               Int      @id @default(1)
+  legalName        String?
+  taxId            String?
+  address          String?
+  vatRegistered    Boolean  @default(false)
+  vatRate          Float    @default(0.07)
+  pricesIncludeVat Boolean  @default(true)
+  updatedAt        DateTime @updatedAt
+
+  @@map("shop_settings")
 }
