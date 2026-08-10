@@ -19,6 +19,7 @@ npm install                 # installs deps and generates the Prisma client (pos
 cp .env.example .env        # set JWT_SECRET to a real random value for anything beyond local dev
 npx prisma migrate deploy   # create dev.db and apply migrations
 npm run seed                # creates the initial admin user (admin@example.com / changeme123 by default)
+npm run seed:menu           # optional: seeds 2 branches + a sample burger/fries/drinks menu with modifiers and stock
 ```
 
 ## Running locally
@@ -53,6 +54,7 @@ npm test            # migrates test.db and runs the full backend test suite (nod
 | `npm run prisma:migrate` | Create/apply a new dev migration |
 | `npm run prisma:generate` | Regenerate the Prisma client |
 | `npm run seed` | Create the initial admin user in `dev.db` |
+| `npm run seed:menu` | Seed 2 sample branches and a burger/fries/drinks menu (with modifiers and initial stock) into `dev.db` — safe to re-run |
 
 ## API overview
 
