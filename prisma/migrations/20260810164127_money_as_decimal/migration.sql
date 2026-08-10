@@ -1,0 +1,28 @@
+-- AlterTable
+ALTER TABLE "modifier_options" ALTER COLUMN "priceDelta" SET DATA TYPE DECIMAL(12,2);
+
+-- AlterTable
+ALTER TABLE "products" ALTER COLUMN "unitCost" SET DATA TYPE DECIMAL(12,2),
+ALTER COLUMN "sellingPrice" SET DATA TYPE DECIMAL(12,2);
+
+-- AlterTable
+ALTER TABLE "purchase_order_items" ALTER COLUMN "unitCost" SET DATA TYPE DECIMAL(12,2);
+
+-- AlterTable
+ALTER TABLE "sale_item_modifiers" ALTER COLUMN "priceDelta" SET DATA TYPE DECIMAL(12,2);
+
+-- AlterTable
+ALTER TABLE "sale_items" ALTER COLUMN "unitPrice" SET DATA TYPE DECIMAL(12,2),
+ALTER COLUMN "lineTotal" SET DATA TYPE DECIMAL(12,2);
+
+-- AlterTable
+ALTER TABLE "sales" ALTER COLUMN "subtotal" SET DATA TYPE DECIMAL(12,2),
+ALTER COLUMN "total" SET DATA TYPE DECIMAL(12,2),
+ALTER COLUMN "amountTendered" SET DATA TYPE DECIMAL(12,2),
+ALTER COLUMN "changeDue" SET DATA TYPE DECIMAL(12,2),
+ALTER COLUMN "taxAmount" SET DATA TYPE DECIMAL(12,2),
+ALTER COLUMN "taxRate" SET DATA TYPE DECIMAL(6,4);
+
+-- AlterTable
+ALTER TABLE "shop_settings" ALTER COLUMN "vatRate" SET DATA TYPE DECIMAL(6,4);
+

@@ -1,4 +1,5 @@
 const PDFDocument = require("pdfkit");
+const { toNumber } = require("./money");
 
 function buildSummaryPdf(summary) {
   return new Promise((resolve, reject) => {
@@ -16,7 +17,7 @@ function buildSummaryPdf(summary) {
     doc.fontSize(14).text("Overview");
     doc.fontSize(12).text(`Total products: ${summary.totalProducts}`);
     doc.text(`Total units in stock: ${summary.totalQuantity}`);
-    doc.text(`Total inventory value: ${summary.totalValue.toFixed(2)}`);
+    doc.text(`Total inventory value: ${toNumber(summary.totalValue).toFixed(2)}`);
     doc.text(`Low on stock: ${summary.lowStockCount}`);
     doc.moveDown();
 
@@ -47,7 +48,25 @@ function buildSummaryPdf(summary) {
   });
 }
 
-function generateReceiptPdf(sale, shop = {}) {
+function generateReceiptPdf(rawSale, shop = {}) {
+  // Money arrives as Prisma.Decimal. Convert once, explicitly, rather than
+  // letting `-` and `*` coerce via valueOf() further down.
+  const sale = {
+    ...rawSale,
+    subtotal: toNumber(rawSale.subtotal),
+    taxRate: toNumber(rawSale.taxRate),
+    taxAmount: toNumber(rawSale.taxAmount),
+    total: toNumber(rawSale.total),
+    amountTendered: toNumber(rawSale.amountTendered),
+    changeDue: toNumber(rawSale.changeDue),
+    items: (rawSale.items || []).map((item) => ({
+      ...item,
+      unitPrice: toNumber(item.unitPrice),
+      lineTotal: toNumber(item.lineTotal),
+      modifiers: (item.modifiers || []).map((m) => ({ ...m, priceDelta: toNumber(m.priceDelta) })),
+    })),
+  };
+
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ margin: 40 });
     const chunks = [];

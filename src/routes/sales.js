@@ -3,7 +3,8 @@ const prisma = require("../../prisma/client");
 const { authenticate, requireRole } = require("../middleware/auth");
 const { logAction } = require("../lib/audit");
 const { applyStockMovement, InsufficientStockError } = require("../lib/stock");
-const { getShopSettings, calculateTax, round2 } = require("../lib/tax");
+const { getShopSettings, calculateTax } = require("../lib/tax");
+const { toDecimal, money } = require("../lib/money");
 const { generateReceiptPdf } = require("../lib/pdf");
 
 const router = express.Router();
@@ -94,14 +95,14 @@ router.post("/", requireRole("admin", "staff"), async (req, res) => {
       }
     }
 
-    const modifierTotal = options.reduce((sum, o) => sum + o.priceDelta, 0);
-    const unitPrice = (product.sellingPrice ?? 0) + modifierTotal;
-    const lineTotal = unitPrice * quantity;
+    const modifierTotal = options.reduce((sum, o) => sum.plus(toDecimal(o.priceDelta)), toDecimal(0));
+    const unitPrice = money(toDecimal(product.sellingPrice ?? 0).plus(modifierTotal));
+    const lineTotal = money(unitPrice.times(quantity));
 
     preparedItems.push({ product, quantity, options, unitPrice, lineTotal });
   }
 
-  const subtotal = round2(preparedItems.reduce((sum, i) => sum + i.lineTotal, 0));
+  const subtotal = money(preparedItems.reduce((sum, i) => sum.plus(i.lineTotal), toDecimal(0)));
   // Snapshotted onto the sale so changing the shop's VAT settings later never
   // rewrites what past receipts said.
   const shopSettings = await getShopSettings();
@@ -116,13 +117,13 @@ router.post("/", requireRole("admin", "staff"), async (req, res) => {
     amountTendered !== ""
   ) {
     const tendered = Number(amountTendered);
-    if (Number.isNaN(tendered) || tendered < total) {
+    if (Number.isNaN(tendered) || toDecimal(tendered).lessThan(total)) {
       return res
         .status(400)
         .json({ error: "amountTendered must be a number greater than or equal to the total" });
     }
     resolvedAmountTendered = tendered;
-    changeDue = round2(tendered - total);
+    changeDue = money(toDecimal(tendered).minus(total));
   }
 
   const stockResults = [];

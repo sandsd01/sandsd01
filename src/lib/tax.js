@@ -1,4 +1,5 @@
 const prisma = require("../../prisma/client");
+const { toDecimal, money } = require("./money");
 
 // Thai retail almost always advertises VAT-inclusive prices, so that is the
 // default: the menu price is what the customer pays, and the VAT portion is
@@ -22,10 +23,10 @@ async function getShopSettings(client = prisma) {
   return existing || DEFAULT_SETTINGS;
 }
 
+// Kept for callers that just need a rounded Decimal; the exactness now comes
+// from Decimal arithmetic rather than from rounding away float drift.
 function round2(value) {
-  // Money is stored as Float, so round at every boundary the customer sees;
-  // otherwise 0.1 + 0.2 style drift shows up on receipts and daily totals.
-  return Math.round((value + Number.EPSILON) * 100) / 100;
+  return money(value);
 }
 
 /**
@@ -36,25 +37,32 @@ function round2(value) {
  * shop's VAT settings never rewrites the history of past sales.
  */
 function calculateTax(subtotal, settings) {
-  if (!settings.vatRegistered || !settings.vatRate) {
-    return { taxRate: 0, taxAmount: 0, taxInclusive: settings.pricesIncludeVat, total: round2(subtotal) };
-  }
+  const gross = toDecimal(subtotal);
+  const rate = toDecimal(settings.vatRate);
 
-  const taxRate = settings.vatRate;
-
-  if (settings.pricesIncludeVat) {
-    // The menu price already contains the VAT; extract it rather than adding.
-    const net = subtotal / (1 + taxRate);
+  if (!settings.vatRegistered || rate.isZero()) {
     return {
-      taxRate,
-      taxAmount: round2(subtotal - net),
-      taxInclusive: true,
-      total: round2(subtotal),
+      taxRate: toDecimal(0),
+      taxAmount: toDecimal(0),
+      taxInclusive: Boolean(settings.pricesIncludeVat),
+      total: money(gross),
     };
   }
 
-  const taxAmount = round2(subtotal * taxRate);
-  return { taxRate, taxAmount, taxInclusive: false, total: round2(subtotal + taxAmount) };
+  if (settings.pricesIncludeVat) {
+    // The menu price already contains the VAT; extract it rather than adding,
+    // so turning VAT on never changes what the customer is charged.
+    const net = gross.dividedBy(rate.plus(1));
+    return {
+      taxRate: rate,
+      taxAmount: money(gross.minus(net)),
+      taxInclusive: true,
+      total: money(gross),
+    };
+  }
+
+  const taxAmount = money(gross.times(rate));
+  return { taxRate: rate, taxAmount, taxInclusive: false, total: money(gross.plus(taxAmount)) };
 }
 
 module.exports = { getShopSettings, calculateTax, round2, SETTINGS_ID, DEFAULT_SETTINGS };
