@@ -186,6 +186,15 @@ export const translations = {
     'locations.activate': 'Activate',
     'locations.deactivate': 'Deactivate',
 
+    'locations.promptPayQr': 'PromptPay QR',
+    'locations.promptPayQrUpload': 'Upload QR',
+    'locations.promptPayQrReplace': 'Replace QR',
+    'locations.promptPayQrRemove': 'Remove QR',
+    'locations.promptPayQrConfirmRemove': 'Remove this branch’s PromptPay QR?',
+    'locations.promptPayQrUploadError': 'Failed to upload PromptPay QR.',
+    'locations.promptPayQrRemoveError': 'Failed to remove PromptPay QR.',
+    'locations.promptPayQrNone': 'No QR uploaded',
+
     'users.homeBranch': 'Home branch',
     'users.noHomeBranch': '(none)',
 
@@ -223,6 +232,9 @@ export const translations = {
     'pos.paymentMethod.cash': 'Cash',
     'pos.paymentMethod.promptpay': 'PromptPay',
     'pos.paymentMethod.card': 'Card',
+    'pos.promptPayQrTitle': 'Scan to pay with PromptPay',
+    'pos.promptPayQrMissing': 'No PromptPay QR has been set up for this branch.',
+    'pos.promptPayQrMissingHint': 'Ask an admin to upload this branch’s PromptPay QR under Locations, or choose another payment method.',
     'pos.amountTendered': 'Amount received',
     'pos.changeDue': 'Change due',
     'pos.note': 'Note',
@@ -465,6 +477,15 @@ export const translations = {
     'locations.activate': 'เปิดใช้งาน',
     'locations.deactivate': 'ปิดใช้งาน',
 
+    'locations.promptPayQr': 'QR พร้อมเพย์',
+    'locations.promptPayQrUpload': 'อัปโหลด QR',
+    'locations.promptPayQrReplace': 'เปลี่ยน QR',
+    'locations.promptPayQrRemove': 'ลบ QR',
+    'locations.promptPayQrConfirmRemove': 'ต้องการลบ QR พร้อมเพย์ของสาขานี้ใช่หรือไม่?',
+    'locations.promptPayQrUploadError': 'อัปโหลด QR พร้อมเพย์ไม่สำเร็จ',
+    'locations.promptPayQrRemoveError': 'ลบ QR พร้อมเพย์ไม่สำเร็จ',
+    'locations.promptPayQrNone': 'ยังไม่มี QR',
+
     'users.homeBranch': 'สาขาประจำ',
     'users.noHomeBranch': '(ไม่มี)',
 
@@ -499,6 +520,9 @@ export const translations = {
     'pos.noSellableProducts': 'ไม่พบสินค้าที่ขายได้ สินค้าต้องมีราคาขายจึงจะแสดงที่นี่',
     'pos.stockAtBranch': 'สต็อกที่สาขานี้',
     'pos.paymentMethod': 'วิธีการชำระเงิน',
+    'pos.promptPayQrTitle': 'สแกนเพื่อชำระเงินด้วยพร้อมเพย์',
+    'pos.promptPayQrMissing': 'ยังไม่ได้ตั้งค่า QR พร้อมเพย์สำหรับสาขานี้',
+    'pos.promptPayQrMissingHint': 'กรุณาแจ้งผู้ดูแลระบบให้อัปโหลด QR พร้อมเพย์ของสาขานี้ในหน้าคลังสินค้า หรือเลือกวิธีการชำระเงินอื่น',
     'pos.paymentMethod.cash': 'เงินสด',
     'pos.paymentMethod.promptpay': 'พร้อมเพย์',
     'pos.paymentMethod.card': 'บัตร',

@@ -97,6 +97,11 @@ export function PosPage() {
     else localStorage.removeItem(LOCATION_STORAGE_KEY)
   }
 
+  const selectedLocation = useMemo(
+    () => locations.find((l) => String(l.id) === String(locationId)) || null,
+    [locations, locationId]
+  )
+
   const sellableProducts = useMemo(
     () =>
       products
@@ -363,6 +368,26 @@ export function PosPage() {
                 </button>
               ))}
             </div>
+
+            {paymentMethod === 'promptpay' && (
+              <div className="promptpay-qr-panel">
+                {selectedLocation?.promptPayQrUrl ? (
+                  <>
+                    <p>{t('pos.promptPayQrTitle')}</p>
+                    <img
+                      src={selectedLocation.promptPayQrUrl}
+                      alt={t('pos.promptPayQrTitle')}
+                      className="promptpay-qr-image"
+                    />
+                  </>
+                ) : (
+                  <>
+                    <p className="error">{t('pos.promptPayQrMissing')}</p>
+                    <p className="hint">{t('pos.promptPayQrMissingHint')}</p>
+                  </>
+                )}
+              </div>
+            )}
 
             {paymentMethod === 'cash' && (
               <label>

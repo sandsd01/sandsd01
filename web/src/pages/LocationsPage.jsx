@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { apiFetch } from '../api/client'
+import { apiFetch, uploadFile } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
 
@@ -13,6 +13,7 @@ export function LocationsPage() {
   const [isActive, setIsActive] = useState(true)
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [qrBusyId, setQrBusyId] = useState(null)
 
   async function load() {
     setLoading(true)
@@ -74,6 +75,43 @@ export function LocationsPage() {
     }
   }
 
+  async function handleQrUpload(locationId, e) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setError(null)
+    setQrBusyId(locationId)
+    try {
+      const updated = await uploadFile(`/locations/${locationId}/promptpay-qr`, {
+        file,
+        fieldName: 'qr',
+        token,
+      })
+      setLocations((prev) => prev.map((l) => (l.id === locationId ? updated : l)))
+    } catch (err) {
+      setError(err.message || t('locations.promptPayQrUploadError'))
+    } finally {
+      setQrBusyId(null)
+    }
+  }
+
+  async function handleQrRemove(locationId) {
+    if (!window.confirm(t('locations.promptPayQrConfirmRemove'))) return
+    setError(null)
+    setQrBusyId(locationId)
+    try {
+      const updated = await apiFetch(`/locations/${locationId}/promptpay-qr`, {
+        method: 'DELETE',
+        token,
+      })
+      setLocations((prev) => prev.map((l) => (l.id === locationId ? updated : l)))
+    } catch (err) {
+      setError(err.message || t('locations.promptPayQrRemoveError'))
+    } finally {
+      setQrBusyId(null)
+    }
+  }
+
   if (loading) return <p>{t('common.loading')}</p>
 
   return (
@@ -112,6 +150,7 @@ export function LocationsPage() {
               <th>{t('locations.address')}</th>
               <th>{t('locations.phone')}</th>
               <th>{t('locations.status')}</th>
+              <th>{t('locations.promptPayQr')}</th>
               <th></th>
             </tr>
           </thead>
@@ -122,6 +161,31 @@ export function LocationsPage() {
                 <td>{l.address || '-'}</td>
                 <td>{l.phone || '-'}</td>
                 <td>{l.isActive ? t('locations.active') : t('locations.inactive')}</td>
+                <td className="qr-cell">
+                  {l.promptPayQrUrl ? (
+                    <img src={l.promptPayQrUrl} alt="" className="location-qr-thumb" />
+                  ) : (
+                    <span className="hint">{t('locations.promptPayQrNone')}</span>
+                  )}
+                  <label className="file-input-label">
+                    {l.promptPayQrUrl ? t('locations.promptPayQrReplace') : t('locations.promptPayQrUpload')}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      disabled={qrBusyId === l.id}
+                      onChange={(e) => handleQrUpload(l.id, e)}
+                    />
+                  </label>
+                  {l.promptPayQrUrl && (
+                    <button
+                      type="button"
+                      disabled={qrBusyId === l.id}
+                      onClick={() => handleQrRemove(l.id)}
+                    >
+                      {t('locations.promptPayQrRemove')}
+                    </button>
+                  )}
+                </td>
                 <td className="actions">
                   <button onClick={() => handleToggleActive(l)}>
                     {l.isActive ? t('locations.deactivate') : t('locations.activate')}
