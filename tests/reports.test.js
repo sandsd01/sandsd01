@@ -5,7 +5,7 @@ const { resetDb, createUser } = require("./helpers/db");
 const app = require("../src/app");
 
 async function login(email, password) {
-  const res = await request(app).post("/auth/login").send({ email, password });
+  const res = await request(app).post("/api/auth/login").send({ email, password });
   return res.body.token;
 }
 
@@ -20,31 +20,31 @@ describe("GET /reports/summary", () => {
   });
 
   test("requires authentication", async () => {
-    const res = await request(app).get("/reports/summary");
+    const res = await request(app).get("/api/reports/summary");
     assert.equal(res.status, 401);
   });
 
   test("summarizes product counts, quantity, and low stock", async () => {
     const adminToken = await login("admin@test.com", "adminpass1");
     await request(app)
-      .post("/products")
+      .post("/api/products")
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ sku: "SKU-LOW", name: "Low Widget", unit: "pcs", reorderLevel: 10 });
     await request(app)
-      .post("/products")
+      .post("/api/products")
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ sku: "SKU-OK", name: "OK Widget", unit: "pcs", reorderLevel: 1 });
 
-    const products = await request(app).get("/products").set("Authorization", `Bearer ${staffToken}`);
+    const products = await request(app).get("/api/products").set("Authorization", `Bearer ${staffToken}`);
     const [low, ok] = products.body.data;
 
     await request(app)
-      .post(`/products/${ok.id}/movements`)
+      .post(`/api/products/${ok.id}/movements`)
       .set("Authorization", `Bearer ${staffToken}`)
       .send({ type: "in", quantity: 20 });
 
     const res = await request(app)
-      .get("/reports/summary")
+      .get("/api/reports/summary")
       .set("Authorization", `Bearer ${staffToken}`);
 
     assert.equal(res.status, 200);
@@ -59,16 +59,16 @@ describe("GET /reports/summary", () => {
   test("computes total inventory value from unit cost * quantity", async () => {
     const adminToken = await login("admin@test.com", "adminpass1");
     const product = await request(app)
-      .post("/products")
+      .post("/api/products")
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ sku: "SKU-VAL", name: "Priced Widget", unit: "pcs", unitCost: 2.5 });
     await request(app)
-      .post(`/products/${product.body.id}/movements`)
+      .post(`/api/products/${product.body.id}/movements`)
       .set("Authorization", `Bearer ${staffToken}`)
       .send({ type: "in", quantity: 10 });
 
     const res = await request(app)
-      .get("/reports/summary")
+      .get("/api/reports/summary")
       .set("Authorization", `Bearer ${staffToken}`);
     assert.equal(res.body.totalValue, 25);
   });
@@ -87,26 +87,26 @@ describe("GET /reports/movements-timeseries", () => {
   });
 
   test("requires authentication", async () => {
-    const res = await request(app).get("/reports/movements-timeseries");
+    const res = await request(app).get("/api/reports/movements-timeseries");
     assert.equal(res.status, 401);
   });
 
   test("aggregates today's movements into the returned series", async () => {
     const product = await request(app)
-      .post("/products")
+      .post("/api/products")
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ sku: "SKU-TS", name: "Widget", unit: "pcs" });
     await request(app)
-      .post(`/products/${product.body.id}/movements`)
+      .post(`/api/products/${product.body.id}/movements`)
       .set("Authorization", `Bearer ${staffToken}`)
       .send({ type: "in", quantity: 15 });
     await request(app)
-      .post(`/products/${product.body.id}/movements`)
+      .post(`/api/products/${product.body.id}/movements`)
       .set("Authorization", `Bearer ${staffToken}`)
       .send({ type: "out", quantity: 4 });
 
     const res = await request(app)
-      .get("/reports/movements-timeseries?days=7")
+      .get("/api/reports/movements-timeseries?days=7")
       .set("Authorization", `Bearer ${staffToken}`);
 
     assert.equal(res.status, 200);
@@ -131,19 +131,19 @@ describe("POST /reports/send-low-stock-alert", () => {
 
   test("staff cannot trigger the alert", async () => {
     const res = await request(app)
-      .post("/reports/send-low-stock-alert")
+      .post("/api/reports/send-low-stock-alert")
       .set("Authorization", `Bearer ${staffToken}`);
     assert.equal(res.status, 403);
   });
 
   test("admin can trigger it; skips sending when Resend isn't configured", async () => {
     await request(app)
-      .post("/products")
+      .post("/api/products")
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ sku: "SKU-ALERT", name: "Widget", unit: "pcs", reorderLevel: 5 });
 
     const res = await request(app)
-      .post("/reports/send-low-stock-alert")
+      .post("/api/reports/send-low-stock-alert")
       .set("Authorization", `Bearer ${adminToken}`);
 
     assert.equal(res.status, 200);
@@ -163,7 +163,7 @@ describe("GET /reports/summary/pdf", () => {
 
   test("returns a PDF document", async () => {
     const res = await request(app)
-      .get("/reports/summary/pdf")
+      .get("/api/reports/summary/pdf")
       .set("Authorization", `Bearer ${adminToken}`)
       .buffer(true)
       .parse((response, callback) => {
@@ -192,14 +192,14 @@ describe("POST /reports/send-daily-summary", () => {
 
   test("staff cannot trigger the daily summary", async () => {
     const res = await request(app)
-      .post("/reports/send-daily-summary")
+      .post("/api/reports/send-daily-summary")
       .set("Authorization", `Bearer ${staffToken}`);
     assert.equal(res.status, 403);
   });
 
   test("admin can trigger it; skips sending when Resend isn't configured", async () => {
     const res = await request(app)
-      .post("/reports/send-daily-summary")
+      .post("/api/reports/send-daily-summary")
       .set("Authorization", `Bearer ${adminToken}`);
     assert.equal(res.status, 200);
     assert.equal(res.body.sent, false);
@@ -220,19 +220,19 @@ describe("GET /reports/activity-log", () => {
 
   test("staff cannot view the activity log", async () => {
     const res = await request(app)
-      .get("/reports/activity-log")
+      .get("/api/reports/activity-log")
       .set("Authorization", `Bearer ${staffToken}`);
     assert.equal(res.status, 403);
   });
 
   test("records and lists actions with the acting user's email", async () => {
     await request(app)
-      .post("/products")
+      .post("/api/products")
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ sku: "SKU-LOG", name: "Widget", unit: "pcs" });
 
     const res = await request(app)
-      .get("/reports/activity-log")
+      .get("/api/reports/activity-log")
       .set("Authorization", `Bearer ${adminToken}`);
 
     assert.equal(res.status, 200);

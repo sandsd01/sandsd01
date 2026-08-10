@@ -59,79 +59,79 @@ npm test            # migrates the test database and runs the full backend suite
 
 ## API overview
 
-All endpoints except `/health` and `/auth/login` require `Authorization: Bearer <token>`.
+All API routes are namespaced under `/api` (so client-side SPA routes like `/sales` can't collide with them). All endpoints except `/api/auth/login` require `Authorization: Bearer <token>`. `/health` (unprefixed) is available for load-balancer health checks.
 
 | Method | Path | Role | Description |
 | --- | --- | --- | --- |
-| POST | `/auth/login` | — | Log in, returns `{ token, user }`. Locks the account for 15 minutes after 5 consecutive failed attempts (`423`) |
-| GET | `/auth/me` | any | Your own profile (`id`, `email`, `role`, `homeLocationId`) — the POS page uses it to pin a staff cashier to their assigned branch |
-| POST | `/auth/logout` | any | No-op; client discards the token |
-| PATCH | `/auth/password` | any | Change your own password (`{ currentPassword, newPassword }`) |
-| POST | `/auth/forgot-password` | — | `{ email }` — always returns a generic success message; emails a reset link if the account exists |
-| POST | `/auth/reset-password` | — | `{ email, token, newPassword }` — token expires after 30 minutes and is single-use |
-| GET | `/products?search=&category=&page=&pageSize=&sortBy=&sortDir=` | any | Paginated, non-deleted product list — filter by SKU/name/category, sort by `name`\|`sku`\|`quantity`\|`reorderLevel`\|`category` |
-| GET | `/products/categories` | any | Distinct list of product categories in use |
-| GET | `/products/trash` | admin | List soft-deleted products |
-| GET | `/products/export` | any | Download products as CSV (respects `?search=`/`?category=`) |
-| POST | `/products/import` | admin | Bulk create/update products from CSV (`{ csv }`); upserts by SKU, never touches `quantity` |
-| POST | `/products/bulk-delete` | admin | Soft-delete multiple products (`{ ids: [...] }`) |
-| POST | `/products/bulk-category` | admin | Set category on multiple products (`{ ids: [...], category }`) |
-| GET | `/products/lookup?code=` | any | Find one product by exact SKU or barcode match (used by the barcode-scan quick lookup) |
-| GET | `/products/:id/modifier-groups` | any | List a product's modifier groups (POS options like size/topping), each with its options |
-| POST | `/products/:id/modifier-groups` | admin | Add a modifier group to a product (`{ name, selectionType: "single"\|"multiple", required?, sortOrder? }`) |
-| PATCH | `/products/modifier-groups/:groupId` | admin | Update a modifier group |
-| DELETE | `/products/modifier-groups/:groupId` | admin | Delete a modifier group (cascades its options) |
-| POST | `/products/modifier-groups/:groupId/options` | admin | Add an option to a modifier group (`{ name, priceDelta?, sortOrder? }`) |
-| PATCH | `/products/modifier-options/:optionId` | admin | Update a modifier option |
-| DELETE | `/products/modifier-options/:optionId` | admin | Delete a modifier option |
-| GET | `/products/:id` | any | Get one product (excludes soft-deleted) |
-| GET | `/products/:id/qrcode` | any | A 256x256 PNG QR code encoding the product's barcode (or SKU if it has none), for printing a scannable label |
-| POST | `/products` | admin | Create a product (`category`, `supplierId`, `unitCost`, `sellingPrice`, `barcode` optional) |
-| PATCH | `/products/:id` | admin | Update a product (same optional fields as create, including `sellingPrice`) |
-| DELETE | `/products/:id` | admin | Soft-delete a product (recoverable via `/restore`) |
-| POST | `/products/:id/restore` | admin | Restore a soft-deleted product |
-| DELETE | `/products/:id/permanent` | admin | Permanently delete a soft-deleted product and its movement history (must already be in Trash) |
-| POST | `/products/:id/image` | admin | Upload a product image (multipart, field `image`; jpg/png/webp/gif, 5MB max) |
-| GET | `/products/:id/movements` | any | List stock movement history (includes each movement's `location`, if any) |
-| GET | `/products/:id/movements/by-location` | any | Net quantity (in − out) for this product, grouped by location |
-| GET | `/products/:id/movements/export` | any | Download a product's movement history as CSV |
-| POST | `/products/:id/movements` | admin, staff | Record a stock in/out movement (updates `Product.quantity`; `locationId` optional, and when given also updates that branch's `LocationStock`) |
-| DELETE | `/products/:id/movements/:movementId` | admin | Delete a movement, reversing its effect on `Product.quantity` (and that movement's `LocationStock`, if it was location-tagged) |
-| GET | `/suppliers` | any | List suppliers |
-| POST | `/suppliers` | admin | Create a supplier |
-| PATCH | `/suppliers/:id` | admin | Update a supplier |
-| DELETE | `/suppliers/:id` | admin | Delete a supplier (unlinks it from any products; rejected with `409` if it has purchase orders) |
-| GET | `/purchase-orders?status=&supplierId=&page=&pageSize=` | any | Paginated purchase order list, newest first |
-| GET | `/purchase-orders/:id` | any | Get one purchase order with its line items |
-| POST | `/purchase-orders` | admin | Create a draft PO (`{ supplierId, notes?, items: [{ productId, quantityOrdered, unitCost? }] }`) |
-| PATCH | `/purchase-orders/:id` | admin | Update a draft PO's supplier/notes/items (items are replaced wholesale); `400` once it's no longer a draft |
-| DELETE | `/purchase-orders/:id` | admin | Delete a draft PO; `400` once it's no longer a draft |
-| POST | `/purchase-orders/:id/mark-ordered` | admin | Draft → ordered (requires at least one item) |
-| POST | `/purchase-orders/:id/cancel` | admin | Draft or ordered → cancelled (once anything has been received, it can no longer be cancelled) |
-| POST | `/purchase-orders/:id/receive` | admin | Record receipt of stock (`{ items: [{ itemId, quantity }], locationId? }`); creates a stock-in movement per line, updates `Product.quantity`, and advances the PO to `partially_received` or `received` |
-| GET | `/locations` | any | List locations (branches), including `address`/`phone`/`isActive` |
-| GET | `/locations/:id/stock` | any | Per-branch stock levels — each non-deleted product's `LocationStock` quantity at this location |
-| POST | `/locations` | admin | Create a location (`address`, `phone`, `isActive` optional) |
-| PATCH | `/locations/:id` | admin | Update a location's name/address/phone/isActive |
-| DELETE | `/locations/:id` | admin | Delete a location (rejected with `409` if any movement has been recorded against it, or if it still has `LocationStock` with quantity > 0) |
-| POST | `/locations/:id/promptpay-qr` | admin | Upload/replace a location's PromptPay QR image (multipart, field `qr`; jpg/png/webp/gif, 5MB max); deletes the old file on disk if one existed |
-| DELETE | `/locations/:id/promptpay-qr` | admin | Remove a location's PromptPay QR (`400` if none is set) |
-| POST | `/sales` | admin, staff | Checkout — `{ locationId, items: [{ productId, quantity, modifierOptionIds? }], paymentMethod: "cash"\|"promptpay"\|"card", amountTendered?, note? }`; prices each line as `sellingPrice + Σ priceDelta`, then decrements stock (company-wide `Product.quantity` and that branch's `LocationStock`). Staff with a `homeLocationId` get `403` for any other branch |
-| GET | `/sales?locationId=&from=&to=&status=&page=&pageSize=` | admin, staff | Paginated sale list, newest first; staff are auto-scoped to their own `homeLocationId` |
-| GET | `/sales/:id` | admin, staff | Get one sale with its items and modifiers |
-| GET | `/sales/:id/receipt` | admin, staff | Download the sale as a PDF receipt |
-| POST | `/sales/:id/void` | admin | Void a completed sale (`{ reason }`); restocks each item via an `in` movement at the sale's location |
-| GET | `/reports/summary` | any | Product/quantity/value/low-stock counts and the 10 most recent movements |
-| GET | `/reports/summary/pdf` | any | The summary above as a downloadable PDF |
-| GET | `/reports/movements-timeseries?days=` | any | Daily in/out totals for the last N days (default 30) |
-| GET | `/reports/activity-log?page=&pageSize=` | admin | Paginated audit log (who did what, when) |
-| GET | `/reports/sales-summary?locationId=&from=&to=` | any | Total revenue/sale count, revenue-by-location breakdown, and top 10 products by revenue; staff are auto-scoped to their `homeLocationId` (and don't get a by-location breakdown, since it's just their one branch) |
-| POST | `/reports/send-low-stock-alert` | admin | Manually send the low-stock alert email now |
-| POST | `/reports/send-daily-summary` | admin | Manually send the daily summary email now |
-| GET | `/users` | admin | List users |
-| POST | `/users` | admin | Create a user (`homeLocationId` optional) |
-| PATCH | `/users/:id` | admin | Update a user's email/password/role/homeLocationId |
-| DELETE | `/users/:id` | admin | Delete a user |
+| POST | `/api/auth/login` | — | Log in, returns `{ token, user }`. Locks the account for 15 minutes after 5 consecutive failed attempts (`423`) |
+| GET | `/api/auth/me` | any | Your own profile (`id`, `email`, `role`, `homeLocationId`) — the POS page uses it to pin a staff cashier to their assigned branch |
+| POST | `/api/auth/logout` | any | No-op; client discards the token |
+| PATCH | `/api/auth/password` | any | Change your own password (`{ currentPassword, newPassword }`) |
+| POST | `/api/auth/forgot-password` | — | `{ email }` — always returns a generic success message; emails a reset link if the account exists |
+| POST | `/api/auth/reset-password` | — | `{ email, token, newPassword }` — token expires after 30 minutes and is single-use |
+| GET | `/api/products?search=&category=&page=&pageSize=&sortBy=&sortDir=` | any | Paginated, non-deleted product list — filter by SKU/name/category, sort by `name`\|`sku`\|`quantity`\|`reorderLevel`\|`category` |
+| GET | `/api/products/categories` | any | Distinct list of product categories in use |
+| GET | `/api/products/trash` | admin | List soft-deleted products |
+| GET | `/api/products/export` | any | Download products as CSV (respects `?search=`/`?category=`) |
+| POST | `/api/products/import` | admin | Bulk create/update products from CSV (`{ csv }`); upserts by SKU, never touches `quantity` |
+| POST | `/api/products/bulk-delete` | admin | Soft-delete multiple products (`{ ids: [...] }`) |
+| POST | `/api/products/bulk-category` | admin | Set category on multiple products (`{ ids: [...], category }`) |
+| GET | `/api/products/lookup?code=` | any | Find one product by exact SKU or barcode match (used by the barcode-scan quick lookup) |
+| GET | `/api/products/:id/modifier-groups` | any | List a product's modifier groups (POS options like size/topping), each with its options |
+| POST | `/api/products/:id/modifier-groups` | admin | Add a modifier group to a product (`{ name, selectionType: "single"\|"multiple", required?, sortOrder? }`) |
+| PATCH | `/api/products/modifier-groups/:groupId` | admin | Update a modifier group |
+| DELETE | `/api/products/modifier-groups/:groupId` | admin | Delete a modifier group (cascades its options) |
+| POST | `/api/products/modifier-groups/:groupId/options` | admin | Add an option to a modifier group (`{ name, priceDelta?, sortOrder? }`) |
+| PATCH | `/api/products/modifier-options/:optionId` | admin | Update a modifier option |
+| DELETE | `/api/products/modifier-options/:optionId` | admin | Delete a modifier option |
+| GET | `/api/products/:id` | any | Get one product (excludes soft-deleted) |
+| GET | `/api/products/:id/qrcode` | any | A 256x256 PNG QR code encoding the product's barcode (or SKU if it has none), for printing a scannable label |
+| POST | `/api/products` | admin | Create a product (`category`, `supplierId`, `unitCost`, `sellingPrice`, `barcode` optional) |
+| PATCH | `/api/products/:id` | admin | Update a product (same optional fields as create, including `sellingPrice`) |
+| DELETE | `/api/products/:id` | admin | Soft-delete a product (recoverable via `/restore`) |
+| POST | `/api/products/:id/restore` | admin | Restore a soft-deleted product |
+| DELETE | `/api/products/:id/permanent` | admin | Permanently delete a soft-deleted product and its movement history (must already be in Trash) |
+| POST | `/api/products/:id/image` | admin | Upload a product image (multipart, field `image`; jpg/png/webp/gif, 5MB max) |
+| GET | `/api/products/:id/movements` | any | List stock movement history (includes each movement's `location`, if any) |
+| GET | `/api/products/:id/movements/by-location` | any | Net quantity (in − out) for this product, grouped by location |
+| GET | `/api/products/:id/movements/export` | any | Download a product's movement history as CSV |
+| POST | `/api/products/:id/movements` | admin, staff | Record a stock in/out movement (updates `Product.quantity`; `locationId` optional, and when given also updates that branch's `LocationStock`) |
+| DELETE | `/api/products/:id/movements/:movementId` | admin | Delete a movement, reversing its effect on `Product.quantity` (and that movement's `LocationStock`, if it was location-tagged) |
+| GET | `/api/suppliers` | any | List suppliers |
+| POST | `/api/suppliers` | admin | Create a supplier |
+| PATCH | `/api/suppliers/:id` | admin | Update a supplier |
+| DELETE | `/api/suppliers/:id` | admin | Delete a supplier (unlinks it from any products; rejected with `409` if it has purchase orders) |
+| GET | `/api/purchase-orders?status=&supplierId=&page=&pageSize=` | any | Paginated purchase order list, newest first |
+| GET | `/api/purchase-orders/:id` | any | Get one purchase order with its line items |
+| POST | `/api/purchase-orders` | admin | Create a draft PO (`{ supplierId, notes?, items: [{ productId, quantityOrdered, unitCost? }] }`) |
+| PATCH | `/api/purchase-orders/:id` | admin | Update a draft PO's supplier/notes/items (items are replaced wholesale); `400` once it's no longer a draft |
+| DELETE | `/api/purchase-orders/:id` | admin | Delete a draft PO; `400` once it's no longer a draft |
+| POST | `/api/purchase-orders/:id/mark-ordered` | admin | Draft → ordered (requires at least one item) |
+| POST | `/api/purchase-orders/:id/cancel` | admin | Draft or ordered → cancelled (once anything has been received, it can no longer be cancelled) |
+| POST | `/api/purchase-orders/:id/receive` | admin | Record receipt of stock (`{ items: [{ itemId, quantity }], locationId? }`); creates a stock-in movement per line, updates `Product.quantity`, and advances the PO to `partially_received` or `received` |
+| GET | `/api/locations` | any | List locations (branches), including `address`/`phone`/`isActive` |
+| GET | `/api/locations/:id/stock` | any | Per-branch stock levels — each non-deleted product's `LocationStock` quantity at this location |
+| POST | `/api/locations` | admin | Create a location (`address`, `phone`, `isActive` optional) |
+| PATCH | `/api/locations/:id` | admin | Update a location's name/address/phone/isActive |
+| DELETE | `/api/locations/:id` | admin | Delete a location (rejected with `409` if any movement has been recorded against it, or if it still has `LocationStock` with quantity > 0) |
+| POST | `/api/locations/:id/promptpay-qr` | admin | Upload/replace a location's PromptPay QR image (multipart, field `qr`; jpg/png/webp/gif, 5MB max); deletes the old file on disk if one existed |
+| DELETE | `/api/locations/:id/promptpay-qr` | admin | Remove a location's PromptPay QR (`400` if none is set) |
+| POST | `/api/sales` | admin, staff | Checkout — `{ locationId, items: [{ productId, quantity, modifierOptionIds? }], paymentMethod: "cash"\|"promptpay"\|"card", amountTendered?, note? }`; prices each line as `sellingPrice + Σ priceDelta`, then decrements stock (company-wide `Product.quantity` and that branch's `LocationStock`). Staff with a `homeLocationId` get `403` for any other branch |
+| GET | `/api/sales?locationId=&from=&to=&status=&page=&pageSize=` | admin, staff | Paginated sale list, newest first; staff are auto-scoped to their own `homeLocationId` |
+| GET | `/api/sales/:id` | admin, staff | Get one sale with its items and modifiers |
+| GET | `/api/sales/:id/receipt` | admin, staff | Download the sale as a PDF receipt |
+| POST | `/api/sales/:id/void` | admin | Void a completed sale (`{ reason }`); restocks each item via an `in` movement at the sale's location |
+| GET | `/api/reports/summary` | any | Product/quantity/value/low-stock counts and the 10 most recent movements |
+| GET | `/api/reports/summary/pdf` | any | The summary above as a downloadable PDF |
+| GET | `/api/reports/movements-timeseries?days=` | any | Daily in/out totals for the last N days (default 30) |
+| GET | `/api/reports/activity-log?page=&pageSize=` | admin | Paginated audit log (who did what, when) |
+| GET | `/api/reports/sales-summary?locationId=&from=&to=` | any | Total revenue/sale count, revenue-by-location breakdown, and top 10 products by revenue; staff are auto-scoped to their `homeLocationId` (and don't get a by-location breakdown, since it's just their one branch) |
+| POST | `/api/reports/send-low-stock-alert` | admin | Manually send the low-stock alert email now |
+| POST | `/api/reports/send-daily-summary` | admin | Manually send the daily summary email now |
+| GET | `/api/users` | admin | List users |
+| POST | `/api/users` | admin | Create a user (`homeLocationId` optional) |
+| PATCH | `/api/users/:id` | admin | Update a user's email/password/role/homeLocationId |
+| DELETE | `/api/users/:id` | admin | Delete a user |
 
 ### Low-stock and daily summary email alerts
 
