@@ -109,6 +109,18 @@ export function ChatPage() {
     return userResults.filter((u) => !shownIds.has(u.id))
   }, [userResults, filteredConversations])
 
+  // Each section heading only earns its place when something sits under it —
+  // "People / No matches found" above a list of matched conversations reads as
+  // if the search failed. When neither side matches, one message covers both.
+  const trimmedQuery = query.trim()
+  const showPeopleSection = Boolean(trimmedQuery) && (searching || visibleUserResults.length > 0)
+  const showConversationsHeading = Boolean(trimmedQuery) && filteredConversations.length > 0
+  const showNoMatches =
+    Boolean(trimmedQuery) &&
+    !searching &&
+    visibleUserResults.length === 0 &&
+    filteredConversations.length === 0
+
   async function handleStartChat(targetUser) {
     setStartError(null)
     try {
@@ -293,13 +305,11 @@ export function ChatPage() {
             {conversationsError && <p className="error">{t('chat.loadError')}</p>}
             {startError && <p className="error">{startError}</p>}
 
-            {query.trim() && (
+            {showPeopleSection && (
               <>
                 <div className="chat-list-section-label">{t('chat.sectionPeople')}</div>
                 {searching ? (
                   <p className="hint">{t('common.loading')}</p>
-                ) : visibleUserResults.length === 0 ? (
-                  <p className="hint">{t('chat.noResults')}</p>
                 ) : (
                   visibleUserResults.map((u) => (
                     <button
@@ -317,15 +327,18 @@ export function ChatPage() {
                     </button>
                   ))
                 )}
-                <div className="chat-list-section-label">{t('chat.sectionConversations')}</div>
               </>
+            )}
+
+            {showConversationsHeading && (
+              <div className="chat-list-section-label">{t('chat.sectionConversations')}</div>
             )}
 
             {conversationsLoading && conversations.length === 0 ? (
               <p className="hint">{t('common.loading')}</p>
             ) : filteredConversations.length === 0 ? (
-              query.trim() ? (
-                <p className="hint">{t('chat.noResults')}</p>
+              trimmedQuery ? (
+                showNoMatches && <p className="hint">{t('chat.noResults')}</p>
               ) : (
                 <div className="chat-empty">
                   <strong>{t('chat.noConversationsTitle')}</strong>
