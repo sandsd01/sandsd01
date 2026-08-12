@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import { LanguageProvider } from './context/LanguageContext'
+import { ChatProvider } from './context/ChatContext'
 import { RequireAuth, RequireRole } from './components/RequireAuth'
 import { Layout } from './components/Layout'
 import { LoginPage } from './pages/LoginPage'
@@ -24,13 +25,15 @@ import { PosPage } from './pages/PosPage'
 import { SalesHistoryPage } from './pages/SalesHistoryPage'
 import { ShiftsPage } from './pages/ShiftsPage'
 import { SaleDetailPage } from './pages/SaleDetailPage'
+import { ChatPage } from './pages/ChatPage'
 
 function App() {
   return (
     <BrowserRouter>
       <LanguageProvider>
         <AuthProvider>
-          <Routes>
+          <ChatProvider>
+            <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
@@ -45,6 +48,8 @@ function App() {
                 <Route path="/sales" element={<SalesHistoryPage />} />
                 <Route path="/shifts" element={<ShiftsPage />} />
                 <Route path="/sales/:id" element={<SaleDetailPage />} />
+                <Route path="/chat" element={<ChatPage />} />
+                <Route path="/chat/:conversationId" element={<ChatPage />} />
 
                 <Route element={<RequireRole roles={['admin']} />}>
                   <Route path="/products/new" element={<ProductFormPage />} />
@@ -63,7 +68,8 @@ function App() {
             </Route>
 
             <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+            </Routes>
+          </ChatProvider>
         </AuthProvider>
       </LanguageProvider>
     </BrowserRouter>
