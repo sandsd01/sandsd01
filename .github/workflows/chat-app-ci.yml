@@ -1,0 +1,49 @@
+name: chat-app CI
+
+# Scoped to chat-app/** so it stays independent of the inventory app's own
+# CI (.github/workflows/ci.yml) — the two projects share nothing.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "chat-app/**"
+      - ".github/workflows/chat-app-ci.yml"
+  pull_request:
+    paths:
+      - "chat-app/**"
+      - ".github/workflows/chat-app-ci.yml"
+
+jobs:
+  server-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: chat-app/server
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: chat-app/server/package-lock.json
+
+      - run: npm ci
+      - run: npm test
+
+  web-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: chat-app/web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: chat-app/web/package-lock.json
+
+      - run: npm ci
+      - run: npm run build
