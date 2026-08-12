@@ -102,11 +102,24 @@ cd web && npm install && npm run dev       # http://localhost:5173
 Redis and Postgres must be reachable before `npm run dev` on the server, or
 the sync queue / DB queries will throw at startup/request time.
 
+## Tests & CI
+
+`server/tests/` covers the crypto helper (round-trip, tamper detection, key
+validation) and the JWT auth middleware with `node --test` — run with
+`npm test` inside `server/`. `.github/workflows/chat-app-ci.yml` runs that
+suite plus `web`'s production build on any PR touching `chat-app/**`,
+independent of the inventory app's own CI.
+
+Still missing: integration coverage for the OAuth callback, Drive sync
+worker, and WebSocket flow (all need mocking `googleapis` and a real/fake
+Postgres+Redis — spec step 8's token-expiry/revoke/network-loss scenarios
+in particular are not yet exercised).
+
 ## Known gaps to close before shipping
 
-- No automated tests yet (spec step 8: token-expiry, revoke, and
-  network-loss scenarios need coverage).
-- No CI/deploy config yet (Railway/Render for `server/`, Vercel for `web/`
+- Integration tests for OAuth callback, Drive sync worker, and WebSocket
+  message flow (see "Tests & CI" above).
+- No deploy config yet (Railway/Render for `server/`, Vercel for `web/`
   per the spec's suggested hosting).
 - `docs/PRIVACY.md` is a starting draft, not reviewed legal copy — needed
   before Google OAuth verification and PDPA compliance sign-off.
