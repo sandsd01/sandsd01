@@ -1,5 +1,6 @@
 const { test, describe, beforeEach } = require("node:test");
 const assert = require("node:assert/strict");
+const http = require("node:http");
 const request = require("supertest");
 const { resetDb, createUser, prisma } = require("./helpers/db");
 const app = require("../src/app");
@@ -7,6 +8,31 @@ const app = require("../src/app");
 async function login(email, password) {
   const res = await request(app).post("/api/auth/login").send({ email, password });
   return res.body.token;
+}
+
+// GET /chat/stream never ends its response (it's a long-lived SSE
+// connection, kept open by a heartbeat interval), so driving it through
+// supertest's normal `.then()`/`await` — which waits for the response body
+// to finish — would hang the test run forever. Instead bind a throwaway
+// listener, grab just the status/headers via the raw `http` module, and
+// destroy the socket immediately so nothing is left open.
+function probeStream(query) {
+  return new Promise((resolve, reject) => {
+    const server = app.listen(0, () => {
+      const { port } = server.address();
+      const req = http.get(`http://127.0.0.1:${port}/api/chat/stream${query}`, (res) => {
+        const result = { status: res.statusCode, headers: res.headers };
+        res.resume(); // drain/discard whatever body arrives so 'close' fires
+        req.destroy();
+        server.close();
+        resolve(result);
+      });
+      req.on("error", (err) => {
+        server.close();
+        reject(err);
+      });
+    });
+  });
 }
 
 describe("Chat API", () => {
@@ -473,21 +499,21 @@ describe("Chat API", () => {
         .send({});
       const ticket = issued.body.ticket;
 
-      const first = await request(app).get(`/api/chat/stream?ticket=${ticket}`);
+      const first = await probeStream(`?ticket=${ticket}`);
       assert.equal(first.status, 200);
       assert.equal(first.headers["content-type"], "text/event-stream");
 
-      const second = await request(app).get(`/api/chat/stream?ticket=${ticket}`);
+      const second = await probeStream(`?ticket=${ticket}`);
       assert.equal(second.status, 401);
     });
 
     test("a bogus ticket is rejected", async () => {
-      const res = await request(app).get("/api/chat/stream?ticket=not-a-real-ticket");
+      const res = await probeStream("?ticket=not-a-real-ticket");
       assert.equal(res.status, 401);
     });
 
     test("a missing ticket is rejected", async () => {
-      const res = await request(app).get("/api/chat/stream");
+      const res = await probeStream("");
       assert.equal(res.status, 401);
     });
 
