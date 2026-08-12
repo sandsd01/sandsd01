@@ -104,6 +104,47 @@ jobs:
           done
           echo "container never became healthy"; docker logs pos; exit 1
 
+      # Real-time chat is the app's only long-lived connection, and every way it
+      # breaks is silent: the SPA fallback swallowing /api/chat/stream, a
+      # buffering layer holding the frames, or the response never being
+      # flushed all look like "no new messages" rather than an error. Assert it
+      # against the real image instead of finding out in production.
+      - name: Check the SSE chat stream
+        run: |
+          set -euo pipefail
+          base=http://127.0.0.1:3000
+
+          # Without a ticket the route must answer with the JSON 401 from the
+          # API, never the index.html shell an SPA fallback would serve.
+          code=$(curl -s -o /tmp/nostream.txt -w '%{http_code}' "$base/api/chat/stream")
+          if [ "$code" != "401" ] || ! grep -q '"error"' /tmp/nostream.txt; then
+            echo "expected a JSON 401 without a ticket, got $code:"; cat /tmp/nostream.txt; exit 1
+          fi
+
+          # Then the real path: seed an admin, log in, mint a ticket, open the
+          # stream. Credentials are the seed defaults against a throwaway
+          # container, so nothing here is a real secret.
+          docker exec pos node prisma/seed.js
+          token=$(curl -sf -X POST "$base/api/auth/login" \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"admin@example.com","password":"changeme123"}' \
+            | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
+          test -n "$token" || { echo "login returned no token"; exit 1; }
+          ticket=$(curl -sf -X POST "$base/api/chat/stream-ticket" \
+            -H "Authorization: Bearer $token" \
+            | sed -n 's/.*"ticket":"\([^"]*\)".*/\1/p')
+          test -n "$ticket" || { echo "no stream ticket issued"; exit 1; }
+
+          # The response never ends, so curl is meant to hit --max-time and exit
+          # 28; the headers it already wrote are what we assert on.
+          curl -s -N --max-time 5 -D /tmp/stream-headers.txt -o /dev/null \
+            "$base/api/chat/stream?ticket=$ticket" || true
+          grep -q '^HTTP/1.1 200' /tmp/stream-headers.txt \
+            || { echo "stream did not return 200:"; cat /tmp/stream-headers.txt; exit 1; }
+          grep -qi '^content-type: text/event-stream' /tmp/stream-headers.txt \
+            || { echo "stream is not text/event-stream:"; cat /tmp/stream-headers.txt; exit 1; }
+          echo "SSE stream OK"
+
       - name: Container logs on failure
         if: failure()
         run: docker logs pos || true
