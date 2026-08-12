@@ -67,6 +67,12 @@ if (corsOrigin) {
 
 app.use(express.json());
 
+// No response-compression middleware is mounted, deliberately. gzip buffers
+// output, so it would hold GET /api/chat/stream's SSE frames instead of
+// flushing each one — the stream would connect and then appear to deliver
+// nothing. If compression is ever added, exclude text/event-stream from it
+// (compression's `filter` option) and keep the route's X-Accel-Buffering: no.
+
 // Money is Prisma.Decimal in the database layer but plain numbers on the wire.
 // Converting in one place means no route can forget and start emitting strings.
 app.use((_req, res, next) => {
