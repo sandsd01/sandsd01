@@ -52,6 +52,29 @@ cron.schedule(
   { timezone: cronTimezone }
 );
 
+// Long-lived responses (GET /api/chat/stream holds an SSE response open
+// indefinitely) are left on Node's default HTTP timeouts on purpose:
+//
+//   server.requestTimeout   300_000  bounds RECEIVING the request, not the
+//                                    response. A bodyless GET is complete the
+//                                    moment its headers arrive, so the timer
+//                                    never trips no matter how long the
+//                                    response stays open. Verified on Node 22
+//                                    by holding an SSE response open for 330s
+//                                    (past the 300s mark) — it stayed up,
+//                                    while a control request with a stalled
+//                                    body was killed exactly on the timeout.
+//   server.headersTimeout    60_000  likewise only covers arrival of headers.
+//   server.keepAliveTimeout   5_000  only applies to an IDLE connection
+//                                    between requests, not one mid-response.
+//   server.timeout                0  no socket inactivity timeout (Node >= 13).
+//
+// So do NOT "fix" a dropped stream by setting `server.requestTimeout = 0`:
+// that wouldn't have been the cause, and it removes the slow-request
+// (slowloris) protection from every other route, uploads especially. If a
+// stream does die at a fixed interval in production, look at the proxy in
+// front of Node, not here — the route's 25s `: ping` heartbeat exists to keep
+// those proxies from calling the connection idle.
 app.listen(port, () => {
   console.log(`API listening on port ${port}`);
 });

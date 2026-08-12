@@ -13,6 +13,7 @@ const purchaseOrderRoutes = require("./routes/purchaseOrders");
 const locationRoutes = require("./routes/locations");
 const salesRoutes = require("./routes/sales");
 const settingsRoutes = require("./routes/settings");
+const chatRoutes = require("./routes/chat");
 const { router: cashShiftRoutes } = require("./routes/cashShifts");
 const { uploadDir, isRemote: usingObjectStorage, publicBaseUrl } = require("./lib/storage");
 const { apiLimiter } = require("./middleware/rateLimit");
@@ -66,6 +67,12 @@ if (corsOrigin) {
 
 app.use(express.json());
 
+// No response-compression middleware is mounted, deliberately. gzip buffers
+// output, so it would hold GET /api/chat/stream's SSE frames instead of
+// flushing each one — the stream would connect and then appear to deliver
+// nothing. If compression is ever added, exclude text/event-stream from it
+// (compression's `filter` option) and keep the route's X-Accel-Buffering: no.
+
 // Money is Prisma.Decimal in the database layer but plain numbers on the wire.
 // Converting in one place means no route can forget and start emitting strings.
 app.use((_req, res, next) => {
@@ -99,6 +106,7 @@ apiRouter.use("/locations", locationRoutes);
 apiRouter.use("/sales", salesRoutes);
 apiRouter.use("/settings", settingsRoutes);
 apiRouter.use("/cash-shifts", cashShiftRoutes);
+apiRouter.use("/chat", chatRoutes);
 
 // The API is namespaced under /api so the SPA can own the rest of the URL
 // space: client routes such as /sales, /users and /locations would otherwise

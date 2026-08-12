@@ -51,6 +51,7 @@ enum ModifierSelectionType {
 model User {
   id                  Int       @id @default(autoincrement())
   email               String    @unique
+  name                String?
   passwordHash        String
   role                Role      @default(staff)
   failedLoginAttempts Int       @default(0)
@@ -69,6 +70,9 @@ model User {
   homeLocation          Location?       @relation(fields: [homeLocationId], references: [id])
   sales                 Sale[]          @relation("SaleCashier")
   voidedSales           Sale[]          @relation("SaleVoidedBy")
+  conversationsAsUserA  Conversation[]  @relation("ConversationUserA")
+  conversationsAsUserB  Conversation[]  @relation("ConversationUserB")
+  sentMessages          Message[]       @relation("MessageSender")
 
   @@map("users")
 }
@@ -338,4 +342,39 @@ model CashShift {
   sales    Sale[]
 
   @@map("cash_shifts")
+}
+
+/// One 1:1 direct-message thread between two users (no groups). The pair is
+/// canonically ordered by the backend (userAId = lower user id, userBId =
+/// higher user id), so the unique constraint below gives an idempotent
+/// find-or-create with no separate participants join table.
+model Conversation {
+  id              Int       @id @default(autoincrement())
+  userAId         Int
+  userBId         Int
+  lastMessageAt   DateTime?
+  userALastReadAt DateTime?
+  userBLastReadAt DateTime?
+  createdAt       DateTime  @default(now())
+
+  userA    User      @relation("ConversationUserA", fields: [userAId], references: [id])
+  userB    User      @relation("ConversationUserB", fields: [userBId], references: [id])
+  messages Message[]
+
+  @@unique([userAId, userBId])
+  @@map("conversations")
+}
+
+model Message {
+  id             Int      @id @default(autoincrement())
+  conversationId Int
+  senderId       Int
+  body           String   @db.Text
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+  sender       User         @relation("MessageSender", fields: [senderId], references: [id])
+
+  @@index([conversationId, createdAt])
+  @@map("messages")
 }

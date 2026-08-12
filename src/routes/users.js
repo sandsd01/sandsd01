@@ -112,6 +112,21 @@ router.delete("/:id", async (req, res) => {
   const existing = await prisma.user.findUnique({ where: { id } });
   if (!existing) return res.status(404).json({ error: "User not found" });
 
+  // Chat is FK-linked to User (Conversation.userAId/userBId, Message.senderId)
+  // and, unlike a movement/audit log row, a DM thread has no "detach and keep
+  // going" story — so refuse the delete with a clear 409 rather than letting
+  // it fail on the FK constraint, matching the supplier/location pattern.
+  const hasConversations = await prisma.conversation.findFirst({
+    where: { OR: [{ userAId: id }, { userBId: id }] },
+  });
+  if (hasConversations) {
+    return res.status(409).json({ error: "Cannot delete a user with chat conversations" });
+  }
+  const hasMessages = await prisma.message.findFirst({ where: { senderId: id } });
+  if (hasMessages) {
+    return res.status(409).json({ error: "Cannot delete a user with sent messages" });
+  }
+
   await prisma.user.delete({ where: { id } });
 
   await logAction({

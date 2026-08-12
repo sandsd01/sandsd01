@@ -1,10 +1,12 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
+import { useChat } from '../context/ChatContext'
 
 export function Layout() {
   const { user, logout } = useAuth()
   const { language, setLanguage, t } = useLanguage()
+  const { unreadTotal } = useChat()
   const navigate = useNavigate()
 
   function handleLogout() {
@@ -20,6 +22,10 @@ export function Layout() {
         <NavLink to="/sales" className={({isActive}) => isActive ? "active" : undefined}>{t('nav.sales')}</NavLink>
         <NavLink to="/shifts" className={({isActive}) => isActive ? "active" : undefined}>{t('nav.shifts')}</NavLink>
         <NavLink to="/reports" className={({isActive}) => isActive ? "active" : undefined}>{t('nav.reports')}</NavLink>
+        <NavLink to="/chat" className={({isActive}) => isActive ? "active" : undefined}>
+          {t('nav.chat')}
+          {unreadTotal > 0 && <span className="chat-nav-badge">{unreadTotal > 99 ? '99+' : unreadTotal}</span>}
+        </NavLink>
         {user?.role === 'admin' && (
           <>
             <NavLink to="/users" className={({isActive}) => isActive ? "active" : undefined}>{t('nav.users')}</NavLink>

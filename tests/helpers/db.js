@@ -23,6 +23,8 @@ async function resetDb() {
   await prisma.location.deleteMany();
   await prisma.product.deleteMany();
   await prisma.supplier.deleteMany();
+  await prisma.message.deleteMany();
+  await prisma.conversation.deleteMany();
   await prisma.user.deleteMany();
 }
 
