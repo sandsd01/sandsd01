@@ -5,6 +5,8 @@ Basic stock management system with two roles — **admin** and **staff**. Includ
 - **admin**: manage products, manage users, record stock movements, view everything
 - **staff**: view products, record stock in/out movements, view movement history, ring up sales at their home location
 
+Both roles can also direct-message each other 1:1 from `/chat`.
+
 ## Stack
 
 - **Backend**: Node.js + Express 5, Prisma ORM + PostgreSQL (`@prisma/adapter-pg`), JWT auth
@@ -173,7 +175,17 @@ All API routes are namespaced under `/api` (so client-side SPA routes like `/sal
 | GET | `/api/users` | admin | List users |
 | POST | `/api/users` | admin | Create a user (`homeLocationId` optional) |
 | PATCH | `/api/users/:id` | admin | Update a user's email/password/role/homeLocationId |
-| DELETE | `/api/users/:id` | admin | Delete a user |
+| DELETE | `/api/users/:id` | admin | Delete a user (rejected with `409` if they have any chat conversations or sent messages) |
+| GET | `/api/chat/users?q=` | admin, staff | Search other users by name or email (case-insensitive, max 20); never returns yourself, and returns `[]` for an empty `q` |
+| GET | `/api/chat/conversations` | admin, staff | Your own conversations, most recently active first, each with `otherUser`, `lastMessage`, `lastMessageAt` and `unreadCount` |
+| POST | `/api/chat/conversations` | admin, staff | Find-or-create the 1:1 conversation with `{ userId }` — `201` when newly created, `200` when it already exists (started from either side); `400` for yourself |
+| GET | `/api/chat/conversations/:id/messages?before=&limit=` | admin, staff | Newest-first page of messages (`limit` clamped to 1–100, default 50), returning `{ data, hasMore, nextBefore }` for scroll-up cursor pagination |
+| POST | `/api/chat/conversations/:id/messages` | admin, staff | Send a message (`{ body }`, 1–4000 characters after trimming) and push it to both participants' live streams |
+| POST | `/api/chat/conversations/:id/read` | admin, staff | Mark the conversation read up to now (updates only your own last-read timestamp) |
+| POST | `/api/chat/stream-ticket` | admin, staff | Mint a single-use ticket, valid 30 seconds, for opening the SSE stream below |
+| GET | `/api/chat/stream?ticket=` | — (ticket) | Server-sent events stream of `message` events for your own conversations. Authenticated by the ticket, not the JWT, because `EventSource` can't send an `Authorization` header |
+
+Chat is available to **both `admin` and `staff`**, and a conversation is visible only to its two participants — every `/api/chat/conversations/:id/*` route answers `404` (not `403`) to anyone else, and there is **no admin override** for reading other people's messages.
 
 ### Low-stock and daily summary email alerts
 
@@ -193,6 +205,7 @@ Without those env vars set, both kinds of alert are silently skipped (logged, no
 - **Locations & barcodes**: admins manage a list of locations (warehouses/branches, with optional `address`/`phone` and an `isActive` flag); any stock movement (manual or from a PO receipt) can optionally be tagged with one, and a product's movement history page shows a net-quantity breakdown by location. Locations also carry a real per-branch stock partition, `LocationStock` (see POS below) — recording a movement without a `locationId` behaves exactly as before and only touches the company-wide `Product.quantity`. Products can also have an optional unique `barcode`; the Products page has a scan-or-type lookup box (built for handheld barcode scanners, which act as keyboards) that jumps straight to a matched product's movements page, and each product's edit page shows a printable QR code encoding its barcode (or SKU if it has none).
 - **Point of sale (POS) & multi-branch stock**: the `/pos` page lets a cashier pick a location, add products (with optional size/topping modifiers, each with a `priceDelta`) to a cart, and check out (`POST /sales`) with cash/PromptPay/card. Checkout prices each line as `sellingPrice + Σ priceDelta`, and decrements both the company-wide `Product.quantity` and the sold branch's `LocationStock` in one transaction — a branch can't sell more than its own recorded `LocationStock`, even if the company-wide total would otherwise cover it. Sales are listed/viewed at `/sales`, can be downloaded as a PDF receipt, and voided by an admin (`POST /sales/:id/void`), which restocks both figures. Staff are scoped to their `homeLocationId` (`User.homeLocationId`) for the sales list, sale detail, and sales-summary report; admins see everything. Reports gains a `GET /reports/sales-summary` (revenue, sale count, revenue by location, top products). Each branch can have an admin-uploaded PromptPay QR image (`Location.promptPayQrUrl`, managed from the Locations page); when a cashier selects "PromptPay" as the payment method on `/pos`, that branch's QR is shown at a scannable size (or a "no QR configured" message if none was uploaded) — it's a real bank-issued QR image the admin uploads, not a generated/decoded PromptPay payload, and checkout can still be completed regardless, same as cash/card.
 - **Cash shift / drawer reconciliation**: `/shifts` lets a cashier open the till with a counted `openingFloat` and close it at the end of the day with the cash actually in the drawer. Every sale rung up while a shift is open is attached to it (`Sale.cashShiftId`), so closing compares `countedCash` against `openingFloat + cash sales` and stores the difference as `variance` — negative means the drawer is short. Only cash sales count toward it: card and PromptPay money never reaches the till. One branch can have at most one open shift, staff are pinned to their own branch for opening, closing, and history, and both open and close are written to the audit log. Trading still works with no shift open — those sales simply aren't reconciled (`cashShiftId` stays `null`).
+- **Direct messages**: `/chat` gives every logged-in user (admin or staff) 1:1 text messaging — search for a colleague by name or email to start a thread, send messages, scroll up to page through history, and see per-conversation unread badges plus a total in the nav. Delivery is live over server-sent events (`GET /api/chat/stream`, authorised by a short-lived single-use ticket since `EventSource` can't send an auth header), with automatic backoff reconnection and a banner while the stream is down; sends are optimistic and can be retried if they fail. A conversation is visible only to its two participants — non-participants get `404`, admins included — and message bodies are deliberately kept out of the audit log. Text only: no group chats, attachments, reactions, or calls. A user with chat history can't be deleted (`409`).
 - **Audit log**: product/user/supplier create-update-delete and stock movement create/delete are recorded to `AuditLog`, viewable on the Activity Log page (admin).
 - **Product images**: uploaded files are stored on disk under `uploads/` (gitignored) and served at `/uploads/<filename>`.
 - **Account lockout**: 5 consecutive failed login attempts locks the account for 15 minutes.
@@ -212,11 +225,12 @@ src/
   lib/audit.js   Writes AuditLog rows for the activity log
   lib/upload.js  Multer config for product image uploads
   lib/stock.js   applyStockMovement() — shared Product.quantity + LocationStock update, used by movements and sales
-  routes/        auth, products, users, reports, suppliers, purchaseOrders, locations, sales
+  lib/chatBus.js In-process pub/sub (EventEmitter) fanning new messages out to open SSE streams
+  routes/        auth, products, users, reports, suppliers, purchaseOrders, locations, sales, settings, cashShifts, chat
 uploads/         Uploaded product images (gitignored)
 tests/           node:test + Supertest suite (backend)
 web/             React (Vite) frontend SPA
   src/i18n/      EN/ไทย translation dictionary
-  src/context/   AuthContext, LanguageContext
+  src/context/   AuthContext, LanguageContext, ChatContext
 .claude/agents/  Claude Code subagent pipeline (see CLAUDE.md)
 ```
