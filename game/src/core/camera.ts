@@ -43,7 +43,12 @@ export class ThirdPersonCamera {
 
   addYawPitch(deltaYaw: number, deltaPitch: number): void {
     this.yaw -= deltaYaw;
-    this.pitch = THREE.MathUtils.clamp(this.pitch - deltaPitch, MIN_PITCH, MAX_PITCH);
+    // Moving the mouse down should look down (non-inverted convention):
+    // deltaPitch is positive when the mouse moves down, and increasing
+    // pitch raises the camera above the target so it tilts its view
+    // downward to keep looking at it — so pitch must increase, not decrease,
+    // when the mouse moves down.
+    this.pitch = THREE.MathUtils.clamp(this.pitch + deltaPitch, MIN_PITCH, MAX_PITCH);
   }
 
   update(target: THREE.Vector3, collidables: THREE.Object3D[]): void {
