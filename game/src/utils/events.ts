@@ -1,0 +1,41 @@
+// Lightweight typed pub/sub so gameplay systems can notify UI/save-load without
+// direct references to each other.
+type Listener<T> = (payload: T) => void;
+
+export class EventBus<Events extends object> {
+  private listeners: { [K in keyof Events]?: Set<Listener<Events[K]>> } = {};
+
+  on<K extends keyof Events>(event: K, listener: Listener<Events[K]>): () => void {
+    let set = this.listeners[event];
+    if (!set) {
+      set = new Set();
+      this.listeners[event] = set;
+    }
+    set.add(listener);
+    return () => set!.delete(listener);
+  }
+
+  emit<K extends keyof Events>(event: K, payload: Events[K]): void {
+    const set = this.listeners[event];
+    if (!set) return;
+    for (const listener of set) listener(payload);
+  }
+}
+
+export interface GameEvents {
+  "inventory-changed": { itemId: string };
+  "player-health-changed": { current: number; max: number };
+  "player-died": Record<string, never>;
+  "player-respawned": Record<string, never>;
+  "enemy-spawned": { id: string };
+  "enemy-killed": { id: string };
+  "item-crafted": { itemId: string; qty: number };
+  "building-placed": { id: string; buildingId: string };
+  "crop-planted": { plotId: string; cropId: string };
+  "crop-harvested": { plotId: string; cropId: string };
+  "notification": { message: string };
+  "game-saved": Record<string, never>;
+  "game-loaded": Record<string, never>;
+}
+
+export const events = new EventBus<GameEvents>();
