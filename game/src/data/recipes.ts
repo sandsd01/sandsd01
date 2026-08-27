@@ -56,6 +56,33 @@ export const RECIPES: RecipeDef[] = [
     output: { itemId: "wheat_seed", qty: 2 },
     craftTimeMs: 500,
   },
+  {
+    id: "brick",
+    name: "Brick",
+    inputs: [{ itemId: "clay", qty: 2 }],
+    output: { itemId: "brick", qty: 1 },
+    craftTimeMs: 1000,
+  },
+  {
+    id: "iron_ingot",
+    name: "Iron Ingot",
+    inputs: [
+      { itemId: "iron_ore", qty: 2 },
+      { itemId: "wood", qty: 1 },
+    ],
+    output: { itemId: "iron_ingot", qty: 1 },
+    craftTimeMs: 2000,
+  },
+  {
+    id: "iron_sword",
+    name: "Iron Sword",
+    inputs: [
+      { itemId: "iron_ingot", qty: 2 },
+      { itemId: "plank", qty: 1 },
+    ],
+    output: { itemId: "iron_sword", qty: 1 },
+    craftTimeMs: 2500,
+  },
 ];
 
 export function getRecipe(id: string): RecipeDef {

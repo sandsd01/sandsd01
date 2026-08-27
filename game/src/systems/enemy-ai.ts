@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { getEnemy, type EnemyDef } from "../data/enemies";
 import type { Terrain } from "../world/terrain";
+import { getZone } from "../world/zones";
 import { mulberry32 } from "../utils/rng";
 import { events } from "../utils/events";
 
@@ -105,11 +106,14 @@ export class EnemyManager {
   }
 
   private spawnOne(): void {
-    const def = getEnemy("zombie");
     const angle = this.rand() * Math.PI * 2;
     const radius = SPAWN_RADIUS_MIN + this.rand() * (SPAWN_RADIUS_MAX - SPAWN_RADIUS_MIN);
     const x = Math.cos(angle) * radius;
     const z = Math.sin(angle) * radius;
+    // Rocky/wetland biomes are tougher terrain to fight through, so they
+    // spawn the stronger Brute instead of a regular Zombie.
+    const zone = getZone(x, z);
+    const def = getEnemy(zone === "rocky" || zone === "wetland" ? "brute" : "zombie");
     const y = this.terrain.heightAt(x, z);
 
     const enemy = new Enemy(def, x, y, z);

@@ -22,6 +22,17 @@ export const ENEMIES: Record<string, EnemyDef> = {
     attackCooldownMs: 1000,
     color: 0x4a6b3a,
   },
+  brute: {
+    id: "brute",
+    name: "Brute",
+    maxHealth: 60,
+    damage: 14,
+    moveSpeed: 1.8,
+    aggroRadius: 16,
+    attackRange: 1.6,
+    attackCooldownMs: 1200,
+    color: 0x6b3a3a,
+  },
 };
 
 export function getEnemy(id: string): EnemyDef {

@@ -3,10 +3,13 @@ import { getQty } from "../systems/inventory";
 import { events } from "../utils/events";
 import { colorToCss, el } from "./dom";
 
-const TRACKED_ITEMS = ["wood", "stone", "plank", "wheat_seed", "wheat"];
+const TRACKED_ITEMS = ["wood", "stone", "berry", "clay", "iron_ore", "plank", "wheat_seed", "wheat"];
 const ITEM_COLORS: Record<string, number> = {
   wood: 0x8b5a2b,
   stone: 0x8a8a8a,
+  berry: 0x9a2a4a,
+  clay: 0x8a5a42,
+  iron_ore: 0x6a5a52,
   plank: 0xc19a6b,
   wheat_seed: 0xd4c26a,
   wheat: 0xe8c840,

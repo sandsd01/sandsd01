@@ -4,7 +4,18 @@ import { addItem, hasQty } from "./inventory";
 import { events } from "../utils/events";
 
 const INTERACT_RANGE = 2.5;
-const REQUIRED_TOOL: Record<string, string> = { tree: "axe", rock: "pickaxe" };
+const REQUIRED_TOOL: Partial<Record<string, string>> = {
+  tree: "axe",
+  rock: "pickaxe",
+  iron_vein: "pickaxe",
+};
+const GATHER_VERB: Record<string, string> = {
+  tree: "chop",
+  rock: "mine",
+  iron_vein: "mine",
+  berry_bush: "pick",
+  clay_pit: "dig",
+};
 
 function findNearestNode(
   nodes: ResourceNode[],
@@ -34,9 +45,9 @@ export function getInteractionPrompt(
 ): string | null {
   const node = findNearestNode(nodes, playerX, playerZ);
   if (!node) return null;
-  const verb = node.config.kind === "tree" ? "chop" : "mine";
+  const verb = GATHER_VERB[node.config.kind] ?? "gather";
   const tool = REQUIRED_TOOL[node.config.kind];
-  if (!hasQty(state, tool, 1)) return `Need a ${tool} to ${verb} this`;
+  if (tool && !hasQty(state, tool, 1)) return `Need a ${tool} to ${verb} this`;
   return `Press E to ${verb}`;
 }
 
@@ -51,7 +62,7 @@ export function tryGather(
   if (!node) return;
 
   const tool = REQUIRED_TOOL[node.config.kind];
-  if (!hasQty(state, tool, 1)) {
+  if (tool && !hasQty(state, tool, 1)) {
     events.emit("notification", { message: `You need a ${tool} for this` });
     return;
   }

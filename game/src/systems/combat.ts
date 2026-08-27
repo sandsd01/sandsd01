@@ -6,6 +6,7 @@ const ATTACK_RANGE = 2.2;
 const ATTACK_COOLDOWN_MS = 500;
 const BASE_DAMAGE = 10;
 const SWORD_DAMAGE = 25;
+const IRON_SWORD_DAMAGE = 40;
 
 // Player-initiated melee combat: a simple range check against the nearest
 // enemy each swing (single-target, no full raycast needed for an MVP with a
@@ -23,7 +24,11 @@ export class PlayerCombat {
     if (nowMs - this.lastAttackMs < ATTACK_COOLDOWN_MS) return;
     this.lastAttackMs = nowMs;
 
-    const damage = hasQty(state, "sword", 1) ? SWORD_DAMAGE : BASE_DAMAGE;
+    const damage = hasQty(state, "iron_sword", 1)
+      ? IRON_SWORD_DAMAGE
+      : hasQty(state, "sword", 1)
+        ? SWORD_DAMAGE
+        : BASE_DAMAGE;
     for (const enemy of enemyManager.getEnemies()) {
       const dist = Math.hypot(
         enemy.object.position.x - playerX,
