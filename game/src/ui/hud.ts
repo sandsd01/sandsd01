@@ -22,7 +22,11 @@ export class Hud {
   private readonly timeLabel: HTMLSpanElement;
   private toastTimeout = 0;
 
-  constructor(root: HTMLElement, state: GameState) {
+  constructor(
+    root: HTMLElement,
+    state: GameState,
+    private readonly isTouchDevice: boolean = false,
+  ) {
     const healthWrap = el("div", "hud-health");
     const healthBg = el("div", "hud-health-bar-bg");
     this.healthFill = el("div", "hud-health-bar-fill");
@@ -109,11 +113,17 @@ export class Hud {
 
   setPrompt(text: string | null): void {
     if (text) {
-      this.prompt.textContent = text;
+      this.prompt.textContent = this.isTouchDevice ? this.touchifyPrompt(text) : text;
       this.prompt.style.display = "block";
     } else {
       this.prompt.style.display = "none";
     }
+  }
+
+  // Gathering/farming prompts are written for keyboard players ("Press E to
+  // chop"); on touch there's no keyboard, so point at the matching button.
+  private touchifyPrompt(text: string): string {
+    return text.replace("Press E", "Tap ✋").replace("Press F", "Tap 🌱");
   }
 
   private showToast(message: string): void {

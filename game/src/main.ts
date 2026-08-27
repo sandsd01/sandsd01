@@ -28,6 +28,7 @@ import { Hud } from "./ui/hud";
 import { InventoryPanel } from "./ui/inventory-panel";
 import { CraftingPanel } from "./ui/crafting-panel";
 import { BuildingPanel } from "./ui/building-panel";
+import { TouchControls } from "./ui/touch-controls";
 import type { Collidable } from "./utils/collision";
 
 const canvas = document.getElementById("game-canvas") as HTMLCanvasElement;
@@ -57,7 +58,7 @@ const farmingSystem = new FarmingSystem(scene, terrain, state);
 const enemyManager = new EnemyManager(scene, terrain, state.seed);
 const playerCombat = new PlayerCombat();
 
-const hud = new Hud(uiRoot, state);
+const hud = new Hud(uiRoot, state, input.isTouchDevice);
 let selectedSeedItemId: string | null = null;
 const inventoryPanel = new InventoryPanel(
   uiRoot,
@@ -82,11 +83,8 @@ function scheduleRespawnIfDead(): void {
   }, 2000);
 }
 
-canvas.addEventListener("mousedown", (e) => {
-  if (e.button !== 0) return;
-  if (!input.isPointerLocked()) return;
+function performPrimaryAction(): void {
   if (isPlayerDead(state)) return;
-
   const feet = player.getFeetPosition();
   const forward = camera.getForward();
   if (buildingSystem.getSelectedBuildingId()) {
@@ -94,7 +92,30 @@ canvas.addEventListener("mousedown", (e) => {
   } else {
     playerCombat.tryAttack(state, enemyManager, feet.x, feet.z, currentNowMs);
   }
+}
+
+canvas.addEventListener("mousedown", (e) => {
+  if (e.button !== 0) return;
+  if (!input.isControlsActive()) return;
+  performPrimaryAction();
 });
+
+if (input.isTouchDevice) {
+  new TouchControls(
+    uiRoot,
+    input,
+    performPrimaryAction,
+    () => {
+      craftingPanel.toggle();
+    },
+    () => {
+      buildingPanel.toggle();
+    },
+    () => {
+      inventoryPanel.toggle();
+    },
+  );
+}
 
 function getCollidables(): Collidable[] {
   const nodeCollidables: Collidable[] = resourceNodes

@@ -9,6 +9,7 @@ body {
   width: 100%;
   height: 100%;
   overflow: hidden;
+  overscroll-behavior: none;
   background: #000;
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   color: #f0ede4;
@@ -18,6 +19,7 @@ body {
   position: relative;
   width: 100vw;
   height: 100vh;
+  touch-action: none;
 }
 
 #game-canvas {
@@ -25,6 +27,7 @@ body {
   width: 100%;
   height: 100%;
   cursor: crosshair;
+  touch-action: none;
 }
 
 #ui-root {
@@ -253,4 +256,116 @@ body {
   margin-top: 10px;
   font-size: 12px;
   opacity: 0.6;
+}
+
+/* --- Touch controls (mobile) --- */
+
+.touch-look-zone {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  touch-action: none;
+  pointer-events: auto;
+}
+
+.touch-joystick-base {
+  position: absolute;
+  left: 24px;
+  bottom: 24px;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  touch-action: none;
+  pointer-events: auto;
+  z-index: 2;
+}
+
+.touch-joystick-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 54px;
+  height: 54px;
+  margin: -27px 0 0 -27px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.45);
+  pointer-events: none;
+}
+
+.touch-actions {
+  position: absolute;
+  right: 20px;
+  bottom: 24px;
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  z-index: 2;
+}
+
+.touch-menu {
+  position: absolute;
+  right: 16px;
+  top: 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 2;
+}
+
+.touch-btn {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  background: rgba(20, 20, 20, 0.55);
+  color: #f0ede4;
+  font-size: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+  pointer-events: auto;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.touch-btn-primary {
+  width: 76px;
+  height: 76px;
+  background: rgba(179, 38, 30, 0.65);
+}
+
+.touch-btn-small {
+  width: 46px;
+  height: 46px;
+  font-size: 18px;
+}
+
+/* --- Mobile / narrow-screen HUD layout: the desktop layout spreads the
+   health bar, clock, and resource chips across the same top row, which
+   collides on narrow phone screens — stack them in a left-aligned column
+   instead, and drop the desktop-only "click to lock" instructions. --- */
+@media (max-width: 640px), (pointer: coarse) {
+  .hud-health {
+    top: 12px;
+    left: 12px;
+    width: 150px;
+  }
+
+  .hud-time {
+    top: 56px;
+    left: 12px;
+    transform: none;
+  }
+
+  .hud-resources {
+    top: 100px;
+    left: 12px;
+    right: auto;
+  }
+
+  .hud-keybinds {
+    display: none;
+  }
 }
