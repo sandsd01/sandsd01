@@ -7,7 +7,11 @@ export class BuildingPanel {
   private readonly list: HTMLDivElement;
   private visible = false;
 
-  constructor(root: HTMLElement, private readonly buildingSystem: BuildingSystem) {
+  constructor(
+    root: HTMLElement,
+    private readonly buildingSystem: BuildingSystem,
+    private readonly canvas: HTMLCanvasElement,
+  ) {
     this.panel = el("div", "panel");
     this.panel.appendChild(el("h2", undefined, "Build"));
     this.list = el("div");
@@ -49,6 +53,10 @@ export class BuildingPanel {
         button.addEventListener("click", () => {
           this.buildingSystem.selectBuilding(def.id);
           this.close();
+          // Re-acquire pointer lock immediately (it was released to make
+          // this button clickable) so the very next click places the
+          // building instead of being consumed just re-locking the pointer.
+          this.canvas.requestPointerLock();
         });
         row.appendChild(button);
         return row;
