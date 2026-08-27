@@ -39,6 +39,15 @@ export const BUILDINGS: Record<string, BuildingDef> = {
     color: 0x6b4a2b,
     isPlot: true,
   },
+  brick_wall: {
+    id: "brick_wall",
+    name: "Brick Wall",
+    footprintCells: [{ x: 0, z: 0 }],
+    cost: [{ itemId: "brick", qty: 3 }],
+    height: 2.4,
+    color: 0xa85c3a,
+    isPlot: false,
+  },
 };
 
 export function getBuilding(id: string): BuildingDef {

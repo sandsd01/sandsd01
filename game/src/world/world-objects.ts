@@ -1,8 +1,29 @@
 import * as THREE from "three";
 import { mulberry32 } from "../utils/rng";
-import { getZone } from "./zones";
+import { getZone, type ZoneId } from "./zones";
 import { WORLD_SIZE, type Terrain } from "./terrain";
-import { ResourceNode } from "./resource-node";
+import { ResourceNode, type ResourceNodeKind } from "./resource-node";
+
+// Which resource node(s) spawn in each biome, and how the pick is weighted —
+// a small chance of the "other" zone's staple resource, plus a rarer special
+// node unique to that biome, keeps each zone from feeling monotonous.
+function pickKind(zone: ZoneId, rand: () => number): ResourceNodeKind {
+  const roll = rand();
+  switch (zone) {
+    case "forest":
+      if (roll < 0.12) return "rock";
+      if (roll < 0.24) return "berry_bush";
+      return "tree";
+    case "rocky":
+      if (roll < 0.12) return "tree";
+      if (roll < 0.2) return "iron_vein";
+      return "rock";
+    case "wetland":
+      return "clay_pit";
+    default:
+      return "tree";
+  }
+}
 
 const MIN_SPACING = 3.5;
 const CANDIDATE_ATTEMPTS = 900;
@@ -30,12 +51,10 @@ export function scatterResourceNodes(terrain: Terrain, seed: number): ResourceNo
     });
     if (tooClose) continue;
 
-    const kind = zone === "forest" ? "tree" : "rock";
-    // Occasionally sprinkle a little of the other resource for variety.
-    const finalKind = rand() < 0.12 ? (kind === "tree" ? "rock" : "tree") : kind;
+    const kind = pickKind(zone, rand);
 
     const y = terrain.heightAt(x, z);
-    const node = new ResourceNode(finalKind, x, y, z);
+    const node = new ResourceNode(kind, x, y, z);
     node.object.rotation.y = rand() * Math.PI * 2;
     nodes.push(node);
   }
