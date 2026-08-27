@@ -19,6 +19,7 @@ import { BuildingSystem } from "./systems/building";
 import { FarmingSystem } from "./systems/farming";
 import { EnemyManager } from "./systems/enemy-ai";
 import { PlayerCombat } from "./systems/combat";
+import { DayNightSystem, DAY_LENGTH_MS } from "./systems/day-night";
 import { saveGame, loadGame } from "./systems/save-load";
 
 import { createInitialState, type GameState } from "./state/game-state";
@@ -34,14 +35,16 @@ const uiRoot = document.getElementById("ui-root") as HTMLElement;
 
 const state = loadGame() ?? createInitialState();
 
-const scene = createScene();
+const sceneRig = createScene();
+const { scene } = sceneRig;
 const terrain = new Terrain(state.seed);
 scene.add(terrain.mesh);
 
 const renderer = createRenderer(canvas);
 const camera = new ThirdPersonCamera();
 const input = new InputManager(canvas);
-const clock = new GameClock();
+const clock = new GameClock(state.elapsedMs);
+const dayNight = new DayNightSystem(sceneRig);
 
 const player = new PlayerController(state, terrain);
 scene.add(player.object);
@@ -103,6 +106,9 @@ function getCollidables(): Collidable[] {
 const loop = new GameLoop((dt) => {
   clock.tick(dt);
   currentNowMs = clock.now();
+  state.elapsedMs = currentNowMs;
+  dayNight.update(currentNowMs);
+  hud.setTimeOfDay(dayNight.getTimeOfDay(currentNowMs));
 
   if (!isPlayerDead(state)) {
     const collidables = getCollidables();
@@ -173,6 +179,8 @@ declare global {
       teleportPlayer: (x: number, z: number) => void;
       isPointerLocked: () => boolean;
       getResourceNodes: () => { id: string; kind: string; x: number; z: number; depleted: boolean }[];
+      getTimeOfDay: () => number;
+      setTimeOfDayFraction: (fraction: number) => void;
     };
   }
 }
@@ -195,4 +203,6 @@ window.__gameDebug = {
       z: n.object.position.z,
       depleted: n.depleted,
     })),
+  getTimeOfDay: () => dayNight.getTimeOfDay(currentNowMs),
+  setTimeOfDayFraction: (fraction) => clock.setElapsed(DAY_LENGTH_MS * fraction),
 };

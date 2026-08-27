@@ -18,6 +18,8 @@ export class Hud {
   private readonly prompt: HTMLDivElement;
   private readonly toast: HTMLDivElement;
   private readonly deathOverlay: HTMLDivElement;
+  private readonly timeIcon: HTMLSpanElement;
+  private readonly timeLabel: HTMLSpanElement;
   private toastTimeout = 0;
 
   constructor(root: HTMLElement, state: GameState) {
@@ -26,6 +28,11 @@ export class Hud {
     this.healthFill = el("div", "hud-health-bar-fill");
     healthBg.appendChild(this.healthFill);
     healthWrap.appendChild(healthBg);
+
+    const timeWrap = el("div", "hud-time");
+    this.timeIcon = el("span", "hud-time-icon", "☀️");
+    this.timeLabel = el("span", "hud-time-label", "06:00");
+    timeWrap.append(this.timeIcon, this.timeLabel);
 
     this.resourceRow = el("div", "hud-resources");
 
@@ -51,6 +58,7 @@ export class Hud {
 
     root.append(
       healthWrap,
+      timeWrap,
       this.resourceRow,
       this.prompt,
       crosshair,
@@ -85,6 +93,18 @@ export class Hud {
         return chip;
       }),
     );
+  }
+
+  // t is the day-night fraction in [0,1) from DayNightSystem.getTimeOfDay —
+  // mapped to a 24h virtual clock purely for display.
+  setTimeOfDay(t: number): void {
+    const totalMinutes = Math.floor(t * 24 * 60);
+    const hours = Math.floor(totalMinutes / 60)
+      .toString()
+      .padStart(2, "0");
+    const minutes = (totalMinutes % 60).toString().padStart(2, "0");
+    this.timeLabel.textContent = `${hours}:${minutes}`;
+    this.timeIcon.textContent = t < 0.22 || t > 0.78 ? "🌙" : t < 0.3 || t > 0.7 ? "🌅" : "☀️";
   }
 
   setPrompt(text: string | null): void {
