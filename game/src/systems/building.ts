@@ -11,6 +11,7 @@ import { events } from "../utils/events";
 const PLACEMENT_DISTANCE = 3;
 const VALID_COLOR = 0x4caf50;
 const INVALID_COLOR = 0xe53935;
+const POP_IN_MS = 220;
 
 let nextBuildingInstanceId = 0;
 
@@ -20,6 +21,7 @@ export class BuildingSystem {
   private ghostValid = false;
   private readonly meshes = new Map<string, THREE.Object3D>();
   private readonly occupancy = new Map<string, string>(); // cell key -> placedBuilding.id
+  private readonly popIns: { mesh: THREE.Object3D; startMs: number }[] = [];
 
   constructor(
     private readonly scene: THREE.Scene,
@@ -78,7 +80,9 @@ export class BuildingSystem {
     return true; // inventory cost is checked separately at place-time
   }
 
-  update(playerPos: THREE.Vector3, forward: THREE.Vector3): void {
+  update(playerPos: THREE.Vector3, forward: THREE.Vector3, nowMs: number): void {
+    this.updatePopIns(nowMs);
+
     if (!this.selectedBuildingId || !this.ghost) return;
     const def = getBuilding(this.selectedBuildingId);
     const anchor = this.anchorCellFor(playerPos, forward);
@@ -93,7 +97,7 @@ export class BuildingSystem {
     );
   }
 
-  tryPlace(playerPos: THREE.Vector3, forward: THREE.Vector3): boolean {
+  tryPlace(playerPos: THREE.Vector3, forward: THREE.Vector3, nowMs: number): boolean {
     if (!this.selectedBuildingId) return false;
     const def = getBuilding(this.selectedBuildingId);
     const anchor = this.anchorCellFor(playerPos, forward);
@@ -115,9 +119,28 @@ export class BuildingSystem {
     };
     this.state.placedBuildings.push(placed);
     this.occupyCells(placed);
-    this.spawnMesh(placed);
+    this.spawnMesh(placed, nowMs);
     events.emit("building-placed", { id: placed.id, buildingId: def.id });
     return true;
+  }
+
+  private updatePopIns(nowMs: number): void {
+    for (let i = this.popIns.length - 1; i >= 0; i--) {
+      const tween = this.popIns[i];
+      const elapsed = nowMs - tween.startMs;
+      if (elapsed >= POP_IN_MS) {
+        tween.mesh.scale.setScalar(1);
+        this.popIns.splice(i, 1);
+        continue;
+      }
+      const t = elapsed / POP_IN_MS;
+      // Ease-out-back: overshoots past 1 slightly before settling, so a
+      // placed building feels like it "pops" into place.
+      const c1 = 1.70158;
+      const c3 = c1 + 1;
+      const eased = 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+      tween.mesh.scale.setScalar(Math.max(0.05, eased));
+    }
   }
 
   private occupyCells(placed: PlacedBuilding): void {
@@ -128,7 +151,10 @@ export class BuildingSystem {
     }
   }
 
-  private spawnMesh(placed: PlacedBuilding): void {
+  // nowMs is only passed for a freshly-placed building, which pop-in
+  // animates; buildings rehydrated from a save appear at full scale
+  // immediately, since animating them on page load would be misleading.
+  private spawnMesh(placed: PlacedBuilding, nowMs?: number): void {
     const def = getBuilding(placed.buildingId);
     const worldX = placed.cellX * GRID_CELL_SIZE;
     const worldZ = placed.cellZ * GRID_CELL_SIZE;
@@ -140,6 +166,10 @@ export class BuildingSystem {
     );
     mesh.position.set(worldX, y + def.height / 2, worldZ);
     mesh.name = placed.id;
+    if (nowMs !== undefined) {
+      mesh.scale.setScalar(0.05);
+      this.popIns.push({ mesh, startMs: nowMs });
+    }
     this.scene.add(mesh);
     this.meshes.set(placed.id, mesh);
   }

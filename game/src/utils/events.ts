@@ -25,11 +25,15 @@ export class EventBus<Events extends object> {
 export interface GameEvents {
   "inventory-changed": { itemId: string };
   "player-health-changed": { current: number; max: number };
+  "player-damaged": { amount: number };
   "player-died": Record<string, never>;
   "player-respawned": Record<string, never>;
   "enemy-spawned": { id: string };
+  "enemy-hit": { id: string; damage: number };
   "enemy-killed": { id: string };
   "item-crafted": { itemId: string; qty: number };
+  "resource-gathered": { itemId: string; qty: number; kind: string };
+  "player-attack": Record<string, never>;
   "building-placed": { id: string; buildingId: string };
   "crop-planted": { plotId: string; cropId: string };
   "crop-harvested": { plotId: string; cropId: string };

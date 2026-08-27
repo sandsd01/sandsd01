@@ -7,13 +7,16 @@ import { events } from "../utils/events";
 
 type EnemyAiState = "idle" | "chase" | "attack";
 
+const FLASH_MS = 120;
+const DEATH_ANIM_MS = 300;
+
 let nextEnemyId = 0;
 
 function buildEnemyMesh(color: number): THREE.Group {
   const group = new THREE.Group();
   const body = new THREE.Mesh(
     new THREE.CapsuleGeometry(0.35, 0.9, 4, 8),
-    new THREE.MeshStandardMaterial({ color }),
+    new THREE.MeshStandardMaterial({ color, transparent: true }),
   );
   body.position.y = 0.9;
   group.add(body);
@@ -25,21 +28,40 @@ export class Enemy {
   readonly def: EnemyDef;
   readonly object: THREE.Group;
   health: number;
+  dying = false;
   private aiState: EnemyAiState = "idle";
   private lastAttackMs = -Infinity;
+  private flashUntilMs = -Infinity;
+  private deathStartMs = -Infinity;
+  private readonly body: THREE.Mesh;
+  private readonly baseColor: THREE.Color;
 
   constructor(def: EnemyDef, x: number, y: number, z: number) {
     this.id = `enemy-${nextEnemyId++}`;
     this.def = def;
     this.object = buildEnemyMesh(def.color);
+    this.body = this.object.children[0] as THREE.Mesh;
+    this.baseColor = (this.body.material as THREE.MeshStandardMaterial).color.clone();
     this.object.position.set(x, y, z);
     this.health = def.maxHealth;
   }
 
   // Returns true if this hit killed the enemy.
-  takeDamage(amount: number): boolean {
+  takeDamage(amount: number, nowMs: number): boolean {
     this.health = Math.max(0, this.health - amount);
+    this.flashUntilMs = nowMs + FLASH_MS;
     return this.health <= 0;
+  }
+
+  // Marks the enemy as dead but keeps it around (no longer targetable/acting)
+  // to play a short shrink-and-fade before EnemyManager actually removes it.
+  startDeathAnimation(nowMs: number): void {
+    this.dying = true;
+    this.deathStartMs = nowMs;
+  }
+
+  isDeathAnimDone(nowMs: number): boolean {
+    return this.dying && nowMs - this.deathStartMs >= DEATH_ANIM_MS;
   }
 
   update(
@@ -49,6 +71,13 @@ export class Enemy {
     terrain: Terrain,
     onAttackPlayer: (damage: number) => void,
   ): void {
+    if (this.dying) {
+      const t = Math.min(1, (nowMs - this.deathStartMs) / DEATH_ANIM_MS);
+      this.object.scale.setScalar(1 - t);
+      (this.body.material as THREE.MeshStandardMaterial).opacity = 1 - t;
+      return;
+    }
+
     const dx = playerPos.x - this.object.position.x;
     const dz = playerPos.z - this.object.position.z;
     const dist = Math.hypot(dx, dz);
@@ -80,6 +109,15 @@ export class Enemy {
     }
 
     this.object.position.y = terrain.heightAt(this.object.position.x, this.object.position.z);
+
+    // Brief white flash on taking a hit — clearer feedback than the health
+    // bar alone, especially mid-fight with several enemies on screen.
+    const material = this.body.material as THREE.MeshStandardMaterial;
+    if (nowMs < this.flashUntilMs) {
+      material.color.set(0xffffff);
+    } else {
+      material.color.copy(this.baseColor);
+    }
   }
 }
 
@@ -101,8 +139,10 @@ export class EnemyManager {
     this.rand = mulberry32(seed ^ 0x1337beef);
   }
 
+  // Live, targetable enemies only — a dying enemy is still animating out but
+  // should no longer be attackable or attack the player.
   getEnemies(): Enemy[] {
-    return this.enemies;
+    return this.enemies.filter((e) => !e.dying);
   }
 
   private spawnOne(): void {
@@ -122,11 +162,13 @@ export class EnemyManager {
     events.emit("enemy-spawned", { id: enemy.id });
   }
 
-  removeEnemy(id: string): void {
-    const index = this.enemies.findIndex((e) => e.id === id);
-    if (index === -1) return;
-    this.scene.remove(this.enemies[index].object);
-    this.enemies.splice(index, 1);
+  // Starts the death animation immediately and emits enemy-killed right away
+  // (so loot/UI/audio react promptly); the mesh itself is only actually
+  // removed from the scene once the animation finishes, in update().
+  removeEnemy(id: string, nowMs: number): void {
+    const enemy = this.enemies.find((e) => e.id === id);
+    if (!enemy || enemy.dying) return;
+    enemy.startDeathAnimation(nowMs);
     events.emit("enemy-killed", { id });
   }
 
@@ -143,6 +185,13 @@ export class EnemyManager {
 
     for (const enemy of this.enemies) {
       enemy.update(dt, nowMs, playerPos, this.terrain, onAttackPlayer);
+    }
+
+    for (let i = this.enemies.length - 1; i >= 0; i--) {
+      if (this.enemies[i].isDeathAnimDone(nowMs)) {
+        this.scene.remove(this.enemies[i].object);
+        this.enemies.splice(i, 1);
+      }
     }
   }
 }

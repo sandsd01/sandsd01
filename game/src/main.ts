@@ -28,7 +28,8 @@ import { Hud } from "./ui/hud";
 import { InventoryPanel } from "./ui/inventory-panel";
 import { CraftingPanel } from "./ui/crafting-panel";
 import { BuildingPanel } from "./ui/building-panel";
-import { TouchControls } from "./ui/touch-controls";
+import { AudioHooks } from "./systems/audio-hooks";
+import { sound } from "./utils/audio";
 import type { Collidable } from "./utils/collision";
 
 const canvas = document.getElementById("game-canvas") as HTMLCanvasElement;
@@ -58,7 +59,8 @@ const farmingSystem = new FarmingSystem(scene, terrain, state);
 const enemyManager = new EnemyManager(scene, terrain, state.seed);
 const playerCombat = new PlayerCombat();
 
-const hud = new Hud(uiRoot, state, input.isTouchDevice);
+const hud = new Hud(uiRoot, state);
+new AudioHooks();
 let selectedSeedItemId: string | null = null;
 const inventoryPanel = new InventoryPanel(
   uiRoot,
@@ -87,8 +89,9 @@ function performPrimaryAction(): void {
   if (isPlayerDead(state)) return;
   const feet = player.getFeetPosition();
   const forward = camera.getForward();
+  player.triggerSwing(currentNowMs);
   if (buildingSystem.getSelectedBuildingId()) {
-    buildingSystem.tryPlace(feet, forward);
+    buildingSystem.tryPlace(feet, forward, currentNowMs);
   } else {
     playerCombat.tryAttack(state, enemyManager, feet.x, feet.z, currentNowMs);
   }
@@ -96,26 +99,13 @@ function performPrimaryAction(): void {
 
 canvas.addEventListener("mousedown", (e) => {
   if (e.button !== 0) return;
-  if (!input.isControlsActive()) return;
+  if (!input.isPointerLocked()) return;
   performPrimaryAction();
 });
 
-if (input.isTouchDevice) {
-  new TouchControls(
-    uiRoot,
-    input,
-    performPrimaryAction,
-    () => {
-      craftingPanel.toggle();
-    },
-    () => {
-      buildingPanel.toggle();
-    },
-    () => {
-      inventoryPanel.toggle();
-    },
-  );
-}
+// Browsers block audio until a user gesture; the same click that requests
+// pointer lock doubles as that gesture.
+canvas.addEventListener("click", () => sound.unlock());
 
 function getCollidables(): Collidable[] {
   const nodeCollidables: Collidable[] = resourceNodes
@@ -133,7 +123,7 @@ const loop = new GameLoop((dt) => {
 
   if (!isPlayerDead(state)) {
     const collidables = getCollidables();
-    player.update(dt, input, camera, collidables);
+    player.update(dt, currentNowMs, input, camera, collidables);
   }
 
   const feet = player.getFeetPosition();
@@ -150,7 +140,7 @@ const loop = new GameLoop((dt) => {
   }
 
   const forward = camera.getForward();
-  buildingSystem.update(feet, forward);
+  buildingSystem.update(feet, forward, currentNowMs);
 
   if (input.wasJustPressed("KeyE") && !isPlayerDead(state)) {
     tryGather(state, resourceNodes, feet.x, feet.z, currentNowMs);

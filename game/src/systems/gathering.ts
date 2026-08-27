@@ -70,4 +70,5 @@ export function tryGather(
   const result = node.hit(nowMs);
   if (!result) return;
   addItem(state, result.itemId, result.qty);
+  events.emit("resource-gathered", { ...result, kind: node.config.kind });
 }

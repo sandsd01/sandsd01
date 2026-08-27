@@ -1,4 +1,5 @@
 import { getRecipe, RECIPES, type RecipeDef } from "../data/recipes";
+import { getItem } from "../data/items";
 import type { GameState } from "../state/game-state";
 import { addItem, hasQty, removeItem } from "./inventory";
 import { events } from "../utils/events";
@@ -19,6 +20,9 @@ export function craft(state: GameState, recipeId: string): boolean {
   }
   addItem(state, recipe.output.itemId, recipe.output.qty);
   events.emit("item-crafted", { itemId: recipe.output.itemId, qty: recipe.output.qty });
+  events.emit("notification", {
+    message: `Crafted ${recipe.output.qty}x ${getItem(recipe.output.itemId).name}`,
+  });
   return true;
 }
 
