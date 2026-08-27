@@ -1,0 +1,48 @@
+import * as THREE from "three";
+import { mulberry32 } from "../utils/rng";
+import { getZone } from "./zones";
+import { WORLD_SIZE, type Terrain } from "./terrain";
+import { ResourceNode } from "./resource-node";
+
+const MIN_SPACING = 3.5;
+const CANDIDATE_ATTEMPTS = 900;
+
+// Scatters trees/rocks procedurally at world-init time using the same seed
+// as the terrain, so a given seed always reproduces the same resource layout.
+// Uses simple jittered rejection sampling (retry-on-overlap) rather than a
+// full Poisson-disc implementation — sufficient for a bounded, non-streamed
+// MVP world.
+export function scatterResourceNodes(terrain: Terrain, seed: number): ResourceNode[] {
+  const rand = mulberry32(seed ^ 0x51ed270b);
+  const nodes: ResourceNode[] = [];
+  const half = WORLD_SIZE / 2;
+
+  for (let i = 0; i < CANDIDATE_ATTEMPTS; i++) {
+    const x = (rand() * 2 - 1) * half;
+    const z = (rand() * 2 - 1) * half;
+    const zone = getZone(x, z);
+    if (zone === "open") continue;
+
+    const tooClose = nodes.some((n) => {
+      const dx = n.object.position.x - x;
+      const dz = n.object.position.z - z;
+      return Math.hypot(dx, dz) < MIN_SPACING;
+    });
+    if (tooClose) continue;
+
+    const kind = zone === "forest" ? "tree" : "rock";
+    // Occasionally sprinkle a little of the other resource for variety.
+    const finalKind = rand() < 0.12 ? (kind === "tree" ? "rock" : "tree") : kind;
+
+    const y = terrain.heightAt(x, z);
+    const node = new ResourceNode(finalKind, x, y, z);
+    node.object.rotation.y = rand() * Math.PI * 2;
+    nodes.push(node);
+  }
+
+  return nodes;
+}
+
+export function addNodesToScene(scene: THREE.Scene, nodes: ResourceNode[]): void {
+  for (const node of nodes) scene.add(node.object);
+}
