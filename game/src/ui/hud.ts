@@ -21,15 +21,13 @@ export class Hud {
   private readonly prompt: HTMLDivElement;
   private readonly toast: HTMLDivElement;
   private readonly deathOverlay: HTMLDivElement;
+  private readonly damageFlash: HTMLDivElement;
   private readonly timeIcon: HTMLSpanElement;
   private readonly timeLabel: HTMLSpanElement;
   private toastTimeout = 0;
+  private damageFlashTimeout = 0;
 
-  constructor(
-    root: HTMLElement,
-    state: GameState,
-    private readonly isTouchDevice: boolean = false,
-  ) {
+  constructor(root: HTMLElement, state: GameState) {
     const healthWrap = el("div", "hud-health");
     const healthBg = el("div", "hud-health-bar-bg");
     this.healthFill = el("div", "hud-health-bar-fill");
@@ -50,11 +48,12 @@ export class Hud {
 
     const keybinds = el("div", "hud-keybinds");
     keybinds.innerHTML =
-      "WASD move · Mouse look (click to lock)<br>" +
+      "WASD move · Shift sprint · Mouse look (click to lock) · Scroll zoom<br>" +
       "E gather/interact · F plant/harvest<br>" +
       "Left-click attack · C craft · B build · I inventory";
 
     this.toast = el("div", "hud-toast");
+    this.damageFlash = el("div", "hud-damage-flash");
 
     this.deathOverlay = el("div", "hud-death-overlay");
     const deathText = el("div", undefined, "You have fallen");
@@ -71,6 +70,7 @@ export class Hud {
       crosshair,
       keybinds,
       this.toast,
+      this.damageFlash,
       this.deathOverlay,
     );
 
@@ -80,6 +80,7 @@ export class Hud {
     events.on("player-health-changed", () => this.renderHealth(state));
     events.on("inventory-changed", () => this.renderResources(state));
     events.on("notification", ({ message }) => this.showToast(message));
+    events.on("player-damaged", () => this.flashDamage());
     events.on("player-died", () => this.deathOverlay.classList.add("visible"));
     events.on("player-respawned", () => this.deathOverlay.classList.remove("visible"));
   }
@@ -116,17 +117,19 @@ export class Hud {
 
   setPrompt(text: string | null): void {
     if (text) {
-      this.prompt.textContent = this.isTouchDevice ? this.touchifyPrompt(text) : text;
+      this.prompt.textContent = text;
       this.prompt.style.display = "block";
     } else {
       this.prompt.style.display = "none";
     }
   }
 
-  // Gathering/farming prompts are written for keyboard players ("Press E to
-  // chop"); on touch there's no keyboard, so point at the matching button.
-  private touchifyPrompt(text: string): string {
-    return text.replace("Press E", "Tap ✋").replace("Press F", "Tap 🌱");
+  private flashDamage(): void {
+    this.damageFlash.classList.add("visible");
+    window.clearTimeout(this.damageFlashTimeout);
+    this.damageFlashTimeout = window.setTimeout(() => {
+      this.damageFlash.classList.remove("visible");
+    }, 300);
   }
 
   private showToast(message: string): void {

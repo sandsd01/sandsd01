@@ -19,13 +19,6 @@ body {
   position: relative;
   width: 100vw;
   height: 100vh;
-  /* 100vh includes the space behind a mobile browser's address/toolbar
-     chrome, which isn't actually visible — dvh tracks the real visible
-     viewport instead, so bottom-anchored touch controls don't end up
-     partly hidden below the fold. Kept as a fallback since dvh isn't
-     universally supported. */
-  height: 100dvh;
-  touch-action: none;
 }
 
 #game-canvas {
@@ -33,7 +26,6 @@ body {
   width: 100%;
   height: 100%;
   cursor: crosshair;
-  touch-action: none;
 }
 
 #ui-root {
@@ -166,6 +158,20 @@ body {
   opacity: 1;
 }
 
+.hud-damage-flash {
+  position: absolute;
+  inset: 0;
+  background: rgba(180, 0, 0, 0.35);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.hud-damage-flash.visible {
+  opacity: 1;
+  transition: opacity 0.05s ease;
+}
+
 .hud-death-overlay {
   position: absolute;
   inset: 0;
@@ -176,8 +182,7 @@ body {
   flex-direction: column;
   gap: 12px;
   font-size: 28px;
-  /* Above the touch controls' z-index:1/2 layers (see below) so death always
-     visibly blocks input, on both desktop and touch. */
+  /* Always above any open panel, so death is visible even mid-menu. */
   z-index: 20;
 }
 
@@ -198,12 +203,6 @@ body {
   border-radius: 10px;
   padding: 16px;
   display: none;
-  /* Must sit above .touch-look-zone (z-index:1) and the joystick/action
-     buttons (z-index:2) — otherwise the full-screen look-drag layer covers
-     the panel and every tap on its buttons misses, hitting the look-zone
-     instead. Panels have no explicit z-index otherwise, so without this the
-     browser's default stacking (touch controls are appended later in the
-     DOM, so they'd win) puts the invisible drag layer on top of the menu. */
   z-index: 10;
 }
 
@@ -272,121 +271,4 @@ body {
   margin-top: 10px;
   font-size: 12px;
   opacity: 0.6;
-}
-
-/* --- Touch controls (mobile) --- */
-
-.touch-look-zone {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  touch-action: none;
-  pointer-events: auto;
-}
-
-.touch-joystick-base {
-  position: absolute;
-  left: 24px;
-  /* Add the device's safe-area inset (home-indicator/gesture-bar area on
-     notched phones) so the joystick isn't placed under it. */
-  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
-  width: 120px;
-  height: 120px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.12);
-  border: 2px solid rgba(255, 255, 255, 0.25);
-  touch-action: none;
-  pointer-events: auto;
-  z-index: 2;
-}
-
-.touch-joystick-knob {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 54px;
-  height: 54px;
-  margin: -27px 0 0 -27px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.45);
-  pointer-events: none;
-}
-
-.touch-actions {
-  position: absolute;
-  right: 20px;
-  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
-  display: flex;
-  align-items: flex-end;
-  gap: 14px;
-  z-index: 2;
-}
-
-.touch-menu {
-  position: absolute;
-  right: 16px;
-  top: 64px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  z-index: 2;
-}
-
-.touch-btn {
-  width: 60px;
-  height: 60px;
-  border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  background: rgba(20, 20, 20, 0.55);
-  color: #f0ede4;
-  font-size: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  touch-action: none;
-  pointer-events: auto;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.touch-btn-primary {
-  width: 76px;
-  height: 76px;
-  background: rgba(179, 38, 30, 0.65);
-}
-
-.touch-btn-small {
-  width: 46px;
-  height: 46px;
-  font-size: 18px;
-}
-
-/* --- Mobile / narrow-screen HUD layout: the desktop layout spreads the
-   health bar, clock, and resource chips across the same top row, which
-   collides on narrow phone screens — stack them in a left-aligned column
-   instead, and drop the desktop-only "click to lock" instructions. --- */
-@media (max-width: 640px), (pointer: coarse) {
-  .hud-health {
-    top: 12px;
-    left: 12px;
-    width: 150px;
-  }
-
-  .hud-time {
-    top: 56px;
-    left: 12px;
-    transform: none;
-  }
-
-  .hud-resources {
-    top: 100px;
-    left: 12px;
-    right: auto;
-    max-width: min(70vw, 260px);
-    flex-wrap: wrap;
-    row-gap: 6px;
-  }
-
-  .hud-keybinds {
-    display: none;
-  }
 }

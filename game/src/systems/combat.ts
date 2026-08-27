@@ -1,6 +1,7 @@
 import type { GameState } from "../state/game-state";
 import type { EnemyManager } from "./enemy-ai";
 import { hasQty } from "./inventory";
+import { events } from "../utils/events";
 
 const ATTACK_RANGE = 2.2;
 const ATTACK_COOLDOWN_MS = 500;
@@ -23,6 +24,7 @@ export class PlayerCombat {
   ): void {
     if (nowMs - this.lastAttackMs < ATTACK_COOLDOWN_MS) return;
     this.lastAttackMs = nowMs;
+    events.emit("player-attack", {});
 
     const damage = hasQty(state, "iron_sword", 1)
       ? IRON_SWORD_DAMAGE
@@ -35,8 +37,9 @@ export class PlayerCombat {
         enemy.object.position.z - playerZ,
       );
       if (dist <= ATTACK_RANGE) {
-        const dead = enemy.takeDamage(damage);
-        if (dead) enemyManager.removeEnemy(enemy.id);
+        const dead = enemy.takeDamage(damage, nowMs);
+        events.emit("enemy-hit", { id: enemy.id, damage });
+        if (dead) enemyManager.removeEnemy(enemy.id, nowMs);
         break;
       }
     }

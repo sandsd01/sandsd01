@@ -116,6 +116,9 @@ const NODE_MESH_BUILDERS: Record<ResourceNodeKind, () => THREE.Group> = {
   iron_vein: buildIronVeinMesh,
 };
 
+const HIT_PUNCH_MS = 160;
+const HIT_PUNCH_SCALE = 1.35;
+
 let nextId = 0;
 
 export class ResourceNode {
@@ -125,6 +128,7 @@ export class ResourceNode {
   hitsRemaining: number;
   depleted = false;
   private depletedAtMs = 0;
+  private hitAnimStartMs = -Infinity;
 
   constructor(kind: ResourceNodeKind, x: number, y: number, z: number) {
     this.id = `node-${nextId++}`;
@@ -137,6 +141,7 @@ export class ResourceNode {
   // Returns the item/qty yielded by this hit, or null if already depleted.
   hit(nowMs: number): { itemId: string; qty: number } | null {
     if (this.depleted) return null;
+    this.hitAnimStartMs = nowMs;
     this.hitsRemaining -= 1;
     const result = { itemId: this.config.yieldItemId, qty: this.config.yieldQtyPerHit };
     if (this.hitsRemaining <= 0) {
@@ -152,11 +157,19 @@ export class ResourceNode {
   }
 
   update(nowMs: number): void {
-    if (!this.depleted) return;
-    if (nowMs - this.depletedAtMs >= this.config.respawnMs) {
-      this.depleted = false;
-      this.hitsRemaining = this.config.hitsToDeplete;
-      this.object.visible = true;
+    if (this.depleted) {
+      if (nowMs - this.depletedAtMs >= this.config.respawnMs) {
+        this.depleted = false;
+        this.hitsRemaining = this.config.hitsToDeplete;
+        this.object.visible = true;
+      }
+      return;
     }
+
+    // A quick punch-scale pulse on hit — clear visual confirmation that a
+    // gather actually connected, independent of the HUD count updating.
+    const elapsed = nowMs - this.hitAnimStartMs;
+    const scale = elapsed < HIT_PUNCH_MS ? 1 + (1 - elapsed / HIT_PUNCH_MS) * (HIT_PUNCH_SCALE - 1) : 1;
+    this.object.scale.setScalar(scale);
   }
 }

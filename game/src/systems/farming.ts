@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { getBuilding } from "../data/buildings";
 import { getCrop, CROPS } from "../data/crops";
+import { getItem } from "../data/items";
 import type { GameState, PlotState } from "../state/game-state";
 import type { Terrain } from "../world/terrain";
 import { GRID_CELL_SIZE } from "../utils/grid";
@@ -97,6 +98,9 @@ export class FarmingSystem {
       const crop = getCrop(plot.cropId);
       addItem(this.state, crop.yield.itemId, crop.yield.qty);
       events.emit("crop-harvested", { plotId: plot.buildingId, cropId: crop.id });
+      events.emit("notification", {
+        message: `Harvested ${crop.yield.qty}x ${getItem(crop.yield.itemId).name}`,
+      });
       plot.cropId = null;
       plot.plantedAtMs = null;
       this.removeCropMesh(plot);

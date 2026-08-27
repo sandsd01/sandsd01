@@ -4,6 +4,7 @@ import { events } from "../utils/events";
 export function damagePlayer(state: GameState, amount: number): void {
   if (state.player.health <= 0) return;
   state.player.health = Math.max(0, state.player.health - amount);
+  events.emit("player-damaged", { amount });
   events.emit("player-health-changed", {
     current: state.player.health,
     max: state.player.maxHealth,

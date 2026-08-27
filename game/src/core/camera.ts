@@ -4,6 +4,7 @@ const MIN_PITCH = -0.65;
 const MAX_PITCH = 1.1;
 const MIN_DISTANCE = 3;
 const MAX_DISTANCE = 10;
+const ZOOM_SPEED = 0.0015;
 
 // Third-person follow camera: orbits a target position at a given yaw/pitch/distance,
 // with a simple raycast-based pullback so it doesn't clip through terrain/objects.
@@ -26,6 +27,18 @@ export class ThirdPersonCamera {
       this.camera.aspect = window.innerWidth / window.innerHeight;
       this.camera.updateProjectionMatrix();
     });
+
+    window.addEventListener(
+      "wheel",
+      (e) => {
+        this.distance = THREE.MathUtils.clamp(
+          this.distance + e.deltaY * ZOOM_SPEED * this.distance,
+          MIN_DISTANCE,
+          MAX_DISTANCE,
+        );
+      },
+      { passive: true },
+    );
   }
 
   addYawPitch(deltaYaw: number, deltaPitch: number): void {
