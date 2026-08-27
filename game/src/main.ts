@@ -71,7 +71,7 @@ const inventoryPanel = new InventoryPanel(
   () => selectedSeedItemId,
 );
 const craftingPanel = new CraftingPanel(uiRoot, state);
-const buildingPanel = new BuildingPanel(uiRoot, buildingSystem);
+const buildingPanel = new BuildingPanel(uiRoot, buildingSystem, canvas);
 
 let currentNowMs = 0;
 let respawnScheduled = false;
@@ -167,7 +167,8 @@ const loop = new GameLoop((dt) => {
 
   const gatherPrompt = getInteractionPrompt(state, resourceNodes, feet.x, feet.z);
   const farmPrompt = farmingSystem.getPrompt(feet.x, feet.z, selectedSeedItemId, currentNowMs);
-  hud.setPrompt(gatherPrompt ?? farmPrompt);
+  const placementPrompt = buildingSystem.getPlacementPrompt();
+  hud.setPrompt(placementPrompt ?? gatherPrompt ?? farmPrompt);
 
   renderer.render(scene, camera.camera);
   input.endFrame();
@@ -193,6 +194,7 @@ declare global {
       getTimeOfDay: () => number;
       setTimeOfDayFraction: (fraction: number) => void;
       getCameraPitch: () => number;
+      getCameraDistance: () => number;
     };
   }
 }
@@ -218,4 +220,5 @@ window.__gameDebug = {
   getTimeOfDay: () => dayNight.getTimeOfDay(currentNowMs),
   setTimeOfDayFraction: (fraction) => clock.setElapsed(DAY_LENGTH_MS * fraction),
   getCameraPitch: () => camera.pitch,
+  getCameraDistance: () => camera.distance,
 };

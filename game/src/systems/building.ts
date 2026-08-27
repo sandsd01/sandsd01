@@ -15,10 +15,13 @@ const POP_IN_MS = 220;
 
 let nextBuildingInstanceId = 0;
 
+type InvalidReason = "occupied" | "zone";
+
 export class BuildingSystem {
   private selectedBuildingId: string | null = null;
   private ghost: THREE.Mesh | null = null;
   private ghostValid = false;
+  private invalidReason: InvalidReason | null = null;
   private readonly meshes = new Map<string, THREE.Object3D>();
   private readonly occupancy = new Map<string, string>(); // cell key -> placedBuilding.id
   private readonly popIns: { mesh: THREE.Object3D; startMs: number }[] = [];
@@ -69,15 +72,35 @@ export class BuildingSystem {
     return worldToCell(targetX, targetZ);
   }
 
-  private isPlacementValid(def: BuildingDef, anchor: Cell): boolean {
+  // Returns null when valid, or the reason it isn't — used both to color the
+  // ghost and to explain the block to the player via getPlacementPrompt().
+  private placementInvalidReason(def: BuildingDef, anchor: Cell): InvalidReason | null {
     for (const offset of def.footprintCells) {
       const cell = { x: anchor.x + offset.x, z: anchor.z + offset.z };
-      if (this.occupancy.has(cellKey(cell))) return false;
+      if (this.occupancy.has(cellKey(cell))) return "occupied";
       const worldX = cell.x * GRID_CELL_SIZE;
       const worldZ = cell.z * GRID_CELL_SIZE;
-      if (getZone(worldX, worldZ) !== "open") return false;
+      if (getZone(worldX, worldZ) !== "open") return "zone";
     }
-    return true; // inventory cost is checked separately at place-time
+    return null; // inventory cost is checked separately at place-time
+  }
+
+  private isPlacementValid(def: BuildingDef, anchor: Cell): boolean {
+    return this.placementInvalidReason(def, anchor) === null;
+  }
+
+  // A short HUD prompt while a building is selected: what to do, or why the
+  // current spot won't work — shown instead of leaving the player to guess
+  // why the ghost turned red.
+  getPlacementPrompt(): string | null {
+    if (!this.selectedBuildingId) return null;
+    const def = getBuilding(this.selectedBuildingId);
+    if (this.ghostValid) {
+      const costText = def.cost.map((c) => `${c.qty} ${c.itemId}`).join(", ");
+      return `Left-click to place ${def.name} (${costText})`;
+    }
+    if (this.invalidReason === "occupied") return "Can't place here — space is occupied";
+    return "Can only build in the open area near spawn";
   }
 
   update(playerPos: THREE.Vector3, forward: THREE.Vector3, nowMs: number): void {
@@ -91,7 +114,8 @@ export class BuildingSystem {
     const y = this.terrain.heightAt(worldX, worldZ);
 
     this.ghost.position.set(worldX, y + def.height / 2, worldZ);
-    this.ghostValid = this.isPlacementValid(def, anchor);
+    this.invalidReason = this.placementInvalidReason(def, anchor);
+    this.ghostValid = this.invalidReason === null;
     (this.ghost.material as THREE.MeshStandardMaterial).color.setHex(
       this.ghostValid ? VALID_COLOR : INVALID_COLOR,
     );

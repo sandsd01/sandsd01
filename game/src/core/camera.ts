@@ -2,8 +2,8 @@ import * as THREE from "three";
 
 const MIN_PITCH = -0.65;
 const MAX_PITCH = 1.1;
-const MIN_DISTANCE = 3;
-const MAX_DISTANCE = 10;
+const MIN_DISTANCE = 2.5;
+const MAX_DISTANCE = 16;
 const ZOOM_SPEED = 0.0015;
 
 // Third-person follow camera: orbits a target position at a given yaw/pitch/distance,
