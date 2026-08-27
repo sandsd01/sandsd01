@@ -51,7 +51,7 @@ export class PlayerController {
     camera: ThirdPersonCamera,
     collidables: Collidable[],
   ): void {
-    if (input.isPointerLocked()) {
+    if (input.isControlsActive()) {
       camera.addYawPitch(
         input.mouseDeltaX * MOUSE_SENSITIVITY,
         input.mouseDeltaY * MOUSE_SENSITIVITY,
@@ -60,17 +60,21 @@ export class PlayerController {
 
     const forward = camera.getForward();
     const right = camera.getRight();
+    const { x: mx, y: my } = input.getMoveVector();
     const move = new THREE.Vector3();
-    if (input.isDown("KeyW")) move.add(forward);
-    if (input.isDown("KeyS")) move.sub(forward);
-    if (input.isDown("KeyD")) move.add(right);
-    if (input.isDown("KeyA")) move.sub(right);
+    move.addScaledVector(forward, my);
+    move.addScaledVector(right, mx);
+    // Clamp to unit length rather than always normalizing, so an analog
+    // touch-joystick push shorter than full deflection moves proportionally
+    // slower — keyboard input (each axis exactly -1/0/1) is unaffected since
+    // it already never exceeds length 1 except on diagonals, which this
+    // clamps to the same full speed as before.
+    if (move.lengthSq() > 1) move.normalize();
 
     let { x, z } = this.state.player;
-    if (move.lengthSq() > 0) {
-      move.normalize().multiplyScalar(MOVE_SPEED * dt);
-      x += move.x;
-      z += move.z;
+    if (move.lengthSq() > 0.0001) {
+      x += move.x * MOVE_SPEED * dt;
+      z += move.z * MOVE_SPEED * dt;
       this.state.player.yaw = Math.atan2(move.x, move.z);
     }
 
