@@ -42,8 +42,10 @@ npm run preview   # preview the production build
 ## Scope (MVP)
 
 Implemented: resource gathering (trees/rocks) + crafting, grid-based building
-placement, crop farming (plant → grow → harvest), and enemy (zombie) combat
-with a simple spawn/aggro/attack AI, plus save/load to `localStorage`.
+placement, crop farming (plant → grow → harvest), enemy (zombie) combat with a
+simple spawn/aggro/attack AI, a day/night cycle (`src/systems/day-night.ts`,
+purely visual — sky/light color and intensity on a ~6 minute loop, shown in
+the HUD clock), and save/load to `localStorage`.
 
 Explicitly **out of scope** for this MVP (see
 `/root/.claude/plans/romestead-memoized-charm.md` for the full plan/reasoning):
@@ -53,7 +55,8 @@ Explicitly **out of scope** for this MVP (see
   heightmap instead)
 - Multiple distinct biomes with terrain shaders, procedural dungeons
 - Animal husbandry (crop farming only)
-- Day/night cycle
+- Anything gated on time of day (e.g. night-only enemy spawns) — the cycle is
+  visual only for now
 
 ## Project layout
 
@@ -78,5 +81,9 @@ There's no unit-test suite for this MVP (the surface is small and heavily
 visual/interactive). Verify changes by actually running `npm run dev` and
 playing: gather resources, craft an item, place a building, plant/harvest a
 crop, and fight off a zombie. A `window.__gameDebug` object is exposed in the
-browser console (`getPlayerPosition()`, `getInventory()`) for quick manual or
-scripted (e.g. headless Playwright) checks.
+browser console for quick manual or scripted (e.g. headless Playwright)
+checks — `getPlayerPosition()`, `getInventory()`, `getEnemyPositions()`,
+`getResourceNodes()`, `getPlots()`, `getPlacedBuildings()`,
+`teleportPlayer(x, z)`, `isPointerLocked()`, `getTimeOfDay()`, and
+`setTimeOfDayFraction(fraction)` (jump the clock to any point in the day/night
+cycle without waiting out the full ~6 minute loop).

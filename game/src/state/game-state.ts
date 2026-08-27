@@ -1,4 +1,5 @@
 import { hashStringToSeed } from "../utils/rng";
+import { DAY_LENGTH_MS } from "../systems/day-night";
 
 export interface InventorySlot {
   itemId: string;
@@ -44,7 +45,9 @@ export function createInitialState(seedInput: string | number = "romestead"): Ga
   const seed = typeof seedInput === "string" ? hashStringToSeed(seedInput) : seedInput;
   return {
     seed,
-    elapsedMs: 0,
+    // Start mid-morning rather than at midnight (t=0) so a fresh game opens
+    // in daylight instead of darkness.
+    elapsedMs: DAY_LENGTH_MS * 0.4,
     player: { x: 0, y: 0, z: 8, yaw: 0, health: 100, maxHealth: 100 },
     inventory: [
       { itemId: "axe", qty: 1 },
