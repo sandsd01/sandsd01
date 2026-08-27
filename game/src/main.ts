@@ -192,6 +192,7 @@ declare global {
       getResourceNodes: () => { id: string; kind: string; x: number; z: number; depleted: boolean }[];
       getTimeOfDay: () => number;
       setTimeOfDayFraction: (fraction: number) => void;
+      getCameraPitch: () => number;
     };
   }
 }
@@ -216,4 +217,5 @@ window.__gameDebug = {
     })),
   getTimeOfDay: () => dayNight.getTimeOfDay(currentNowMs),
   setTimeOfDayFraction: (fraction) => clock.setElapsed(DAY_LENGTH_MS * fraction),
+  getCameraPitch: () => camera.pitch,
 };
