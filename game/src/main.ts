@@ -21,7 +21,7 @@ import { EnemyManager } from "./systems/enemy-ai";
 import { PlayerCombat } from "./systems/combat";
 import { saveGame, loadGame } from "./systems/save-load";
 
-import { createInitialState } from "./state/game-state";
+import { createInitialState, type GameState } from "./state/game-state";
 
 import { Hud } from "./ui/hud";
 import { InventoryPanel } from "./ui/inventory-panel";
@@ -131,9 +131,21 @@ const loop = new GameLoop((dt) => {
   if (input.wasJustPressed("KeyF") && !isPlayerDead(state)) {
     farmingSystem.tryInteract(feet.x, feet.z, selectedSeedItemId, currentNowMs);
   }
-  if (input.wasJustPressed("KeyC")) craftingPanel.toggle();
-  if (input.wasJustPressed("KeyB")) buildingPanel.toggle();
-  if (input.wasJustPressed("KeyI")) inventoryPanel.toggle();
+  // Pointer Lock captures all mouse events on the canvas regardless of where
+  // the (hidden, non-moving) cursor visually is, so panel buttons are
+  // unclickable while locked — release the lock whenever a panel is toggled.
+  if (input.wasJustPressed("KeyC")) {
+    document.exitPointerLock();
+    craftingPanel.toggle();
+  }
+  if (input.wasJustPressed("KeyB")) {
+    document.exitPointerLock();
+    buildingPanel.toggle();
+  }
+  if (input.wasJustPressed("KeyI")) {
+    document.exitPointerLock();
+    inventoryPanel.toggle();
+  }
   if (input.wasJustPressed("KeyQ")) buildingSystem.selectBuilding(null);
 
   const gatherPrompt = getInteractionPrompt(state, resourceNodes, feet.x, feet.z);
@@ -155,10 +167,32 @@ declare global {
     __gameDebug?: {
       getPlayerPosition: () => { x: number; y: number; z: number };
       getInventory: () => { itemId: string; qty: number }[];
+      getEnemyPositions: () => { id: string; x: number; z: number; health: number }[];
+      getPlots: () => GameState["plots"];
+      getPlacedBuildings: () => GameState["placedBuildings"];
+      teleportPlayer: (x: number, z: number) => void;
+      isPointerLocked: () => boolean;
+      getResourceNodes: () => { id: string; kind: string; x: number; z: number; depleted: boolean }[];
     };
   }
 }
 window.__gameDebug = {
   getPlayerPosition: () => ({ x: state.player.x, y: state.player.y, z: state.player.z }),
   getInventory: () => state.inventory.map((s) => ({ ...s })),
+  getEnemyPositions: () =>
+    enemyManager
+      .getEnemies()
+      .map((e) => ({ id: e.id, x: e.object.position.x, z: e.object.position.z, health: e.health })),
+  getPlots: () => state.plots.map((p) => ({ ...p })),
+  getPlacedBuildings: () => state.placedBuildings.map((b) => ({ ...b })),
+  teleportPlayer: (x, z) => player.teleport(x, z),
+  isPointerLocked: () => input.isPointerLocked(),
+  getResourceNodes: () =>
+    resourceNodes.map((n) => ({
+      id: n.id,
+      kind: n.config.kind,
+      x: n.object.position.x,
+      z: n.object.position.z,
+      depleted: n.depleted,
+    })),
 };

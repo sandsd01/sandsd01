@@ -36,6 +36,15 @@ export class PlayerController {
     return new THREE.Vector3(this.state.player.x, this.state.player.y, this.state.player.z);
   }
 
+  // Debug/testing-only teleport (see window.__gameDebug in main.ts) — not used
+  // by normal gameplay input handling.
+  teleport(x: number, z: number): void {
+    this.state.player.x = x;
+    this.state.player.z = z;
+    this.state.player.y = this.terrain.heightAt(x, z);
+    this.syncObjectFromState();
+  }
+
   update(
     dt: number,
     input: InputManager,
