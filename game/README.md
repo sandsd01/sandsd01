@@ -30,6 +30,29 @@ npm run build     # type-check + production build to dist/
 npm run preview   # preview the production build
 ```
 
+## Deploying
+
+The game is deployed on Vercel from this repo, built straight from source —
+there is no separate build artifact to commit.
+
+The Vercel project is linked to the GitHub repository, so **every push to
+`main` deploys automatically**; a pull request gets its own preview URL. The
+only non-default setting is the root directory, because this is one project
+inside a repo whose root is the unrelated POS app:
+
+| Setting | Value |
+| --- | --- |
+| Root Directory | `game` |
+| Production Branch | `main` |
+| Framework | Vite (auto-detected) |
+| Build Command | `npm run build` (i.e. `tsc -b && vite build`) |
+| Output Directory | `dist` |
+
+`npm run build` type-checks before bundling, so a type error fails the deploy
+rather than shipping a broken build. Nothing here reads an environment
+variable — the game is fully client-side and persists to `localStorage` — so
+there is no deploy-time configuration to keep in sync.
+
 ## Controls
 
 - `WASD` — move, mouse — look (click the canvas to lock the pointer)
