@@ -124,7 +124,7 @@ export class Hud {
       `${cap("sprint")} sprint · ${cap("jump")} jump</div>` +
       "<div>Mouse look (click to lock) · Scroll to zoom</div>" +
       `<div>${cap("gather")} gather · ${cap("farm")} plant/harvest · <kbd>Click</kbd> attack</div>` +
-      `<div>${cap("hotbar1")}–${cap("hotbar4")} pick a build piece · ${cap("cancelBuild")} cancel</div>` +
+      `<div>${cap("hotbar1")}–${cap("hotbar8")} pick a build piece · ${cap("cancelBuild")} cancel</div>` +
       `<div>${cap("crafting")} craft · ${cap("building")} build · ` +
       `${cap("inventory")} inventory · ${cap("options")} options</div>`;
   }

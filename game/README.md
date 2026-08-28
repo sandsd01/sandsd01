@@ -22,8 +22,17 @@ browser.
 | What | Source | Licence |
 | --- | --- | --- |
 | Props, buildings and the player character | [Kenney](https://www.kenney.nl) — Mini Forest 1.0 | CC0 |
+| Forge, anvil, workbench, barrel | Forge Parts by Don Carson | CC0 |
 | UI type (Rubik, Cinzel) | [Fontsource](https://fontsource.org) | OFL-1.1 |
 | HUD icons | [Lucide](https://lucide.dev) | ISC |
+
+The Forge Parts pack ships as a single OBJ holding 49 unnamed groups laid out
+in a row — an asset sheet rather than a scene. The groups carry generated names,
+so the loader picks pieces out **by their index in the file**, which is stable
+for a committed static asset; those indices were read off a rendered contact
+sheet of all 49 rather than guessed. Its flat MTL colours are restated as
+`MeshStandardMaterial` so these props take the sun and sky fill like everything
+else instead of reading as stickers.
 
 The GLB models live in `public/models/` and are fetched at runtime rather than
 bundled, because they reference a shared `Textures/colormap.png` atlas by
@@ -85,7 +94,7 @@ there is no deploy-time configuration to keep in sync.
 - `E` — gather from the nearest tree/rock, or interact
 - `F` — plant a selected seed into a farm plot / harvest a ready crop
 - Left-click — attack the nearest enemy in range, or place a selected building
-- `1`–`4` — pick a build piece straight from the hotbar (press again to cancel)
+- `1`–`8` — pick a build piece straight from the hotbar (press again to cancel)
 - `Q` — cancel building placement
 - `C` — crafting, `B` — building menu, `Tab` or `I` — inventory (select seeds here)
 - `Esc` — close the open menu, or open Options when nothing is open
@@ -109,6 +118,10 @@ world.
 
 Sprinting and jumping draw on **stamina**, which regenerates after a short
 pause; emptying it locks sprinting until it has recovered a quarter of the way.
+
+Most recipes craft anywhere, but **smelting and smithing need a Forge standing
+nearby** — build one from the hotbar first. A recipe that is blocked says so in
+words next to the disabled button rather than just greying out.
 A **mini-map** in the bottom-right corner shows the biomes, nearby resources,
 your buildings and any enemies, north-up with a marker for your heading.
 

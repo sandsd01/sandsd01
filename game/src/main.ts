@@ -27,6 +27,7 @@ import { loadModels } from "./world/models";
 import { createComposer } from "./core/postprocessing";
 
 import { getInteractionPrompt, tryGather } from "./systems/gathering";
+import { addItem } from "./systems/inventory";
 import { BuildingSystem } from "./systems/building";
 import { FarmingSystem } from "./systems/farming";
 import { EnemyManager } from "./systems/enemy-ai";
@@ -102,7 +103,12 @@ const inventoryPanel = new InventoryPanel(
   },
   () => selectedSeedItemId,
 );
-const craftingPanel = new CraftingPanel(uiRoot, state);
+// Station checks run against wherever the player is standing. Movement is
+// blocked while a menu is open, so the answer can't go stale mid-panel.
+const STATION_RANGE = 5;
+const craftingPanel = new CraftingPanel(uiRoot, state, (buildingId) =>
+  buildingSystem.hasNearby(buildingId, state.player.x, state.player.z, STATION_RANGE),
+);
 const buildingPanel = new BuildingPanel(uiRoot, buildingSystem, canvas, state);
 const buildHotbar = new BuildHotbar(uiRoot, buildingSystem, canvas, state, bindings);
 const settingsPanel = new SettingsPanel(uiRoot, settings, bindings, input, () => {
@@ -285,6 +291,10 @@ declare global {
       getStamina: () => { current: number; max: number };
       getRigFingerprint: () => number;
       getPlayerBounds: () => { height: number; minY: number; feetY: number };
+      grantItems: (items: Record<string, number>) => void;
+      getBuildingBounds: (
+        buildingId: string,
+      ) => { height: number; minY: number; terrainY: number } | null;
       getCameraPitch: () => number;
       getCameraDistance: () => number;
       getRenderStats: () => Record<string, unknown>;
@@ -317,6 +327,21 @@ window.__gameDebug = {
   getPlayerRig: () => player.getAnimationState(),
   getStamina: () => ({ current: state.player.stamina, max: state.player.maxStamina }),
   getRigFingerprint: () => player.getRigFingerprint(),
+  grantItems: (items) => {
+    for (const [itemId, qty] of Object.entries(items)) addItem(state, itemId, qty);
+  },
+  getBuildingBounds: (buildingId) => {
+    const placed = state.placedBuildings.find((b) => b.buildingId === buildingId);
+    if (!placed) return null;
+    const mesh = buildingSystem.getMesh(placed.id);
+    if (!mesh) return null;
+    const box = new THREE.Box3().setFromObject(mesh);
+    return {
+      height: box.max.y - box.min.y,
+      minY: box.min.y,
+      terrainY: terrain.heightAt(placed.cellX, placed.cellZ),
+    };
+  },
   // Measured from the rendered object rather than from state, so a model that
   // loaded at the wrong scale or sank into the terrain is caught.
   getPlayerBounds: () => {

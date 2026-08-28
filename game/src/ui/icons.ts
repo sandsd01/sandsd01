@@ -5,6 +5,8 @@
 import axe from "lucide-static/icons/axe.svg?raw";
 import brickWall from "lucide-static/icons/brick-wall.svg?raw";
 import fence from "lucide-static/icons/fence.svg?raw";
+import flame from "lucide-static/icons/flame.svg?raw";
+import hammer from "lucide-static/icons/hammer.svg?raw";
 import gem from "lucide-static/icons/gem.svg?raw";
 import grape from "lucide-static/icons/grape.svg?raw";
 import heart from "lucide-static/icons/heart.svg?raw";
@@ -25,7 +27,9 @@ const SOURCES = {
   axe,
   brickWall,
   fence,
+  flame,
   gem,
+  hammer,
   grape,
   heart,
   layers,

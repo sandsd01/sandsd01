@@ -231,8 +231,10 @@ body {
 /* --- Controls reference --- */
 
 .hud-keybinds {
+  /* Under the health panel rather than bottom-left: the build hotbar grew to
+     eight slots and now spans the width the card used to share. */
   position: absolute;
-  bottom: 16px;
+  top: 96px;
   left: 16px;
   display: grid;
   gap: 5px;
@@ -462,7 +464,7 @@ body {
   left: 50%;
   transform: translateX(-50%);
   display: flex;
-  gap: 8px;
+  gap: 6px;
   padding: 8px;
   background: var(--slate);
   border: 1px solid var(--edge);
@@ -480,9 +482,9 @@ body {
   gap: 3px;
   /* Comfortably past a 44px target: this is the control the player reaches for
      most often while a fight is going on. */
-  min-width: 84px;
+  min-width: 72px;
   min-height: 76px;
-  padding: 8px 10px 6px;
+  padding: 8px 7px 6px;
   border: 1px solid transparent;
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.04);
@@ -690,4 +692,11 @@ body {
 
 .panel .panel-reset:hover {
   background: rgba(255, 255, 255, 0.13);
+}
+
+/* A blocked craft explains itself in words next to the disabled button, not by
+   colour alone. */
+.panel-row-warn {
+  font-size: 12px;
+  color: #e8b26a;
 }

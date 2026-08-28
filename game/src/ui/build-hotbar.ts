@@ -10,13 +10,26 @@ import { keyLabel, type Bindings } from "../state/keybindings";
 
 // Actions bound to the slots, in the order BUILDINGS declares them. The keys
 // themselves live in the binding map, so these stay correct after a rebind.
-export const HOTBAR_ACTIONS = ["hotbar1", "hotbar2", "hotbar3", "hotbar4"] as const;
+export const HOTBAR_ACTIONS = [
+  "hotbar1",
+  "hotbar2",
+  "hotbar3",
+  "hotbar4",
+  "hotbar5",
+  "hotbar6",
+  "hotbar7",
+  "hotbar8",
+] as const;
 
 const BUILDING_ICONS: Record<string, IconName> = {
   wall: "fence",
   foundation: "squareStack",
   farm_plot: "sprout",
   brick_wall: "brickWall",
+  forge: "flame",
+  anvil: "hammer",
+  workbench: "axe",
+  barrel: "layers",
 };
 
 // An always-visible row of build pieces. Building previously meant a round

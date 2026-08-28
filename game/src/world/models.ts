@@ -1,6 +1,8 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
+import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
+import { MTLLoader } from "three/examples/jsm/loaders/MTLLoader.js";
 
 // Kenney's "Mini Forest" pack (CC0 — see public/models/LICENSE.txt). The GLBs
 // reference a shared colormap atlas by relative path, which is why they're
@@ -18,7 +20,14 @@ export type ModelName =
   | "fence"
   | "building-platform"
   | "building-structure"
-  | "character-archer";
+  | "character-archer"
+  // From the Forge Parts pack (CC0) — see FORGE_PARTS below.
+  | "forge"
+  | "anvil"
+  | "workbench"
+  | "barrel"
+  | "trough"
+  | "brazier";
 
 // The pack is authored against roughly 1-unit tiles, which is not this world's
 // scale (the player stands 1.7 units tall), and "the right size" differs by
@@ -43,6 +52,26 @@ const SPECS: Record<ModelName, ModelSpec> = {
   "building-platform": { fit: "width", size: 0.95 },
   "building-structure": { fit: "width", size: 0.95 },
   "character-archer": { fit: "height", size: 1.7 },
+  forge: { fit: "height", size: 1.7 },
+  anvil: { fit: "height", size: 0.85 },
+  workbench: { fit: "width", size: 0.95 },
+  barrel: { fit: "height", size: 0.95 },
+  trough: { fit: "width", size: 0.95 },
+  brazier: { fit: "height", size: 1.15 },
+};
+
+// The Forge Parts pack ships as one OBJ holding 49 unnamed groups laid out in a
+// row — an asset sheet rather than a scene. The groups carry generated names
+// ("group426239919"), so there is nothing to match on but their order, which is
+// the order they appear in the file and is stable for a committed, static
+// asset. These indices were read off a rendered contact sheet of all 49.
+const FORGE_PARTS: Partial<Record<ModelName, number>> = {
+  forge: 15,
+  brazier: 22,
+  workbench: 23,
+  barrel: 38,
+  anvil: 41,
+  trough: 47,
 };
 
 export interface LoadedModel {
@@ -101,12 +130,65 @@ async function loadOne(
   }
 }
 
+// The pack's materials are flat colours with no texture, and OBJ/MTL gives
+// Phong. Restating them as MeshStandardMaterial puts these props on the same
+// lighting model as everything else in the scene, so they take the sun and the
+// sky fill the same way rather than reading as stickers.
+function restate(mesh: THREE.Mesh): void {
+  const source = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+  const converted = source.map((mat) => {
+    const colour = (mat as THREE.MeshPhongMaterial).color ?? new THREE.Color(0xffffff);
+    return new THREE.MeshStandardMaterial({ color: colour, roughness: 0.75, metalness: 0.05 });
+  });
+  mesh.material = converted.length === 1 ? converted[0] : converted;
+}
+
+async function loadForgeParts(): Promise<ModelLibrary> {
+  const library: ModelLibrary = {};
+  try {
+    const materials = await new MTLLoader().setPath("models/forge/").loadAsync("materials.mtl");
+    materials.preload();
+    const root = await new OBJLoader()
+      .setMaterials(materials)
+      .setPath("models/forge/")
+      .loadAsync("forge-parts.obj");
+
+    const meshes: THREE.Mesh[] = [];
+    root.traverse((child) => {
+      const mesh = child as THREE.Mesh;
+      if (mesh.isMesh) meshes.push(mesh);
+    });
+
+    for (const [name, index] of Object.entries(FORGE_PARTS) as [ModelName, number][]) {
+      const mesh = meshes[index];
+      if (!mesh) {
+        console.warn(`Forge part "${name}" (index ${index}) is missing from the sheet`);
+        continue;
+      }
+      const part = mesh.clone();
+      restate(part);
+      const wrapper = new THREE.Group();
+      wrapper.add(part);
+      normalise(wrapper, SPECS[name]);
+      const outer = new THREE.Group();
+      outer.add(wrapper);
+      library[name] = { scene: outer, animations: [] };
+    }
+  } catch (err) {
+    console.warn("Failed to load the forge parts sheet, falling back to procedural geometry:", err);
+  }
+  return library;
+}
+
 export async function loadModels(): Promise<ModelLibrary> {
   const loader = new GLTFLoader();
-  const names = Object.keys(SPECS) as ModelName[];
-  const loaded = await Promise.all(names.map((name) => loadOne(loader, name)));
+  const glbNames = (Object.keys(SPECS) as ModelName[]).filter((name) => !(name in FORGE_PARTS));
+  const [loaded, forge] = await Promise.all([
+    Promise.all(glbNames.map((name) => loadOne(loader, name))),
+    loadForgeParts(),
+  ]);
 
-  const library: ModelLibrary = {};
+  const library: ModelLibrary = { ...forge };
   for (const entry of loaded) {
     if (entry) library[entry[0]] = entry[1];
   }

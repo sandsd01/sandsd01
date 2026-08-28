@@ -18,7 +18,11 @@ export type Action =
   | "hotbar1"
   | "hotbar2"
   | "hotbar3"
-  | "hotbar4";
+  | "hotbar4"
+  | "hotbar5"
+  | "hotbar6"
+  | "hotbar7"
+  | "hotbar8";
 
 // Order here is the order the Options screen lists them in, grouped the way a
 // player thinks about them rather than alphabetically.
@@ -36,6 +40,10 @@ export const ACTIONS: Action[] = [
   "hotbar2",
   "hotbar3",
   "hotbar4",
+  "hotbar5",
+  "hotbar6",
+  "hotbar7",
+  "hotbar8",
   "crafting",
   "building",
   "inventory",
@@ -60,6 +68,10 @@ export const ACTION_LABELS: Record<Action, string> = {
   hotbar2: "Build slot 2",
   hotbar3: "Build slot 3",
   hotbar4: "Build slot 4",
+  hotbar5: "Build slot 5",
+  hotbar6: "Build slot 6",
+  hotbar7: "Build slot 7",
+  hotbar8: "Build slot 8",
 };
 
 // Two slots per action, as most games in the genre offer: it keeps both
@@ -85,6 +97,10 @@ export const DEFAULT_BINDINGS: Bindings = {
   hotbar2: ["Digit2"],
   hotbar3: ["Digit3"],
   hotbar4: ["Digit4"],
+  hotbar5: ["Digit5"],
+  hotbar6: ["Digit6"],
+  hotbar7: ["Digit7"],
+  hotbar8: ["Digit8"],
 };
 
 const STORAGE_KEY = "romestead-keybindings-v1";

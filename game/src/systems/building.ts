@@ -89,6 +89,10 @@ const BUILDING_MODELS: Record<string, ModelName> = {
   foundation: "building-platform",
   farm_plot: "patch-dirt",
   brick_wall: "building-structure",
+  forge: "forge",
+  anvil: "anvil",
+  workbench: "workbench",
+  barrel: "barrel",
 };
 
 let nextBuildingInstanceId = 0;
@@ -285,6 +289,17 @@ export class BuildingSystem {
     }
     this.scene.add(mesh);
     this.meshes.set(placed.id, mesh);
+  }
+
+  // Whether a given kind of building stands within reach of a point. Crafting
+  // uses this for recipes that need a station.
+  hasNearby(buildingId: string, x: number, z: number, radius: number): boolean {
+    return this.state.placedBuildings.some((placed) => {
+      if (placed.buildingId !== buildingId) return false;
+      const dx = placed.cellX * GRID_CELL_SIZE - x;
+      const dz = placed.cellZ * GRID_CELL_SIZE - z;
+      return Math.hypot(dx, dz) <= radius;
+    });
   }
 
   getMesh(placedId: string): THREE.Object3D | undefined {
