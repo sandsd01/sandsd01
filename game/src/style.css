@@ -246,6 +246,16 @@ body {
   opacity: 0.65;
 }
 
+/* Have/need counts in a cost line. The numbers already say whether a
+   requirement is met, so color only reinforces it. */
+.cost-ok {
+  color: #b3d68f;
+}
+
+.cost-short {
+  color: #e8908a;
+}
+
 .panel button {
   background: #3a5a2e;
   color: #f0ede4;

@@ -1,8 +1,8 @@
 import { listRecipes } from "../systems/crafting";
 import { canCraft, craft } from "../systems/crafting";
 import type { GameState } from "../state/game-state";
-import { getItem } from "../data/items";
 import { events } from "../utils/events";
+import { costLine } from "./cost-line";
 import { el } from "./dom";
 
 export class CraftingPanel {
@@ -35,10 +35,7 @@ export class CraftingPanel {
         const row = el("div", "panel-row");
         const info = el("div", "panel-row-info");
         info.appendChild(el("span", "panel-row-title", recipe.name));
-        const inputsText = recipe.inputs
-          .map((i) => `${i.qty}x ${getItem(i.itemId).name}`)
-          .join(", ");
-        info.appendChild(el("span", "panel-row-sub", `Needs: ${inputsText}`));
+        info.appendChild(costLine("Needs", recipe.inputs, this.state));
         row.appendChild(info);
 
         const button = el("button", undefined, "Craft");
