@@ -71,7 +71,7 @@ const inventoryPanel = new InventoryPanel(
   () => selectedSeedItemId,
 );
 const craftingPanel = new CraftingPanel(uiRoot, state);
-const buildingPanel = new BuildingPanel(uiRoot, buildingSystem, canvas);
+const buildingPanel = new BuildingPanel(uiRoot, buildingSystem, canvas, state);
 
 let currentNowMs = 0;
 let respawnScheduled = false;

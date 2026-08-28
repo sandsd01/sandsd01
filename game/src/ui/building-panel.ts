@@ -1,5 +1,8 @@
 import { BUILDINGS } from "../data/buildings";
 import type { BuildingSystem } from "../systems/building";
+import type { GameState } from "../state/game-state";
+import { events } from "../utils/events";
+import { canAfford, costLine } from "./cost-line";
 import { el } from "./dom";
 
 export class BuildingPanel {
@@ -11,6 +14,7 @@ export class BuildingPanel {
     root: HTMLElement,
     private readonly buildingSystem: BuildingSystem,
     private readonly canvas: HTMLCanvasElement,
+    private readonly state: GameState,
   ) {
     this.panel = el("div", "panel");
     this.panel.appendChild(el("h2", undefined, "Build"));
@@ -24,6 +28,10 @@ export class BuildingPanel {
       ),
     );
     root.appendChild(this.panel);
+
+    events.on("inventory-changed", () => {
+      if (this.visible) this.render();
+    });
   }
 
   toggle(): void {
@@ -44,12 +52,13 @@ export class BuildingPanel {
         const row = el("div", "panel-row");
         const info = el("div", "panel-row-info");
         info.appendChild(el("span", "panel-row-title", def.name));
-        const costText = def.cost.map((c) => `${c.qty}x ${c.itemId}`).join(", ");
-        info.appendChild(el("span", "panel-row-sub", `Cost: ${costText}`));
+        info.appendChild(costLine("Cost", def.cost, this.state));
         row.appendChild(info);
 
+        const affordable = canAfford(def.cost, this.state);
         const button = el("button", undefined, selected === def.id ? "Selected" : "Select");
         if (selected === def.id) button.classList.add("selected");
+        button.disabled = !affordable;
         button.addEventListener("click", () => {
           this.buildingSystem.selectBuilding(def.id);
           this.close();
