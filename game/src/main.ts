@@ -1,4 +1,12 @@
 import * as THREE from "three";
+
+// Fonts are self-hosted via @fontsource (OFL-1.1) rather than linked from a
+// CDN: a blocked font URL fails silently, and the whole HUD would quietly drop
+// back to system-ui without anything in the console to say why.
+import "@fontsource/cinzel/latin-600.css";
+import "@fontsource/cinzel/latin-700.css";
+import "@fontsource/rubik/latin-400.css";
+import "@fontsource/rubik/latin-500.css";
 import "./style.css";
 
 import { createScene, updateSunTarget } from "./core/scene";
@@ -26,11 +34,14 @@ import { DayNightSystem, DAY_LENGTH_MS } from "./systems/day-night";
 import { saveGame, loadGame } from "./systems/save-load";
 
 import { createInitialState, type GameState } from "./state/game-state";
+import { loadSettings } from "./state/settings";
 
 import { Hud } from "./ui/hud";
 import { InventoryPanel } from "./ui/inventory-panel";
 import { CraftingPanel } from "./ui/crafting-panel";
 import { BuildingPanel } from "./ui/building-panel";
+import { BuildHotbar, HOTBAR_KEYS } from "./ui/build-hotbar";
+import { SettingsPanel } from "./ui/settings-panel";
 import { AudioHooks } from "./systems/audio-hooks";
 import { sound } from "./utils/audio";
 import type { Collidable } from "./utils/collision";
@@ -39,6 +50,8 @@ const canvas = document.getElementById("game-canvas") as HTMLCanvasElement;
 const uiRoot = document.getElementById("ui-root") as HTMLElement;
 
 const state = loadGame() ?? createInitialState();
+// Input preferences live outside the save, so they survive a new world.
+const settings = loadSettings();
 
 const sceneRig = createScene();
 const { scene } = sceneRig;
@@ -46,7 +59,7 @@ const terrain = new Terrain(state.seed);
 scene.add(terrain.mesh);
 
 const renderer = createRenderer(canvas);
-const camera = new ThirdPersonCamera();
+const camera = new ThirdPersonCamera(settings);
 const input = new InputManager(canvas);
 const clock = new GameClock(state.elapsedMs);
 const dayNight = new DayNightSystem(sceneRig);
@@ -81,6 +94,30 @@ const inventoryPanel = new InventoryPanel(
 );
 const craftingPanel = new CraftingPanel(uiRoot, state);
 const buildingPanel = new BuildingPanel(uiRoot, buildingSystem, canvas, state);
+const buildHotbar = new BuildHotbar(uiRoot, buildingSystem, canvas, state);
+const settingsPanel = new SettingsPanel(uiRoot, settings);
+
+// Menus are mutually exclusive and Escape closes whatever is open — the
+// convention every game in this genre follows. Opening one also releases
+// pointer lock, since a locked pointer swallows every click on the page.
+interface TogglablePanel {
+  toggle(): void;
+  close(): void;
+  isVisible(): boolean;
+}
+const panels: TogglablePanel[] = [craftingPanel, buildingPanel, inventoryPanel, settingsPanel];
+
+function anyPanelOpen(): boolean {
+  return panels.some((panel) => panel.isVisible());
+}
+
+function togglePanel(target: TogglablePanel): void {
+  const wasOpen = target.isVisible();
+  for (const panel of panels) panel.close();
+  if (wasOpen) return;
+  document.exitPointerLock();
+  target.toggle();
+}
 
 let currentNowMs = 0;
 let respawnScheduled = false;
@@ -130,7 +167,8 @@ const loop = new GameLoop((dt) => {
   dayNight.update(currentNowMs);
   hud.setTimeOfDay(dayNight.getTimeOfDay(currentNowMs));
 
-  if (!isPlayerDead(state)) {
+  const menuOpen = anyPanelOpen();
+  if (!isPlayerDead(state) && !menuOpen) {
     const collidables = getCollidables();
     player.update(dt, currentNowMs, input, camera, collidables);
   }
@@ -153,28 +191,32 @@ const loop = new GameLoop((dt) => {
   const forward = camera.getForward();
   buildingSystem.update(feet, forward, currentNowMs);
 
-  if (input.wasJustPressed("KeyE") && !isPlayerDead(state)) {
+  const canAct = !isPlayerDead(state) && !menuOpen;
+  if (input.wasJustPressed("KeyE") && canAct) {
     tryGather(state, resourceNodes, feet.x, feet.z, currentNowMs);
   }
-  if (input.wasJustPressed("KeyF") && !isPlayerDead(state)) {
+  if (input.wasJustPressed("KeyF") && canAct) {
     farmingSystem.tryInteract(feet.x, feet.z, selectedSeedItemId, currentNowMs);
   }
-  // Pointer Lock captures all mouse events on the canvas regardless of where
-  // the (hidden, non-moving) cursor visually is, so panel buttons are
-  // unclickable while locked — release the lock whenever a panel is toggled.
-  if (input.wasJustPressed("KeyC")) {
-    document.exitPointerLock();
-    craftingPanel.toggle();
+  if (input.wasJustPressed("KeyC")) togglePanel(craftingPanel);
+  if (input.wasJustPressed("KeyB")) togglePanel(buildingPanel);
+  // Tab alongside I: this genre is split between the two, so accept both.
+  if (input.wasJustPressed("KeyI") || input.wasJustPressed("Tab")) {
+    togglePanel(inventoryPanel);
   }
-  if (input.wasJustPressed("KeyB")) {
-    document.exitPointerLock();
-    buildingPanel.toggle();
+  // Escape backs out of whatever is open, and opens Options when nothing is —
+  // the pause-menu convention players arrive with.
+  if (input.wasJustPressed("Escape")) {
+    if (anyPanelOpen()) {
+      for (const panel of panels) panel.close();
+    } else {
+      togglePanel(settingsPanel);
+    }
   }
-  if (input.wasJustPressed("KeyI")) {
-    document.exitPointerLock();
-    inventoryPanel.toggle();
-  }
-  if (input.wasJustPressed("KeyQ")) buildingSystem.selectBuilding(null);
+  if (input.wasJustPressed("KeyQ") && canAct) buildingSystem.selectBuilding(null);
+  // Number keys pick a build piece without opening anything.
+  const hotbarSlot = HOTBAR_KEYS.findIndex((code) => input.wasJustPressed(code));
+  if (hotbarSlot >= 0 && canAct) buildHotbar.selectSlot(hotbarSlot);
 
   const gatherPrompt = getInteractionPrompt(state, resourceNodes, feet.x, feet.z);
   const farmPrompt = farmingSystem.getPrompt(feet.x, feet.z, selectedSeedItemId, currentNowMs);

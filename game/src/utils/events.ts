@@ -35,6 +35,7 @@ export interface GameEvents {
   "resource-gathered": { itemId: string; qty: number; kind: string };
   "player-attack": Record<string, never>;
   "building-placed": { id: string; buildingId: string };
+  "building-selection-changed": { buildingId: string | null };
   "crop-planted": { plotId: string; cropId: string };
   "crop-harvested": { plotId: string; cropId: string };
   "notification": { message: string };

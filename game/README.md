@@ -30,14 +30,53 @@ npm run build     # type-check + production build to dist/
 npm run preview   # preview the production build
 ```
 
+## Deploying
+
+The game is deployed on Vercel from this repo, built straight from source —
+there is no separate build artifact to commit.
+
+The Vercel project is linked to the GitHub repository, so **every push to
+`main` deploys automatically**; a pull request gets its own preview URL. The
+only non-default setting is the root directory, because this is one project
+inside a repo whose root is the unrelated POS app:
+
+| Setting | Value |
+| --- | --- |
+| Root Directory | `game` |
+| Production Branch | `main` |
+| Framework | Vite (auto-detected) |
+| Build Command | `npm run build` (i.e. `tsc -b && vite build`) |
+| Output Directory | `dist` |
+
+`npm run build` type-checks before bundling, so a type error fails the deploy
+rather than shipping a broken build. Nothing here reads an environment
+variable — the game is fully client-side and persists to `localStorage` — so
+there is no deploy-time configuration to keep in sync.
+
 ## Controls
 
-- `WASD` — move, mouse — look (click the canvas to lock the pointer)
+- `WASD` — move, `Shift` — sprint, `Space` — jump, mouse — look
 - `E` — gather from the nearest tree/rock, or interact
 - `F` — plant a selected seed into a farm plot / harvest a ready crop
 - Left-click — attack the nearest enemy in range, or place a selected building
-- `C` — crafting menu, `B` — building menu, `I` — inventory (select seeds here)
+- `1`–`4` — pick a build piece straight from the hotbar (press again to cancel)
 - `Q` — cancel building placement
+- `C` — crafting, `B` — building menu, `Tab` or `I` — inventory (select seeds here)
+- `Esc` — close the open menu, or open Options when nothing is open
+
+Scroll to zoom. Click the canvas to lock the pointer for mouse-look.
+
+These follow the conventions of the genre rather than inventing new ones, so
+the bindings a player arrives with mostly work: `Space` jumps, `Esc` backs out
+of menus and doubles as the options screen, `Tab` and `I` both open the
+inventory (the genre is split between them), only one menu is open at a time,
+and movement stops while one is. Options covers the two settings every game
+here ships — look sensitivity and invert-Y — stored separately from the save
+so they survive starting a new world.
+
+The build hotbar is always on screen and greys out pieces you can't yet
+afford, so building normally needs no menu at all — the `B` panel is only
+there when you want the full costs written out.
 
 ## Scope (MVP)
 

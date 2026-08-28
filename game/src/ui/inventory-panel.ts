@@ -37,6 +37,15 @@ export class InventoryPanel {
     if (this.visible) this.render();
   }
 
+  close(): void {
+    this.visible = false;
+    this.panel.classList.remove("visible");
+  }
+
+  isVisible(): boolean {
+    return this.visible;
+  }
+
   private render(): void {
     const selected = this.getSelectedSeed();
     this.list.replaceChildren(
