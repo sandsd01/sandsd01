@@ -26,6 +26,8 @@ export interface PlayerState {
   yaw: number;
   health: number;
   maxHealth: number;
+  stamina: number;
+  maxStamina: number;
 }
 
 // A single plain, JSON-serializable object that every gameplay system reads
@@ -48,7 +50,7 @@ export function createInitialState(seedInput: string | number = "romestead"): Ga
     // Start mid-morning rather than at midnight (t=0) so a fresh game opens
     // in daylight instead of darkness.
     elapsedMs: DAY_LENGTH_MS * 0.4,
-    player: { x: 0, y: 0, z: 8, yaw: 0, health: 100, maxHealth: 100 },
+    player: { x: 0, y: 0, z: 8, yaw: 0, health: 100, maxHealth: 100, stamina: 100, maxStamina: 100 },
     inventory: [
       { itemId: "axe", qty: 1 },
       { itemId: "pickaxe", qty: 1 },

@@ -25,7 +25,12 @@ export class EventBus<Events extends object> {
 export interface GameEvents {
   "inventory-changed": { itemId: string };
   "player-health-changed": { current: number; max: number };
+  "player-stamina-changed": { current: number; max: number };
   "player-damaged": { amount: number };
+  "player-exhausted": Record<string, never>;
+  "player-jumped": Record<string, never>;
+  "player-landed": Record<string, never>;
+  "player-footstep": Record<string, never>;
   "player-died": Record<string, never>;
   "player-respawned": Record<string, never>;
   "enemy-spawned": { id: string };

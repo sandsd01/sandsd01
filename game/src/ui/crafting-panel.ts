@@ -1,5 +1,5 @@
-import { listRecipes } from "../systems/crafting";
-import { canCraft, craft } from "../systems/crafting";
+import { craft, hasIngredients, listRecipes, type StationCheck } from "../systems/crafting";
+import { getBuilding } from "../data/buildings";
 import type { GameState } from "../state/game-state";
 import { events } from "../utils/events";
 import { costLine } from "./cost-line";
@@ -10,7 +10,11 @@ export class CraftingPanel {
   private readonly list: HTMLDivElement;
   private visible = false;
 
-  constructor(root: HTMLElement, private readonly state: GameState) {
+  constructor(
+    root: HTMLElement,
+    private readonly state: GameState,
+    private readonly hasStation: StationCheck = () => true,
+  ) {
     this.panel = el("div", "panel");
     this.panel.appendChild(el("h2", undefined, "Crafting"));
     this.list = el("div");
@@ -45,13 +49,22 @@ export class CraftingPanel {
         const info = el("div", "panel-row-info");
         info.appendChild(el("span", "panel-row-title", recipe.name));
         info.appendChild(costLine("Needs", recipe.inputs, this.state));
+
+        // A disabled button always says why. Missing ingredients are already
+        // spelled out by the cost line, so this covers the other reason.
+        const station = recipe.requiresStation;
+        const stationMissing = station !== undefined && !this.hasStation(station);
+        if (stationMissing) {
+          info.appendChild(
+            el("span", "panel-row-warn", `Needs a ${getBuilding(station).name} nearby`),
+          );
+        }
         row.appendChild(info);
 
         const button = el("button", undefined, "Craft");
-        const craftable = canCraft(this.state, recipe.id);
-        button.disabled = !craftable;
+        button.disabled = stationMissing || !hasIngredients(this.state, recipe.id);
         button.addEventListener("click", () => {
-          craft(this.state, recipe.id);
+          craft(this.state, recipe.id, this.hasStation);
           this.render();
         });
         row.appendChild(button);

@@ -14,6 +14,10 @@ export class AudioHooks {
       else if (TOOL_KINDS.has(kind)) sound.mine();
       else sound.gatherSoft();
     });
+    events.on("player-footstep", () => sound.footstep());
+    events.on("player-jumped", () => sound.jump());
+    events.on("player-landed", () => sound.land());
+    events.on("player-exhausted", () => sound.exhausted());
     events.on("player-attack", () => sound.swing());
     events.on("enemy-hit", () => sound.hit());
     events.on("enemy-killed", () => sound.enemyDeath());

@@ -9,6 +9,11 @@ export interface RecipeDef {
   inputs: ItemStack[];
   output: ItemStack;
   craftTimeMs: number;
+  /**
+   * Building id that must be standing nearby to craft this. Smelting and
+   * smithing need a Forge; everything else is craftable in the field.
+   */
+  requiresStation?: string;
 }
 
 export const RECIPES: RecipeDef[] = [
@@ -72,6 +77,7 @@ export const RECIPES: RecipeDef[] = [
     ],
     output: { itemId: "iron_ingot", qty: 1 },
     craftTimeMs: 2000,
+    requiresStation: "forge",
   },
   {
     id: "iron_sword",
@@ -82,6 +88,7 @@ export const RECIPES: RecipeDef[] = [
     ],
     output: { itemId: "iron_sword", qty: 1 },
     craftTimeMs: 2500,
+    requiresStation: "forge",
   },
 ];
 

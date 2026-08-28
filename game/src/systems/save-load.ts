@@ -1,4 +1,4 @@
-import type { GameState } from "../state/game-state";
+import { createInitialState, type GameState } from "../state/game-state";
 import { events } from "../utils/events";
 
 const STORAGE_KEY = "romestead-save-v1";
@@ -22,11 +22,23 @@ export function loadGame(): GameState | null {
     if (!parsed || typeof parsed !== "object" || !parsed.player || !Array.isArray(parsed.inventory)) {
       return null;
     }
+    backfillDefaults(parsed);
     events.emit("game-loaded", {});
     return parsed;
   } catch (err) {
     console.warn("Failed to load save, starting fresh:", err);
     return null;
+  }
+}
+
+// Fields added after a save was written come back undefined. Rather than
+// versioning the whole save, fill in anything missing with its starting value:
+// a save from before stamina existed should load as a rested player, not one
+// who can never sprint again.
+function backfillDefaults(state: GameState): void {
+  const defaults = createInitialState().player;
+  for (const key of Object.keys(defaults) as (keyof typeof defaults)[]) {
+    if (typeof state.player[key] !== "number") state.player[key] = defaults[key];
   }
 }
 

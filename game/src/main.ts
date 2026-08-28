@@ -23,9 +23,11 @@ import { Terrain } from "./world/terrain";
 import { scatterResourceNodes, addNodesToScene } from "./world/world-objects";
 import { createGrass } from "./world/grass";
 import { Water, WATER_LEVEL } from "./world/water";
+import { loadModels } from "./world/models";
 import { createComposer } from "./core/postprocessing";
 
 import { getInteractionPrompt, tryGather } from "./systems/gathering";
+import { addItem } from "./systems/inventory";
 import { BuildingSystem } from "./systems/building";
 import { FarmingSystem } from "./systems/farming";
 import { EnemyManager } from "./systems/enemy-ai";
@@ -35,13 +37,15 @@ import { saveGame, loadGame } from "./systems/save-load";
 
 import { createInitialState, type GameState } from "./state/game-state";
 import { loadSettings } from "./state/settings";
+import { loadBindings, saveBindings } from "./state/keybindings";
 
 import { Hud } from "./ui/hud";
 import { InventoryPanel } from "./ui/inventory-panel";
 import { CraftingPanel } from "./ui/crafting-panel";
 import { BuildingPanel } from "./ui/building-panel";
-import { BuildHotbar, HOTBAR_KEYS } from "./ui/build-hotbar";
+import { BuildHotbar, HOTBAR_ACTIONS } from "./ui/build-hotbar";
 import { SettingsPanel } from "./ui/settings-panel";
+import { Minimap } from "./ui/minimap";
 import { AudioHooks } from "./systems/audio-hooks";
 import { sound } from "./utils/audio";
 import type { Collidable } from "./utils/collision";
@@ -52,6 +56,13 @@ const uiRoot = document.getElementById("ui-root") as HTMLElement;
 const state = loadGame() ?? createInitialState();
 // Input preferences live outside the save, so they survive a new world.
 const settings = loadSettings();
+const bindings = loadBindings();
+
+// Models are fetched before anything is built, so props and the player are
+// created with their real meshes rather than being swapped mid-scene. A model
+// that fails to load leaves its slot empty and the procedural fallback stands
+// in, which is why this never rejects.
+const models = await loadModels();
 
 const sceneRig = createScene();
 const { scene } = sceneRig;
@@ -60,14 +71,14 @@ scene.add(terrain.mesh);
 
 const renderer = createRenderer(canvas);
 const camera = new ThirdPersonCamera(settings);
-const input = new InputManager(canvas);
+const input = new InputManager(canvas, bindings);
 const clock = new GameClock(state.elapsedMs);
 const dayNight = new DayNightSystem(sceneRig);
 
-const player = new PlayerController(state, terrain);
+const player = new PlayerController(state, terrain, models);
 scene.add(player.object);
 
-const resourceNodes = scatterResourceNodes(terrain, state.seed);
+const resourceNodes = scatterResourceNodes(terrain, state.seed, models);
 addNodesToScene(scene, resourceNodes);
 scene.add(createGrass(terrain, state.seed));
 
@@ -76,7 +87,7 @@ scene.add(water.mesh);
 
 const composer = createComposer(renderer, scene, camera.camera);
 
-const buildingSystem = new BuildingSystem(scene, terrain, state);
+const buildingSystem = new BuildingSystem(scene, terrain, state, models);
 const farmingSystem = new FarmingSystem(scene, terrain, state);
 const enemyManager = new EnemyManager(scene, terrain, state.seed);
 const playerCombat = new PlayerCombat();
@@ -92,10 +103,24 @@ const inventoryPanel = new InventoryPanel(
   },
   () => selectedSeedItemId,
 );
-const craftingPanel = new CraftingPanel(uiRoot, state);
+// Station checks run against wherever the player is standing. Movement is
+// blocked while a menu is open, so the answer can't go stale mid-panel.
+const STATION_RANGE = 5;
+const craftingPanel = new CraftingPanel(uiRoot, state, (buildingId) =>
+  buildingSystem.hasNearby(buildingId, state.player.x, state.player.z, STATION_RANGE),
+);
 const buildingPanel = new BuildingPanel(uiRoot, buildingSystem, canvas, state);
-const buildHotbar = new BuildHotbar(uiRoot, buildingSystem, canvas, state);
-const settingsPanel = new SettingsPanel(uiRoot, settings);
+const buildHotbar = new BuildHotbar(uiRoot, buildingSystem, canvas, state, bindings);
+const settingsPanel = new SettingsPanel(uiRoot, settings, bindings, input, () => {
+  // One place fans a rebind out to everything that displays or consumes keys,
+  // so nothing is left advertising a binding that no longer exists.
+  saveBindings(bindings);
+  input.setBindings(bindings);
+  buildHotbar.setBindings(bindings);
+  hud.setKeybinds(bindings);
+});
+hud.setKeybinds(bindings);
+const minimap = new Minimap(uiRoot);
 
 // Menus are mutually exclusive and Escape closes whatever is open — the
 // convention every game in this genre follows. Opening one also releases
@@ -166,6 +191,7 @@ const loop = new GameLoop((dt) => {
   state.elapsedMs = currentNowMs;
   dayNight.update(currentNowMs);
   hud.setTimeOfDay(dayNight.getTimeOfDay(currentNowMs));
+  sound.updateAmbient(dayNight.getDaylight());
 
   const menuOpen = anyPanelOpen();
   if (!isPlayerDead(state) && !menuOpen) {
@@ -192,36 +218,37 @@ const loop = new GameLoop((dt) => {
   buildingSystem.update(feet, forward, currentNowMs);
 
   const canAct = !isPlayerDead(state) && !menuOpen;
-  if (input.wasJustPressed("KeyE") && canAct) {
+  if (input.wasActionPressed("gather") && canAct) {
     tryGather(state, resourceNodes, feet.x, feet.z, currentNowMs);
   }
-  if (input.wasJustPressed("KeyF") && canAct) {
+  if (input.wasActionPressed("farm") && canAct) {
     farmingSystem.tryInteract(feet.x, feet.z, selectedSeedItemId, currentNowMs);
   }
-  if (input.wasJustPressed("KeyC")) togglePanel(craftingPanel);
-  if (input.wasJustPressed("KeyB")) togglePanel(buildingPanel);
-  // Tab alongside I: this genre is split between the two, so accept both.
-  if (input.wasJustPressed("KeyI") || input.wasJustPressed("Tab")) {
-    togglePanel(inventoryPanel);
-  }
-  // Escape backs out of whatever is open, and opens Options when nothing is —
-  // the pause-menu convention players arrive with.
-  if (input.wasJustPressed("Escape")) {
+  if (input.wasActionPressed("crafting")) togglePanel(craftingPanel);
+  if (input.wasActionPressed("building")) togglePanel(buildingPanel);
+  if (input.wasActionPressed("inventory")) togglePanel(inventoryPanel);
+  // Options backs out of whatever is open, and opens the Options screen when
+  // nothing is — the pause-menu convention players arrive with.
+  if (input.wasActionPressed("options")) {
     if (anyPanelOpen()) {
       for (const panel of panels) panel.close();
     } else {
       togglePanel(settingsPanel);
     }
   }
-  if (input.wasJustPressed("KeyQ") && canAct) buildingSystem.selectBuilding(null);
-  // Number keys pick a build piece without opening anything.
-  const hotbarSlot = HOTBAR_KEYS.findIndex((code) => input.wasJustPressed(code));
+  if (input.wasActionPressed("cancelBuild") && canAct) buildingSystem.selectBuilding(null);
+  // Hotbar keys pick a build piece without opening anything.
+  const hotbarSlot = HOTBAR_ACTIONS.findIndex((action) => input.wasActionPressed(action));
   if (hotbarSlot >= 0 && canAct) buildHotbar.selectSlot(hotbarSlot);
 
   const gatherPrompt = getInteractionPrompt(state, resourceNodes, feet.x, feet.z);
   const farmPrompt = farmingSystem.getPrompt(feet.x, feet.z, selectedSeedItemId, currentNowMs);
   const placementPrompt = buildingSystem.getPlacementPrompt();
   hud.setPrompt(placementPrompt ?? gatherPrompt ?? farmPrompt);
+
+  minimap.update(currentNowMs, state, resourceNodes, enemyManager.getEnemies(), (id) =>
+    buildingSystem.getMesh(id),
+  );
 
   water.update(currentNowMs);
   // Reset per-frame counters ourselves: the composer issues several render
@@ -233,6 +260,15 @@ const loop = new GameLoop((dt) => {
 });
 
 loop.start();
+
+// Fade the splash out only once a frame has actually been drawn, so the world
+// is on screen behind it rather than a black canvas.
+requestAnimationFrame(() => {
+  const splash = document.getElementById("loading");
+  if (!splash) return;
+  splash.classList.add("done");
+  window.setTimeout(() => splash.remove(), 500);
+});
 
 window.setInterval(() => saveGame(state), 10_000);
 window.addEventListener("beforeunload", () => saveGame(state));
@@ -251,6 +287,14 @@ declare global {
       getResourceNodes: () => { id: string; kind: string; x: number; z: number; depleted: boolean }[];
       getTimeOfDay: () => number;
       setTimeOfDayFraction: (fraction: number) => void;
+      getPlayerRig: () => { clip: string; clips: number; skinned: number };
+      getStamina: () => { current: number; max: number };
+      getRigFingerprint: () => number;
+      getPlayerBounds: () => { height: number; minY: number; feetY: number };
+      grantItems: (items: Record<string, number>) => void;
+      getBuildingBounds: (
+        buildingId: string,
+      ) => { height: number; minY: number; terrainY: number } | null;
       getCameraPitch: () => number;
       getCameraDistance: () => number;
       getRenderStats: () => Record<string, unknown>;
@@ -280,6 +324,30 @@ window.__gameDebug = {
     })),
   getTimeOfDay: () => dayNight.getTimeOfDay(currentNowMs),
   setTimeOfDayFraction: (fraction) => clock.setElapsed(DAY_LENGTH_MS * fraction),
+  getPlayerRig: () => player.getAnimationState(),
+  getStamina: () => ({ current: state.player.stamina, max: state.player.maxStamina }),
+  getRigFingerprint: () => player.getRigFingerprint(),
+  grantItems: (items) => {
+    for (const [itemId, qty] of Object.entries(items)) addItem(state, itemId, qty);
+  },
+  getBuildingBounds: (buildingId) => {
+    const placed = state.placedBuildings.find((b) => b.buildingId === buildingId);
+    if (!placed) return null;
+    const mesh = buildingSystem.getMesh(placed.id);
+    if (!mesh) return null;
+    const box = new THREE.Box3().setFromObject(mesh);
+    return {
+      height: box.max.y - box.min.y,
+      minY: box.min.y,
+      terrainY: terrain.heightAt(placed.cellX, placed.cellZ),
+    };
+  },
+  // Measured from the rendered object rather than from state, so a model that
+  // loaded at the wrong scale or sank into the terrain is caught.
+  getPlayerBounds: () => {
+    const box = new THREE.Box3().setFromObject(player.object);
+    return { height: box.max.y - box.min.y, minY: box.min.y, feetY: state.player.y };
+  },
   getCameraPitch: () => camera.pitch,
   getCameraDistance: () => camera.distance,
   terrainHeightAt: (x, z) => terrain.heightAt(x, z),

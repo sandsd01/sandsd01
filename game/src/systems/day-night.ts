@@ -23,6 +23,7 @@ const HEMI_DAY = new THREE.Color(0xbfd8ff);
 
 export class DayNightSystem {
   private readonly sunDirection = new THREE.Vector3(0, 1, 0);
+  private daylight = 1;
   private readonly scratchColor = new THREE.Color();
 
   constructor(private readonly rig: SceneRig) {}
@@ -31,6 +32,13 @@ export class DayNightSystem {
   // 0.25 = sunrise, 0.5 = noon, 0.75 = sunset.
   getTimeOfDay(nowMs: number): number {
     return (nowMs % DAY_LENGTH_MS) / DAY_LENGTH_MS;
+  }
+
+  // 0 through the night, 1 in full day — the same factor the lighting keys
+  // off, exposed so the ambient sound bed can track it instead of deriving a
+  // second, subtly different notion of "night".
+  getDaylight(): number {
+    return this.daylight;
   }
 
   // Unit vector pointing from the world toward the sun. main.ts feeds this to
@@ -56,6 +64,7 @@ export class DayNightSystem {
     // (light intensity, fog, sky richness) keys off these two factors so the
     // transitions stay consistent with each other.
     const day = THREE.MathUtils.smoothstep(elevationDeg, -6, 12);
+    this.daylight = day;
     const high = THREE.MathUtils.smoothstep(elevationDeg, 0, 28);
     // Peaks while the sun sits near the horizon — the golden-hour window.
     const twilight = (1 - high) * day;

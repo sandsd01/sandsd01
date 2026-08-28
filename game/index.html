@@ -10,7 +10,42 @@
     <div id="app">
       <canvas id="game-canvas"></canvas>
       <div id="ui-root"></div>
+      <!-- Styled inline on purpose: the bundle carries style.css, so anything
+           relying on it would flash unstyled while the models download. -->
+      <div id="loading">
+        <div id="loading-title">Romestead</div>
+        <div id="loading-note">Loading world&hellip;</div>
+      </div>
     </div>
+    <style>
+      #loading {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        background: #14120f;
+        color: #f4eee2;
+        font-family: system-ui, sans-serif;
+        transition: opacity 0.4s ease;
+        z-index: 50;
+      }
+      #loading-title {
+        font-size: 30px;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+      }
+      #loading-note {
+        font-size: 13px;
+        opacity: 0.62;
+      }
+      #loading.done {
+        opacity: 0;
+        pointer-events: none;
+      }
+    </style>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

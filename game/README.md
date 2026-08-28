@@ -17,6 +17,41 @@ browser.
 - No physics engine — simple circle-based collision and terrain-height
   sampling (see `src/utils/collision.ts`, `src/world/terrain.ts`)
 
+## Assets
+
+| What | Source | Licence |
+| --- | --- | --- |
+| Props, buildings and the player character | [Kenney](https://www.kenney.nl) — Mini Forest 1.0 | CC0 |
+| Forge, anvil, workbench, barrel | Forge Parts by Don Carson | CC0 |
+| UI type (Rubik, Cinzel) | [Fontsource](https://fontsource.org) | OFL-1.1 |
+| HUD icons | [Lucide](https://lucide.dev) | ISC |
+
+The Forge Parts pack ships as a single OBJ holding 49 unnamed groups laid out
+in a row — an asset sheet rather than a scene. The groups carry generated names,
+so the loader picks pieces out **by their index in the file**, which is stable
+for a committed static asset; those indices were read off a rendered contact
+sheet of all 49 rather than guessed. Its flat MTL colours are restated as
+`MeshStandardMaterial` so these props take the sun and sky fill like everything
+else instead of reading as stickers.
+
+The GLB models live in `public/models/` and are fetched at runtime rather than
+bundled, because they reference a shared `Textures/colormap.png` atlas by
+relative path. `src/world/models.ts` loads them, and each model declares which
+dimension to fit and the size to fit it to — the pack is authored against
+roughly 1-unit tiles, which is not this world's scale, and "the right size"
+differs by what the prop is (a tree is defined by its height, a floor patch by
+how much of a grid cell it covers).
+
+Any model that fails to load leaves its slot empty and the procedural geometry
+the game shipped with stands in, so a missing file costs polish rather than the
+world. `iron_vein` keeps its procedural mesh on purpose: its ore shards are the
+only thing that says "there is metal here", and nothing in the pack carries
+that signal.
+
+Fonts are bundled locally rather than linked from a CDN — a blocked font URL
+fails silently, and the HUD would drop back to `system-ui` with nothing in the
+console to explain why.
+
 ## Running it
 
 ```bash
@@ -59,7 +94,7 @@ there is no deploy-time configuration to keep in sync.
 - `E` — gather from the nearest tree/rock, or interact
 - `F` — plant a selected seed into a farm plot / harvest a ready crop
 - Left-click — attack the nearest enemy in range, or place a selected building
-- `1`–`4` — pick a build piece straight from the hotbar (press again to cancel)
+- `1`–`8` — pick a build piece straight from the hotbar (press again to cancel)
 - `Q` — cancel building placement
 - `C` — crafting, `B` — building menu, `Tab` or `I` — inventory (select seeds here)
 - `Esc` — close the open menu, or open Options when nothing is open
@@ -70,9 +105,25 @@ These follow the conventions of the genre rather than inventing new ones, so
 the bindings a player arrives with mostly work: `Space` jumps, `Esc` backs out
 of menus and doubles as the options screen, `Tab` and `I` both open the
 inventory (the genre is split between them), only one menu is open at a time,
-and movement stops while one is. Options covers the two settings every game
-here ships — look sensitivity and invert-Y — stored separately from the save
-so they survive starting a new world.
+and movement stops while one is.
+
+**Every key above is rebindable** from Options, with two slots per action so a
+split like `Tab`/`I` survives. Bindings are stored as `KeyboardEvent.code`,
+which is layout-independent — a binding made on AZERTY still means the same
+physical key. Gameplay code only ever asks about named actions
+(`src/state/keybindings.ts`), never about key codes, so nothing needs changing
+when a player rebinds. Options also carries look sensitivity and invert-Y.
+Preferences are stored separately from the save so they survive starting a new
+world.
+
+Sprinting and jumping draw on **stamina**, which regenerates after a short
+pause; emptying it locks sprinting until it has recovered a quarter of the way.
+
+Most recipes craft anywhere, but **smelting and smithing need a Forge standing
+nearby** — build one from the hotbar first. A recipe that is blocked says so in
+words next to the disabled button rather than just greying out.
+A **mini-map** in the bottom-right corner shows the biomes, nearby resources,
+your buildings and any enemies, north-up with a marker for your heading.
 
 The build hotbar is always on screen and greys out pieces you can't yet
 afford, so building normally needs no menu at all — the `B` panel is only

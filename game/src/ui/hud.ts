@@ -2,6 +2,7 @@ import type { GameState } from "../state/game-state";
 import { getQty } from "../systems/inventory";
 import { events } from "../utils/events";
 import { colorToCss, el } from "./dom";
+import { keyLabel, type Action, type Bindings } from "../state/keybindings";
 import { icon, iconSvg, type IconName } from "./icons";
 
 const TRACKED_ITEMS = ["wood", "stone", "berry", "clay", "iron_ore", "plank", "wheat_seed", "wheat"];
@@ -30,6 +31,7 @@ const ITEM_COLORS: Record<string, number> = {
 
 export class Hud {
   private readonly healthFill: HTMLDivElement;
+  private readonly staminaFill: HTMLDivElement;
   private readonly resourceRow: HTMLDivElement;
   private readonly prompt: HTMLDivElement;
   private readonly toast: HTMLDivElement;
@@ -37,6 +39,7 @@ export class Hud {
   private readonly damageFlash: HTMLDivElement;
   private readonly timeIcon: HTMLSpanElement;
   private readonly timeLabel: HTMLSpanElement;
+  private readonly keybinds: HTMLDivElement;
   private timePhase: IconName = "sun";
   private toastTimeout = 0;
   private damageFlashTimeout = 0;
@@ -47,6 +50,14 @@ export class Hud {
     this.healthFill = el("div", "hud-health-bar-fill");
     healthBg.appendChild(this.healthFill);
     healthWrap.appendChild(healthBg);
+
+    // Stamina sits directly under health and is deliberately the thinner of
+    // the two: it recovers on its own, so it should never compete with the
+    // bar that doesn't.
+    const staminaBg = el("div", "hud-stamina-bar-bg");
+    this.staminaFill = el("div", "hud-stamina-bar-fill");
+    staminaBg.appendChild(this.staminaFill);
+    healthWrap.appendChild(staminaBg);
 
     const timeWrap = el("div", "hud-time");
     this.timeIcon = el("span", "hud-time-icon icon");
@@ -61,15 +72,7 @@ export class Hud {
 
     const crosshair = el("div", "hud-crosshair");
 
-    const keybinds = el("div", "hud-keybinds");
-    // Keycaps rather than a wall of prose: the bindings are the thing being
-    // scanned for, so they get to be the visually distinct part.
-    keybinds.innerHTML =
-      "<div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move · <kbd>Shift</kbd> sprint · <kbd>Space</kbd> jump</div>" +
-      "<div>Mouse look (click to lock) · Scroll to zoom</div>" +
-      "<div><kbd>E</kbd> gather · <kbd>F</kbd> plant/harvest · <kbd>Click</kbd> attack</div>" +
-      "<div><kbd>1</kbd>–<kbd>4</kbd> pick a build piece · <kbd>Q</kbd> cancel</div>" +
-      "<div><kbd>C</kbd> craft · <kbd>B</kbd> build · <kbd>Tab</kbd> inventory · <kbd>Esc</kbd> options</div>";
+    this.keybinds = el("div", "hud-keybinds");
 
     this.toast = el("div", "hud-toast");
     this.damageFlash = el("div", "hud-damage-flash");
@@ -87,16 +90,18 @@ export class Hud {
       this.resourceRow,
       this.prompt,
       crosshair,
-      keybinds,
+      this.keybinds,
       this.toast,
       this.damageFlash,
       this.deathOverlay,
     );
 
     this.renderHealth(state);
+    this.renderStamina(state);
     this.renderResources(state);
 
     events.on("player-health-changed", () => this.renderHealth(state));
+    events.on("player-stamina-changed", () => this.renderStamina(state));
     events.on("inventory-changed", () => this.renderResources(state));
     events.on("notification", ({ message }) => this.showToast(message));
     events.on("player-damaged", () => this.flashDamage());
@@ -107,6 +112,30 @@ export class Hud {
   private renderHealth(state: GameState): void {
     const pct = Math.max(0, (state.player.health / state.player.maxHealth) * 100);
     this.healthFill.style.width = `${pct}%`;
+  }
+
+  // Rebuilt from the live binding map rather than hard-coded, so the on-screen
+  // help can never advertise a key that no longer does anything. Keycaps rather
+  // than prose: the bindings are the thing being scanned for.
+  setKeybinds(bindings: Bindings): void {
+    const cap = (action: Action) => `<kbd>${keyLabel(bindings[action][0] ?? "")}</kbd>`;
+    this.keybinds.innerHTML =
+      `<div>${cap("moveForward")}${cap("moveLeft")}${cap("moveBack")}${cap("moveRight")} move · ` +
+      `${cap("sprint")} sprint · ${cap("jump")} jump</div>` +
+      "<div>Mouse look (click to lock) · Scroll to zoom</div>" +
+      `<div>${cap("gather")} gather · ${cap("farm")} plant/harvest · <kbd>Click</kbd> attack</div>` +
+      `<div>${cap("hotbar1")}–${cap("hotbar8")} pick a build piece · ${cap("cancelBuild")} cancel</div>` +
+      `<div>${cap("crafting")} craft · ${cap("building")} build · ` +
+      `${cap("inventory")} inventory · ${cap("options")} options</div>`;
+  }
+
+  private renderStamina(state: GameState): void {
+    const { stamina, maxStamina } = state.player;
+    const pct = Math.max(0, (stamina / maxStamina) * 100);
+    this.staminaFill.style.width = `${pct}%`;
+    // Emptied out, the bar dims rather than just vanishing, so "you cannot
+    // sprint yet" is visible as a state and not only as an absence.
+    this.staminaFill.classList.toggle("spent", stamina <= 0);
   }
 
   private renderResources(state: GameState): void {

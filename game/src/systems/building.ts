@@ -8,6 +8,7 @@ import { GRID_CELL_SIZE, cellKey, worldToCell, type Cell } from "../utils/grid";
 import type { Collidable } from "../utils/collision";
 import { events } from "../utils/events";
 import { merge, paint, placed } from "../world/geometry";
+import { instantiate, type ModelLibrary, type ModelName } from "../world/models";
 
 const PLACEMENT_DISTANCE = 3;
 const VALID_COLOR = 0x4caf50;
@@ -79,6 +80,21 @@ function buildBuildingGeometry(def: BuildingDef): THREE.BufferGeometry {
   return merge(parts);
 }
 
+// Pack models standing in for the procedural pieces. The footprint and height
+// in data/buildings.ts still drive placement and collision — only the mesh
+// changes — so a model that reads slightly differently can't desync what the
+// grid thinks is occupied.
+const BUILDING_MODELS: Record<string, ModelName> = {
+  wall: "fence",
+  foundation: "building-platform",
+  farm_plot: "patch-dirt",
+  brick_wall: "building-structure",
+  forge: "forge",
+  anvil: "anvil",
+  workbench: "workbench",
+  barrel: "barrel",
+};
+
 let nextBuildingInstanceId = 0;
 
 type InvalidReason = "occupied" | "zone";
@@ -96,6 +112,7 @@ export class BuildingSystem {
     private readonly scene: THREE.Scene,
     private readonly terrain: Terrain,
     private readonly state: GameState,
+    private readonly models: ModelLibrary = {},
   ) {
     // Rehydrate any buildings restored from a save.
     for (const placed of state.placedBuildings) {
@@ -251,12 +268,20 @@ export class BuildingSystem {
     const worldZ = placed.cellZ * GRID_CELL_SIZE;
     const y = this.terrain.heightAt(worldX, worldZ);
 
-    const mesh = new THREE.Mesh(buildBuildingGeometry(def), BUILDING_MATERIAL);
-    // Building geometry is modelled from its base up, so it sits on the
-    // terrain rather than being centred on it.
+    const modelName = BUILDING_MODELS[def.id];
+    const model = modelName ? this.models[modelName] : undefined;
+    let mesh: THREE.Object3D;
+    if (model) {
+      mesh = instantiate(model);
+    } else {
+      const fallback = new THREE.Mesh(buildBuildingGeometry(def), BUILDING_MATERIAL);
+      fallback.castShadow = true;
+      fallback.receiveShadow = true;
+      mesh = fallback;
+    }
+    // Both the models and the procedural geometry are built from their base
+    // up, so a piece sits on the terrain rather than being centred in it.
     mesh.position.set(worldX, y, worldZ);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
     mesh.name = placed.id;
     if (nowMs !== undefined) {
       mesh.scale.setScalar(0.05);
@@ -264,6 +289,17 @@ export class BuildingSystem {
     }
     this.scene.add(mesh);
     this.meshes.set(placed.id, mesh);
+  }
+
+  // Whether a given kind of building stands within reach of a point. Crafting
+  // uses this for recipes that need a station.
+  hasNearby(buildingId: string, x: number, z: number, radius: number): boolean {
+    return this.state.placedBuildings.some((placed) => {
+      if (placed.buildingId !== buildingId) return false;
+      const dx = placed.cellX * GRID_CELL_SIZE - x;
+      const dz = placed.cellZ * GRID_CELL_SIZE - z;
+      return Math.hypot(dx, dz) <= radius;
+    });
   }
 
   getMesh(placedId: string): THREE.Object3D | undefined {
