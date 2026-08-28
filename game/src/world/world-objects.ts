@@ -19,6 +19,10 @@ function pickKind(zone: ZoneId, rand: () => number): ResourceNodeKind {
       if (roll < 0.2) return "iron_vein";
       return "rock";
     case "wetland":
+      // Not wall-to-wall clay: scrubby trees and bushes break up what was
+      // otherwise a field of identical pits stretching to the horizon.
+      if (roll < 0.26) return "tree";
+      if (roll < 0.42) return "berry_bush";
       return "clay_pit";
     default:
       return "tree";
@@ -54,9 +58,9 @@ export function scatterResourceNodes(terrain: Terrain, seed: number): ResourceNo
     const kind = pickKind(zone, rand);
 
     const y = terrain.heightAt(x, z);
-    const node = new ResourceNode(kind, x, y, z);
-    node.object.rotation.y = rand() * Math.PI * 2;
-    nodes.push(node);
+    // The node builds its own randomised geometry, rotation and scale from
+    // this stream, so no two props of a kind come out identical.
+    nodes.push(new ResourceNode(kind, x, y, z, rand));
   }
 
   return nodes;

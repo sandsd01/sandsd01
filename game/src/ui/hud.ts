@@ -47,10 +47,13 @@ export class Hud {
     const crosshair = el("div", "hud-crosshair");
 
     const keybinds = el("div", "hud-keybinds");
+    // Keycaps rather than a wall of prose: the bindings are the thing being
+    // scanned for, so they get to be the visually distinct part.
     keybinds.innerHTML =
-      "WASD move · Shift sprint · Mouse look (click to lock) · Scroll zoom<br>" +
-      "E gather/interact · F plant/harvest<br>" +
-      "Left-click attack · C craft · B build · I inventory";
+      "<div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move · <kbd>Shift</kbd> sprint</div>" +
+      "<div>Mouse look (click to lock) · Scroll to zoom</div>" +
+      "<div><kbd>E</kbd> gather · <kbd>F</kbd> plant/harvest · <kbd>Click</kbd> attack</div>" +
+      "<div><kbd>C</kbd> craft · <kbd>B</kbd> build · <kbd>I</kbd> inventory · <kbd>Q</kbd> cancel</div>";
 
     this.toast = el("div", "hud-toast");
     this.damageFlash = el("div", "hud-damage-flash");

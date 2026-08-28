@@ -7,11 +7,77 @@ import { hasQty, removeItem } from "./inventory";
 import { GRID_CELL_SIZE, cellKey, worldToCell, type Cell } from "../utils/grid";
 import type { Collidable } from "../utils/collision";
 import { events } from "../utils/events";
+import { merge, paint, placed } from "../world/geometry";
 
 const PLACEMENT_DISTANCE = 3;
 const VALID_COLOR = 0x4caf50;
 const INVALID_COLOR = 0xe53935;
 const POP_IN_MS = 220;
+
+// Placed buildings share one flat-shaded material and carry their colours in
+// vertex data, same as the world props (see world/geometry.ts).
+const BUILDING_MATERIAL = new THREE.MeshStandardMaterial({
+  vertexColors: true,
+  flatShading: true,
+  roughness: 0.85,
+  metalness: 0,
+});
+
+const W = GRID_CELL_SIZE * 0.95;
+
+// A box per building was readable but lifeless. These keep the same footprint
+// and height the placement grid and collision assume, and spend their detail
+// on the silhouette: posts and rails on walls, a framed soil bed on a plot.
+function buildBuildingGeometry(def: BuildingDef): THREE.BufferGeometry {
+  const h = def.height;
+
+  if (def.isPlot) {
+    const soil = 0x5b4028;
+    const frame = 0x8a6134;
+    const parts: THREE.BufferGeometry[] = [
+      placed(paint(new THREE.BoxGeometry(W * 0.92, h * 0.8, W * 0.92), soil), 0, h * 0.4, 0),
+    ];
+    // Timber frame around the bed.
+    for (const [dx, dz, sx, sz] of [
+      [0, -W / 2, W, 0.09],
+      [0, W / 2, W, 0.09],
+      [-W / 2, 0, 0.09, W],
+      [W / 2, 0, 0.09, W],
+    ]) {
+      parts.push(placed(paint(new THREE.BoxGeometry(sx, h, sz), frame), dx, h * 0.5, dz));
+    }
+    // Furrows, so a planted bed reads as tilled ground.
+    for (let i = -1; i <= 1; i++) {
+      parts.push(
+        placed(paint(new THREE.BoxGeometry(W * 0.82, h * 0.3, 0.06), 0x46311e), 0, h * 0.82, i * 0.24),
+      );
+    }
+    return merge(parts);
+  }
+
+  if (h < 0.6) {
+    // Foundation: a slab with a slightly inset cap, which catches the light
+    // differently from the base and gives the flat top an edge.
+    return merge([
+      placed(paint(new THREE.BoxGeometry(W, h * 0.7, W), 0x8d8b86), 0, h * 0.35, 0),
+      placed(paint(new THREE.BoxGeometry(W * 0.86, h * 0.45, W * 0.86), 0xa5a29b), 0, h * 0.78, 0),
+    ]);
+  }
+
+  // Walls: corner posts plus an infill panel and a mid rail.
+  const post = def.id === "brick_wall" ? 0x8a4a30 : 0x6f4c2e;
+  const panel = def.color;
+  const parts: THREE.BufferGeometry[] = [
+    placed(paint(new THREE.BoxGeometry(W * 0.78, h, W * 0.5), panel), 0, h / 2, 0),
+    placed(paint(new THREE.BoxGeometry(W * 0.96, h * 0.12, W * 0.56), post), 0, h * 0.55, 0),
+  ];
+  for (const dx of [-1, 1]) {
+    parts.push(
+      placed(paint(new THREE.BoxGeometry(0.15, h, 0.18), post), (dx * W) / 2.3, h / 2, 0),
+    );
+  }
+  return merge(parts);
+}
 
 let nextBuildingInstanceId = 0;
 
@@ -184,11 +250,12 @@ export class BuildingSystem {
     const worldZ = placed.cellZ * GRID_CELL_SIZE;
     const y = this.terrain.heightAt(worldX, worldZ);
 
-    const mesh = new THREE.Mesh(
-      new THREE.BoxGeometry(GRID_CELL_SIZE * 0.95, def.height, GRID_CELL_SIZE * 0.95),
-      new THREE.MeshStandardMaterial({ color: def.color }),
-    );
-    mesh.position.set(worldX, y + def.height / 2, worldZ);
+    const mesh = new THREE.Mesh(buildBuildingGeometry(def), BUILDING_MATERIAL);
+    // Building geometry is modelled from its base up, so it sits on the
+    // terrain rather than being centred on it.
+    mesh.position.set(worldX, y, worldZ);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
     mesh.name = placed.id;
     if (nowMs !== undefined) {
       mesh.scale.setScalar(0.05);

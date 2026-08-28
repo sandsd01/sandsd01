@@ -1,3 +1,18 @@
+/* Palette: warm parchment ink on dark translucent slate, so the HUD reads as
+   part of the game's world rather than as browser chrome laid over it. */
+:root {
+  --ink: #f4eee2;
+  --ink-dim: rgba(244, 238, 226, 0.62);
+  --slate: rgba(26, 23, 19, 0.72);
+  --slate-solid: rgba(24, 21, 17, 0.94);
+  --edge: rgba(255, 226, 176, 0.16);
+  --edge-strong: rgba(255, 226, 176, 0.3);
+  --gold: #d8b45a;
+  --danger: #d2452f;
+  --shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+  --radius: 10px;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -12,7 +27,7 @@ body {
   overscroll-behavior: none;
   background: #000;
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  color: #f0ede4;
+  color: var(--ink);
 }
 
 #app {
@@ -32,6 +47,9 @@ body {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  /* Nothing in the HUD should be selectable — dragging across it mid-fight
+     would otherwise leave text highlighted over the world. */
+  user-select: none;
 }
 
 #ui-root button,
@@ -39,12 +57,38 @@ body {
   pointer-events: auto;
 }
 
+/* --- Status: health --- */
+
 .hud-health {
   position: absolute;
   top: 16px;
   left: 16px;
-  width: 220px;
+  width: 224px;
+  padding: 8px 10px;
+  background: var(--slate);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(3px);
 }
+
+.hud-health-bar-bg {
+  width: 100%;
+  height: 14px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(0, 0, 0, 0.5);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.hud-health-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #8f1f16, var(--danger) 55%, #f0705c);
+  border-radius: 999px;
+  transition: width 0.25s ease;
+}
+
+/* --- Status: clock --- */
 
 .hud-time {
   position: absolute;
@@ -54,66 +98,70 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(20, 20, 20, 0.55);
-  padding: 6px 14px;
-  border-radius: 8px;
+  background: var(--slate);
+  border: 1px solid var(--edge);
+  padding: 7px 15px;
+  border-radius: 999px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(3px);
   font-size: 14px;
   font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
 }
 
 .hud-time-icon {
-  font-size: 16px;
+  font-size: 15px;
+  line-height: 1;
 }
 
-.hud-health-bar-bg {
-  width: 100%;
-  height: 18px;
-  background: rgba(0, 0, 0, 0.5);
-  border: 2px solid #2a2a2a;
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.hud-health-bar-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #b3261e, #e8453c);
-  transition: width 0.2s ease;
-}
+/* --- Status: carried resources --- */
 
 .hud-resources {
   position: absolute;
   top: 16px;
   right: 16px;
   display: flex;
-  gap: 10px;
-  background: rgba(20, 20, 20, 0.55);
-  padding: 8px 12px;
-  border-radius: 8px;
+  gap: 4px;
+  background: var(--slate);
+  border: 1px solid var(--edge);
+  padding: 7px 9px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(3px);
 }
 
 .hud-resource-chip {
   display: flex;
   align-items: center;
   gap: 6px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
   font-variant-numeric: tabular-nums;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .hud-resource-swatch {
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   border-radius: 3px;
   display: inline-block;
+  /* A rim keeps dark swatches legible against the dark panel. */
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
 }
+
+/* --- Contextual prompt --- */
 
 .hud-prompt {
   position: absolute;
-  bottom: 130px;
+  bottom: 132px;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(20, 20, 20, 0.65);
-  padding: 6px 14px;
-  border-radius: 6px;
+  background: var(--slate-solid);
+  border: 1px solid var(--edge-strong);
+  padding: 8px 18px;
+  border-radius: 999px;
+  box-shadow: var(--shadow);
   font-size: 14px;
   white-space: nowrap;
 }
@@ -126,62 +174,104 @@ body {
   height: 6px;
   margin: -3px 0 0 -3px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.45),
+    0 0 6px rgba(0, 0, 0, 0.5);
 }
+
+/* --- Controls reference --- */
 
 .hud-keybinds {
   position: absolute;
   bottom: 16px;
   left: 16px;
+  display: grid;
+  gap: 5px;
   font-size: 12px;
-  line-height: 1.6;
-  background: rgba(20, 20, 20, 0.5);
-  padding: 8px 12px;
-  border-radius: 8px;
-  max-width: 260px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+  background: var(--slate);
+  border: 1px solid var(--edge);
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(3px);
+  max-width: 344px;
 }
+
+.hud-keybinds kbd {
+  display: inline-block;
+  min-width: 17px;
+  padding: 1px 5px;
+  margin-right: 2px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-bottom-width: 2px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 11px;
+  text-align: center;
+}
+
+/* --- Transient feedback --- */
 
 .hud-toast {
   position: absolute;
-  bottom: 90px;
+  bottom: 92px;
   left: 50%;
-  transform: translateX(-50%);
-  background: rgba(120, 20, 20, 0.75);
-  padding: 6px 14px;
-  border-radius: 6px;
+  transform: translateX(-50%) translateY(6px);
+  background: var(--slate-solid);
+  border: 1px solid var(--edge-strong);
+  border-left: 3px solid var(--gold);
+  padding: 8px 16px;
+  border-radius: 8px;
+  box-shadow: var(--shadow);
   font-size: 13px;
   opacity: 0;
-  transition: opacity 0.3s ease;
+  transition:
+    opacity 0.25s ease,
+    transform 0.25s ease;
 }
 
 .hud-toast.visible {
   opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }
 
 .hud-damage-flash {
   position: absolute;
   inset: 0;
-  background: rgba(180, 0, 0, 0.35);
+  /* A vignette rather than a flat wash: the edges pulse red while the centre
+     stays readable, so taking a hit never hides what you're fighting. */
+  background: radial-gradient(
+    ellipse at center,
+    rgba(150, 0, 0, 0) 35%,
+    rgba(160, 10, 10, 0.55) 100%
+  );
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.3s ease;
+  transition: opacity 0.32s ease;
 }
 
 .hud-damage-flash.visible {
   opacity: 1;
-  transition: opacity 0.05s ease;
+  transition: opacity 0.04s ease;
 }
 
 .hud-death-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(80, 0, 0, 0.55);
+  background: radial-gradient(ellipse at center, rgba(60, 0, 0, 0.55), rgba(20, 0, 0, 0.86));
   display: none;
   align-items: center;
   justify-content: center;
   flex-direction: column;
-  gap: 12px;
-  font-size: 28px;
+  gap: 10px;
+  font-size: 30px;
+  letter-spacing: 0.06em;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.7);
   /* Always above any open panel, so death is visible even mid-menu. */
   z-index: 20;
 }
@@ -190,18 +280,22 @@ body {
   display: flex;
 }
 
+/* --- Panels --- */
+
 .panel {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 360px;
-  max-height: 70vh;
+  width: 380px;
+  max-height: 72vh;
   overflow-y: auto;
-  background: rgba(24, 22, 18, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 10px;
-  padding: 16px;
+  background: var(--slate-solid);
+  border: 1px solid var(--edge-strong);
+  border-radius: 14px;
+  padding: 18px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(6px);
   display: none;
   z-index: 10;
 }
@@ -211,20 +305,22 @@ body {
 }
 
 .panel h2 {
-  margin: 0 0 12px;
-  font-size: 16px;
-  letter-spacing: 0.04em;
+  margin: 0 0 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--edge);
+  font-size: 13px;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  opacity: 0.85;
+  color: var(--gold);
 }
 
 .panel-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 8px 6px;
-  border-radius: 6px;
+  gap: 12px;
+  padding: 9px 8px;
+  border-radius: 8px;
 }
 
 .panel-row:hover {
@@ -234,7 +330,8 @@ body {
 .panel-row-info {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
+  min-width: 0;
 }
 
 .panel-row-title {
@@ -243,42 +340,49 @@ body {
 
 .panel-row-sub {
   font-size: 12px;
-  opacity: 0.65;
-}
-
-/* Have/need counts in a cost line. The numbers already say whether a
-   requirement is met, so color only reinforces it. */
-.cost-ok {
-  color: #b3d68f;
-}
-
-.cost-short {
-  color: #e8908a;
+  color: var(--ink-dim);
 }
 
 .panel button {
-  background: #3a5a2e;
-  color: #f0ede4;
-  border: none;
-  border-radius: 5px;
-  padding: 6px 12px;
+  flex: none;
+  background: #47702f;
+  color: var(--ink);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 7px;
+  padding: 7px 14px;
   font-size: 13px;
+  font-family: inherit;
   cursor: pointer;
+  transition:
+    background 0.15s ease,
+    transform 0.1s ease;
+}
+
+.panel button:hover:not(:disabled) {
+  background: #58873a;
+}
+
+.panel button:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .panel button:disabled {
-  background: #444;
-  opacity: 0.5;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--ink-dim);
+  border-color: rgba(255, 255, 255, 0.08);
   cursor: not-allowed;
 }
 
 .panel button.selected {
-  background: #6a8a3e;
-  outline: 2px solid #cfe8a0;
+  background: #7aa348;
+  border-color: #cfe8a0;
+  box-shadow: 0 0 0 1px #cfe8a0;
 }
 
 .panel-hint {
-  margin-top: 10px;
+  margin: 14px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--edge);
   font-size: 12px;
-  opacity: 0.6;
+  color: var(--ink-dim);
 }

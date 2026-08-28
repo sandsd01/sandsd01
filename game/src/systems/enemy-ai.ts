@@ -4,6 +4,7 @@ import type { Terrain } from "../world/terrain";
 import { getZone } from "../world/zones";
 import { mulberry32 } from "../utils/rng";
 import { events } from "../utils/events";
+import { buildFigureGeometry, createFigureMaterial, type FigurePalette } from "../world/figures";
 
 type EnemyAiState = "idle" | "chase" | "attack";
 
@@ -12,38 +13,56 @@ const DEATH_ANIM_MS = 300;
 
 let nextEnemyId = 0;
 
-function buildEnemyMesh(color: number): THREE.Group {
-  const group = new THREE.Group();
-  const body = new THREE.Mesh(
-    new THREE.CapsuleGeometry(0.35, 0.9, 4, 8),
-    new THREE.MeshStandardMaterial({ color, transparent: true }),
-  );
-  body.position.y = 0.9;
-  group.add(body);
-  return group;
+// Silhouette carries the threat read at a distance: the lanky, hunched zombie
+// and the squat, heavy brute are told apart by shape before colour.
+const ENEMY_FIGURES: Record<string, { height: number; build: number; hunch: number; palette: FigurePalette }> = {
+  zombie: {
+    height: 1.65,
+    build: 0.9,
+    hunch: 0.3,
+    palette: { skin: 0x8fae6a, torso: 0x53663c, legs: 0x3d4633, accent: 0x2f3826 },
+  },
+  brute: {
+    height: 2.0,
+    build: 1.45,
+    hunch: 0.16,
+    palette: { skin: 0xa8705a, torso: 0x7d4340, legs: 0x452b2c, accent: 0x33201f },
+  },
+};
+
+function buildEnemyMesh(defId: string): THREE.Mesh {
+  const figure = ENEMY_FIGURES[defId] ?? ENEMY_FIGURES.zombie;
+  const material = createFigureMaterial();
+  // Per-enemy material: the hit flash and death fade are material-level, so
+  // enemies can't share one the way static props do.
+  material.transparent = true;
+  const mesh = new THREE.Mesh(buildFigureGeometry(figure), material);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  return mesh;
 }
 
 export class Enemy {
   readonly id: string;
   readonly def: EnemyDef;
-  readonly object: THREE.Group;
+  readonly object: THREE.Mesh;
   health: number;
   dying = false;
   private aiState: EnemyAiState = "idle";
   private lastAttackMs = -Infinity;
   private flashUntilMs = -Infinity;
   private deathStartMs = -Infinity;
-  private readonly body: THREE.Mesh;
-  private readonly baseColor: THREE.Color;
 
   constructor(def: EnemyDef, x: number, y: number, z: number) {
     this.id = `enemy-${nextEnemyId++}`;
     this.def = def;
-    this.object = buildEnemyMesh(def.color);
-    this.body = this.object.children[0] as THREE.Mesh;
-    this.baseColor = (this.body.material as THREE.MeshStandardMaterial).color.clone();
+    this.object = buildEnemyMesh(def.id);
     this.object.position.set(x, y, z);
     this.health = def.maxHealth;
+  }
+
+  private get material(): THREE.MeshStandardMaterial {
+    return this.object.material as THREE.MeshStandardMaterial;
   }
 
   // Returns true if this hit killed the enemy.
@@ -74,7 +93,7 @@ export class Enemy {
     if (this.dying) {
       const t = Math.min(1, (nowMs - this.deathStartMs) / DEATH_ANIM_MS);
       this.object.scale.setScalar(1 - t);
-      (this.body.material as THREE.MeshStandardMaterial).opacity = 1 - t;
+      this.material.opacity = 1 - t;
       return;
     }
 
@@ -110,14 +129,11 @@ export class Enemy {
 
     this.object.position.y = terrain.heightAt(this.object.position.x, this.object.position.z);
 
-    // Brief white flash on taking a hit — clearer feedback than the health
-    // bar alone, especially mid-fight with several enemies on screen.
-    const material = this.body.material as THREE.MeshStandardMaterial;
-    if (nowMs < this.flashUntilMs) {
-      material.color.set(0xffffff);
-    } else {
-      material.color.copy(this.baseColor);
-    }
+    // Brief flash on taking a hit — clearer feedback than the health bar
+    // alone, especially mid-fight with several enemies on screen. Driven by
+    // emissive rather than base colour, since the figure's colours live in
+    // vertex data that a material tint would only multiply against.
+    this.material.emissive.setHex(nowMs < this.flashUntilMs ? 0xaaaaaa : 0x000000);
   }
 }
 
