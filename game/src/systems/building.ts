@@ -106,6 +106,7 @@ export class BuildingSystem {
 
   selectBuilding(buildingId: string | null): void {
     this.selectedBuildingId = buildingId;
+    events.emit("building-selection-changed", { buildingId });
     if (this.ghost) {
       this.scene.remove(this.ghost);
       this.ghost = null;

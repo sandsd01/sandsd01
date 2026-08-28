@@ -1,4 +1,12 @@
 import * as THREE from "three";
+
+// Fonts are self-hosted via @fontsource (OFL-1.1) rather than linked from a
+// CDN: a blocked font URL fails silently, and the whole HUD would quietly drop
+// back to system-ui without anything in the console to say why.
+import "@fontsource/cinzel/latin-600.css";
+import "@fontsource/cinzel/latin-700.css";
+import "@fontsource/rubik/latin-400.css";
+import "@fontsource/rubik/latin-500.css";
 import "./style.css";
 
 import { createScene, updateSunTarget } from "./core/scene";
@@ -31,6 +39,7 @@ import { Hud } from "./ui/hud";
 import { InventoryPanel } from "./ui/inventory-panel";
 import { CraftingPanel } from "./ui/crafting-panel";
 import { BuildingPanel } from "./ui/building-panel";
+import { BuildHotbar, HOTBAR_KEYS } from "./ui/build-hotbar";
 import { AudioHooks } from "./systems/audio-hooks";
 import { sound } from "./utils/audio";
 import type { Collidable } from "./utils/collision";
@@ -81,6 +90,7 @@ const inventoryPanel = new InventoryPanel(
 );
 const craftingPanel = new CraftingPanel(uiRoot, state);
 const buildingPanel = new BuildingPanel(uiRoot, buildingSystem, canvas, state);
+const buildHotbar = new BuildHotbar(uiRoot, buildingSystem, canvas, state);
 
 let currentNowMs = 0;
 let respawnScheduled = false;
@@ -175,6 +185,9 @@ const loop = new GameLoop((dt) => {
     inventoryPanel.toggle();
   }
   if (input.wasJustPressed("KeyQ")) buildingSystem.selectBuilding(null);
+  // Number keys pick a build piece without opening anything.
+  const hotbarSlot = HOTBAR_KEYS.findIndex((code) => input.wasJustPressed(code));
+  if (hotbarSlot >= 0) buildHotbar.selectSlot(hotbarSlot);
 
   const gatherPrompt = getInteractionPrompt(state, resourceNodes, feet.x, feet.z);
   const farmPrompt = farmingSystem.getPrompt(feet.x, feet.z, selectedSeedItemId, currentNowMs);

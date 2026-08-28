@@ -2,8 +2,21 @@ import type { GameState } from "../state/game-state";
 import { getQty } from "../systems/inventory";
 import { events } from "../utils/events";
 import { colorToCss, el } from "./dom";
+import { icon, iconSvg, type IconName } from "./icons";
 
 const TRACKED_ITEMS = ["wood", "stone", "berry", "clay", "iron_ore", "plank", "wheat_seed", "wheat"];
+// Each tracked resource gets a glyph as well as a colour: the icon says what
+// it is, the tint only reinforces it.
+const ITEM_ICONS: Record<string, IconName> = {
+  wood: "trees",
+  stone: "mountain",
+  berry: "grape",
+  clay: "layers",
+  iron_ore: "gem",
+  plank: "squareStack",
+  wheat_seed: "sprout",
+  wheat: "wheat",
+};
 const ITEM_COLORS: Record<string, number> = {
   wood: 0x8b5a2b,
   stone: 0x8a8a8a,
@@ -24,6 +37,7 @@ export class Hud {
   private readonly damageFlash: HTMLDivElement;
   private readonly timeIcon: HTMLSpanElement;
   private readonly timeLabel: HTMLSpanElement;
+  private timePhase: IconName = "sun";
   private toastTimeout = 0;
   private damageFlashTimeout = 0;
 
@@ -35,7 +49,8 @@ export class Hud {
     healthWrap.appendChild(healthBg);
 
     const timeWrap = el("div", "hud-time");
-    this.timeIcon = el("span", "hud-time-icon", "☀️");
+    this.timeIcon = el("span", "hud-time-icon icon");
+    this.timeIcon.innerHTML = iconSvg("sun");
     this.timeLabel = el("span", "hud-time-label", "06:00");
     timeWrap.append(this.timeIcon, this.timeLabel);
 
@@ -53,7 +68,8 @@ export class Hud {
       "<div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move · <kbd>Shift</kbd> sprint</div>" +
       "<div>Mouse look (click to lock) · Scroll to zoom</div>" +
       "<div><kbd>E</kbd> gather · <kbd>F</kbd> plant/harvest · <kbd>Click</kbd> attack</div>" +
-      "<div><kbd>C</kbd> craft · <kbd>B</kbd> build · <kbd>I</kbd> inventory · <kbd>Q</kbd> cancel</div>";
+      "<div><kbd>1</kbd>–<kbd>4</kbd> pick a build piece · <kbd>Q</kbd> cancel</div>" +
+      "<div><kbd>C</kbd> craft · <kbd>B</kbd> build menu · <kbd>I</kbd> inventory</div>";
 
     this.toast = el("div", "hud-toast");
     this.damageFlash = el("div", "hud-damage-flash");
@@ -97,10 +113,10 @@ export class Hud {
     this.resourceRow.replaceChildren(
       ...TRACKED_ITEMS.map((itemId) => {
         const chip = el("div", "hud-resource-chip");
-        const swatch = el("span", "hud-resource-swatch");
-        swatch.style.background = colorToCss(ITEM_COLORS[itemId]);
+        const glyph = icon(ITEM_ICONS[itemId]);
+        glyph.style.color = colorToCss(ITEM_COLORS[itemId]);
         const count = el("span", undefined, String(getQty(state, itemId)));
-        chip.append(swatch, count);
+        chip.append(glyph, count);
         return chip;
       }),
     );
@@ -115,7 +131,11 @@ export class Hud {
       .padStart(2, "0");
     const minutes = (totalMinutes % 60).toString().padStart(2, "0");
     this.timeLabel.textContent = `${hours}:${minutes}`;
-    this.timeIcon.textContent = t < 0.22 || t > 0.78 ? "🌙" : t < 0.3 || t > 0.7 ? "🌅" : "☀️";
+    const phase: IconName = t < 0.22 || t > 0.78 ? "moon" : t < 0.3 || t > 0.7 ? "sunrise" : "sun";
+    if (this.timePhase !== phase) {
+      this.timePhase = phase;
+      this.timeIcon.innerHTML = iconSvg(phase);
+    }
   }
 
   setPrompt(text: string | null): void {

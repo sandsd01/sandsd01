@@ -11,6 +11,13 @@
   --danger: #d2452f;
   --shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
   --radius: 10px;
+
+  /* Rubik carries the running UI text; Cinzel is a Roman inscriptional face,
+     reserved for headings and the death screen so the theme reads in the
+     typography instead of only in the props. Both are bundled locally (see
+     main.ts) — the fallbacks only matter if a woff2 fails to decode. */
+  --font-ui: "Rubik", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Cinzel", Georgia, "Times New Roman", serif;
 }
 
 * {
@@ -26,8 +33,23 @@ body {
   overflow: hidden;
   overscroll-behavior: none;
   background: #000;
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: var(--font-ui);
   color: var(--ink);
+}
+
+/* Icons are inlined lucide SVGs (see ui/icons.ts). They stroke with
+   currentColor, so a chip tints its glyph by setting `color` alone. */
+.icon {
+  display: inline-flex;
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+.icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 #app {
@@ -110,8 +132,13 @@ body {
 }
 
 .hud-time-icon {
-  font-size: 15px;
-  line-height: 1;
+  /* Warms toward gold at midday and cools at night — see Hud.setTimeOfDay. */
+  color: var(--gold);
+}
+
+.hud-time-icon.icon {
+  width: 15px;
+  height: 15px;
 }
 
 /* --- Status: carried resources --- */
@@ -141,20 +168,18 @@ body {
   font-size: 13px;
 }
 
-.hud-resource-swatch {
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
-  display: inline-block;
-  /* A rim keeps dark swatches legible against the dark panel. */
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
+/* The icon names the resource and its colour reinforces it, so a chip no
+   longer depends on the player having learnt which brown square is clay. */
+.hud-resource-chip .icon {
+  width: 15px;
+  height: 15px;
 }
 
 /* --- Contextual prompt --- */
 
 .hud-prompt {
   position: absolute;
-  bottom: 132px;
+  bottom: 176px;
   left: 50%;
   transform: translateX(-50%);
   background: var(--slate-solid);
@@ -219,7 +244,7 @@ body {
 
 .hud-toast {
   position: absolute;
-  bottom: 92px;
+  bottom: 132px;
   left: 50%;
   transform: translateX(-50%) translateY(6px);
   background: var(--slate-solid);
@@ -269,8 +294,10 @@ body {
   justify-content: center;
   flex-direction: column;
   gap: 10px;
-  font-size: 30px;
-  letter-spacing: 0.06em;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 32px;
+  letter-spacing: 0.08em;
   text-shadow: 0 2px 12px rgba(0, 0, 0, 0.7);
   /* Always above any open panel, so death is visible even mid-menu. */
   z-index: 20;
@@ -308,8 +335,10 @@ body {
   margin: 0 0 14px;
   padding-bottom: 10px;
   border-bottom: 1px solid var(--edge);
-  font-size: 13px;
-  letter-spacing: 0.16em;
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--gold);
 }
@@ -396,4 +425,108 @@ body {
   border-top: 1px solid var(--edge);
   font-size: 12px;
   color: var(--ink-dim);
+}
+
+/* --- Build hotbar ---
+   Building used to cost a round trip through a panel: B, read the list, click
+   a row, watch it close, then click the world. The pieces are few enough to
+   live on screen permanently, so a number key goes straight to placing and the
+   panel becomes optional rather than the only route. */
+
+.hud-hotbar {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  background: var(--slate);
+  border: 1px solid var(--edge);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(3px);
+}
+
+.hud-hotbar-slot {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  /* Comfortably past a 44px target: this is the control the player reaches for
+     most often while a fight is going on. */
+  min-width: 84px;
+  min-height: 76px;
+  padding: 8px 10px 6px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--ink);
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.1s ease;
+}
+
+.hud-hotbar-slot:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.hud-hotbar-slot:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+/* Selection is carried by the border, the tint and the lifted key badge
+   together — not by colour alone, which would vanish for anyone who can't
+   separate the gold from the parchment. */
+.hud-hotbar-slot.selected {
+  background: rgba(216, 180, 90, 0.18);
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px var(--gold);
+}
+
+.hud-hotbar-slot:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.hud-hotbar-key {
+  position: absolute;
+  top: 4px;
+  left: 6px;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-hotbar-slot.selected .hud-hotbar-key {
+  color: var(--gold);
+}
+
+.hud-hotbar-slot .icon {
+  width: 22px;
+  height: 22px;
+  color: var(--gold);
+}
+
+.hud-hotbar-slot:disabled .icon {
+  color: var(--ink-dim);
+}
+
+.hud-hotbar-name {
+  font-size: 11px;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.hud-hotbar-cost {
+  font-size: 10px;
+  line-height: 1;
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
 }

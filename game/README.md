@@ -59,8 +59,13 @@ there is no deploy-time configuration to keep in sync.
 - `E` — gather from the nearest tree/rock, or interact
 - `F` — plant a selected seed into a farm plot / harvest a ready crop
 - Left-click — attack the nearest enemy in range, or place a selected building
+- `1`–`4` — pick a build piece straight from the hotbar (press again to cancel)
 - `C` — crafting menu, `B` — building menu, `I` — inventory (select seeds here)
 - `Q` — cancel building placement
+
+Scroll to zoom the camera. The build hotbar is always on screen and greys out
+pieces you can't yet afford, so building normally needs no menu at all — the
+`B` panel is only there when you want the full costs written out.
 
 ## Scope (MVP)
 
