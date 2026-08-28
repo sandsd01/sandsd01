@@ -13,10 +13,12 @@ export function getZone(x: number, z: number): ZoneId {
 }
 
 // Ground vertex color per zone (see Terrain) — the visual signal that these
-// are distinct biomes, not just different resource-spawn tables.
+// are distinct biomes, not just different resource-spawn tables. These read
+// brighter than they look here: the renderer tone-maps the final image, which
+// pulls saturated mid-tones down.
 export const ZONE_GROUND_COLOR: Record<ZoneId, number> = {
-  open: 0x6a9a4a,
-  forest: 0x3f6b34,
-  rocky: 0x8a8270,
-  wetland: 0x4f6b52,
+  open: 0x86b455,
+  forest: 0x4f7f3c,
+  rocky: 0xa1977f,
+  wetland: 0x5f8a63,
 };

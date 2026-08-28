@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import "./style.css";
 
-import { createScene } from "./core/scene";
+import { createScene, updateSunTarget } from "./core/scene";
 import { createRenderer } from "./core/renderer";
 import { ThirdPersonCamera } from "./core/camera";
 import { GameLoop } from "./core/loop";
@@ -13,6 +13,9 @@ import { damagePlayer, isPlayerDead, respawnPlayer } from "./player/player-state
 
 import { Terrain } from "./world/terrain";
 import { scatterResourceNodes, addNodesToScene } from "./world/world-objects";
+import { createGrass } from "./world/grass";
+import { Water, WATER_LEVEL } from "./world/water";
+import { createComposer } from "./core/postprocessing";
 
 import { getInteractionPrompt, tryGather } from "./systems/gathering";
 import { BuildingSystem } from "./systems/building";
@@ -53,6 +56,12 @@ scene.add(player.object);
 
 const resourceNodes = scatterResourceNodes(terrain, state.seed);
 addNodesToScene(scene, resourceNodes);
+scene.add(createGrass(terrain, state.seed));
+
+const water = new Water();
+scene.add(water.mesh);
+
+const composer = createComposer(renderer, scene, camera.camera);
 
 const buildingSystem = new BuildingSystem(scene, terrain, state);
 const farmingSystem = new FarmingSystem(scene, terrain, state);
@@ -127,6 +136,8 @@ const loop = new GameLoop((dt) => {
   }
 
   const feet = player.getFeetPosition();
+  // Re-centre the sun's shadow frustum on the player before anything renders.
+  updateSunTarget(sceneRig, dayNight.getSunDirection(), feet);
   camera.update(feet.clone().add(new THREE.Vector3(0, 1.3, 0)), [terrain.mesh]);
 
   for (const node of resourceNodes) node.update(currentNowMs);
@@ -170,7 +181,12 @@ const loop = new GameLoop((dt) => {
   const placementPrompt = buildingSystem.getPlacementPrompt();
   hud.setPrompt(placementPrompt ?? gatherPrompt ?? farmPrompt);
 
-  renderer.render(scene, camera.camera);
+  water.update(currentNowMs);
+  // Reset per-frame counters ourselves: the composer issues several render
+  // calls per frame, and three's auto-reset would leave the stats reflecting
+  // only the final fullscreen pass.
+  renderer.info.reset();
+  composer.render();
   input.endFrame();
 });
 
@@ -195,6 +211,9 @@ declare global {
       setTimeOfDayFraction: (fraction: number) => void;
       getCameraPitch: () => number;
       getCameraDistance: () => number;
+      getRenderStats: () => Record<string, unknown>;
+      terrainHeightAt: (x: number, z: number) => number;
+      getWaterLevel: () => number;
     };
   }
 }
@@ -221,4 +240,35 @@ window.__gameDebug = {
   setTimeOfDayFraction: (fraction) => clock.setElapsed(DAY_LENGTH_MS * fraction),
   getCameraPitch: () => camera.pitch,
   getCameraDistance: () => camera.distance,
+  terrainHeightAt: (x, z) => terrain.heightAt(x, z),
+  getWaterLevel: () => WATER_LEVEL,
+  // Lighting/shadow state, for checking that a visual change actually took
+  // effect rather than inferring it from a screenshot.
+  getRenderStats: () => {
+    let casters = 0;
+    let receivers = 0;
+    scene.traverse((o) => {
+      if ((o as THREE.Mesh).isMesh) {
+        if (o.castShadow) casters++;
+        if (o.receiveShadow) receivers++;
+      }
+    });
+    const shadowCam = sceneRig.sunLight.shadow.camera;
+    return {
+      shadowMapEnabled: renderer.shadowMap.enabled,
+      toneMappingExposure: renderer.toneMappingExposure,
+      sunCastShadow: sceneRig.sunLight.castShadow,
+      sunIntensity: Number(sceneRig.sunLight.intensity.toFixed(2)),
+      hemiIntensity: Number(sceneRig.hemiLight.intensity.toFixed(2)),
+      sunPosition: sceneRig.sunLight.position.toArray().map((n) => Number(n.toFixed(1))),
+      shadowExtent: [shadowCam.left, shadowCam.right, shadowCam.top, shadowCam.bottom],
+      shadowFrustumWidth: Number(
+        (2 / shadowCam.projectionMatrix.elements[0]).toFixed(1),
+      ),
+      casters,
+      receivers,
+      drawCalls: renderer.info.render.calls,
+      triangles: renderer.info.render.triangles,
+    };
+  },
 };

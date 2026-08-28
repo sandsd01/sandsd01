@@ -4,6 +4,8 @@ import type { InputManager } from "../input/input-manager";
 import type { ThirdPersonCamera } from "../core/camera";
 import type { Terrain } from "../world/terrain";
 import { resolveCollisions, type Collidable } from "../utils/collision";
+import { buildFigureGeometry, createFigureMaterial } from "../world/figures";
+import { merge, paint, placed } from "../world/geometry";
 
 const MOVE_SPEED = 5;
 const SPRINT_MULTIPLIER = 1.6;
@@ -27,19 +29,27 @@ export class PlayerController {
   ) {
     this.object = new THREE.Group();
     this.body = new THREE.Mesh(
-      new THREE.CapsuleGeometry(PLAYER_RADIUS, 1, 4, 8),
-      new THREE.MeshStandardMaterial({ color: 0xcc6b3a }),
+      buildFigureGeometry({
+        height: PLAYER_HEIGHT,
+        palette: { skin: 0xe0a878, torso: 0xc26a3c, legs: 0x574232, accent: 0x8a5a2b },
+      }),
+      createFigureMaterial(),
     );
-    this.body.position.y = PLAYER_HEIGHT / 2;
+    this.body.castShadow = true;
+    this.body.receiveShadow = true;
     this.object.add(this.body);
 
     // A simple held-item indicator that swings on attack/place — purely
     // cosmetic feedback, independent of the range-based hit logic.
     this.weapon = new THREE.Mesh(
-      new THREE.BoxGeometry(0.12, 0.12, 0.8),
-      new THREE.MeshStandardMaterial({ color: 0xb0b0b0 }),
+      merge([
+        placed(paint(new THREE.BoxGeometry(0.05, 0.05, 0.62), 0x6b4a32), 0, 0, 0.05),
+        placed(paint(new THREE.BoxGeometry(0.13, 0.05, 0.2), 0xcfd4dc), 0, 0, 0.42),
+      ]),
+      createFigureMaterial(),
     );
-    this.weapon.position.set(0.35, PLAYER_HEIGHT * 0.6, 0.3);
+    this.weapon.castShadow = true;
+    this.weapon.position.set(0.3, PLAYER_HEIGHT * 0.55, 0.16);
     this.object.add(this.weapon);
 
     this.syncObjectFromState();
@@ -122,8 +132,10 @@ export class PlayerController {
     } else {
       this.bobPhase = 0;
     }
+    // The figure geometry is modelled feet-up from y=0, so the bob is the
+    // body's whole vertical offset rather than an adjustment to a centre.
     const bob = isMoving ? Math.abs(Math.sin(this.bobPhase)) * BOB_AMPLITUDE : 0;
-    this.body.position.y = PLAYER_HEIGHT / 2 + bob;
+    this.body.position.y = bob;
   }
 
   private updateSwing(nowMs: number): void {
