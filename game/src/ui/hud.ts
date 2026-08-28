@@ -30,6 +30,7 @@ const ITEM_COLORS: Record<string, number> = {
 
 export class Hud {
   private readonly healthFill: HTMLDivElement;
+  private readonly staminaFill: HTMLDivElement;
   private readonly resourceRow: HTMLDivElement;
   private readonly prompt: HTMLDivElement;
   private readonly toast: HTMLDivElement;
@@ -47,6 +48,14 @@ export class Hud {
     this.healthFill = el("div", "hud-health-bar-fill");
     healthBg.appendChild(this.healthFill);
     healthWrap.appendChild(healthBg);
+
+    // Stamina sits directly under health and is deliberately the thinner of
+    // the two: it recovers on its own, so it should never compete with the
+    // bar that doesn't.
+    const staminaBg = el("div", "hud-stamina-bar-bg");
+    this.staminaFill = el("div", "hud-stamina-bar-fill");
+    staminaBg.appendChild(this.staminaFill);
+    healthWrap.appendChild(staminaBg);
 
     const timeWrap = el("div", "hud-time");
     this.timeIcon = el("span", "hud-time-icon icon");
@@ -94,9 +103,11 @@ export class Hud {
     );
 
     this.renderHealth(state);
+    this.renderStamina(state);
     this.renderResources(state);
 
     events.on("player-health-changed", () => this.renderHealth(state));
+    events.on("player-stamina-changed", () => this.renderStamina(state));
     events.on("inventory-changed", () => this.renderResources(state));
     events.on("notification", ({ message }) => this.showToast(message));
     events.on("player-damaged", () => this.flashDamage());
@@ -107,6 +118,15 @@ export class Hud {
   private renderHealth(state: GameState): void {
     const pct = Math.max(0, (state.player.health / state.player.maxHealth) * 100);
     this.healthFill.style.width = `${pct}%`;
+  }
+
+  private renderStamina(state: GameState): void {
+    const { stamina, maxStamina } = state.player;
+    const pct = Math.max(0, (stamina / maxStamina) * 100);
+    this.staminaFill.style.width = `${pct}%`;
+    // Emptied out, the bar dims rather than just vanishing, so "you cannot
+    // sprint yet" is visible as a state and not only as an absence.
+    this.staminaFill.classList.toggle("spent", stamina <= 0);
   }
 
   private renderResources(state: GameState): void {

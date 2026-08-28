@@ -166,6 +166,7 @@ const loop = new GameLoop((dt) => {
   state.elapsedMs = currentNowMs;
   dayNight.update(currentNowMs);
   hud.setTimeOfDay(dayNight.getTimeOfDay(currentNowMs));
+  sound.updateAmbient(dayNight.getDaylight());
 
   const menuOpen = anyPanelOpen();
   if (!isPlayerDead(state) && !menuOpen) {

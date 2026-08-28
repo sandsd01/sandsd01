@@ -110,6 +110,29 @@ body {
   transition: width 0.25s ease;
 }
 
+.hud-stamina-bar-bg {
+  width: 100%;
+  height: 7px;
+  margin-top: 5px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(0, 0, 0, 0.5);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.hud-stamina-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #5f8a2f, #9ac95d);
+  border-radius: 999px;
+  /* No width transition: stamina drains continuously while sprinting, and an
+     easing curve would leave the bar lagging behind what the legs are doing. */
+  transition: opacity 0.2s ease;
+}
+
+.hud-stamina-bar-fill.spent {
+  opacity: 0.35;
+}
+
 /* --- Status: clock --- */
 
 .hud-time {

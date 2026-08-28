@@ -4,6 +4,7 @@ import type { InputManager } from "../input/input-manager";
 import type { ThirdPersonCamera } from "../core/camera";
 import type { Terrain } from "../world/terrain";
 import { resolveCollisions, type Collidable } from "../utils/collision";
+import { events } from "../utils/events";
 import { buildFigureGeometry, createFigureMaterial } from "../world/figures";
 import { merge, paint, placed } from "../world/geometry";
 
@@ -20,6 +21,17 @@ const SWING_DURATION_MS = 220;
 // rather than a floaty moon-jump.
 const GRAVITY = 22;
 const JUMP_SPEED = 7;
+// Stamina: a full bar buys roughly five seconds of sprinting or six jumps, and
+// refills in about seven seconds once you stop. Long enough that sprinting is
+// a decision, short enough that it never strands you.
+const SPRINT_DRAIN_PER_SEC = 20;
+const JUMP_COST = 15;
+const REGEN_PER_SEC = 14;
+const REGEN_DELAY_MS = 700;
+// Once emptied, stamina must climb back to this before sprinting is available
+// again — without it, running on empty degenerates into stutter-sprinting one
+// frame at a time.
+const SPRINT_RECOVERY_THRESHOLD = 25;
 
 export class PlayerController {
   readonly object: THREE.Group;
@@ -29,6 +41,9 @@ export class PlayerController {
   private swingStartMs = -Infinity;
   private velocityY = 0;
   private grounded = true;
+  private lastStaminaSpendMs = -Infinity;
+  private sprintLocked = false;
+  private lastStepIndex = -1;
 
   constructor(
     private readonly state: GameState,
@@ -111,9 +126,10 @@ export class PlayerController {
     // direction — each axis alone is already exactly -1/0/1.
     if (move.lengthSq() > 1) move.normalize();
 
-    const speed = MOVE_SPEED * (input.isSprinting() ? SPRINT_MULTIPLIER : 1);
-    let { x, z } = this.state.player;
     const isMoving = move.lengthSq() > 0.0001;
+    const sprinting = this.updateSprintState(dt, nowMs, input.isSprinting() && isMoving);
+    const speed = MOVE_SPEED * (sprinting ? SPRINT_MULTIPLIER : 1);
+    let { x, z } = this.state.player;
     if (isMoving) {
       x += move.x * speed * dt;
       z += move.z * speed * dt;
@@ -123,21 +139,63 @@ export class PlayerController {
     const resolved = resolveCollisions(x, z, PLAYER_RADIUS, collidables);
     this.state.player.x = resolved.x;
     this.state.player.z = resolved.z;
-    this.updateVertical(dt, input, this.terrain.heightAt(resolved.x, resolved.z));
+    this.updateVertical(dt, nowMs, input, this.terrain.heightAt(resolved.x, resolved.z));
 
+    this.regenStamina(dt, nowMs);
     this.syncObjectFromState();
     // Bobbing mid-air would read as swimming, so it only runs on the ground.
     this.updateBob(dt, isMoving && this.grounded);
     this.updateSwing(nowMs);
   }
 
+  // Returns whether the player is actually sprinting this frame, which is only
+  // true when they asked for it and have the stamina to pay.
+  private updateSprintState(dt: number, nowMs: number, wants: boolean): boolean {
+    const player = this.state.player;
+    if (this.sprintLocked && player.stamina >= SPRINT_RECOVERY_THRESHOLD) {
+      this.sprintLocked = false;
+    }
+    if (!wants || this.sprintLocked || player.stamina <= 0) return false;
+
+    this.spendStamina(SPRINT_DRAIN_PER_SEC * dt, nowMs);
+    if (player.stamina <= 0) {
+      this.sprintLocked = true;
+      events.emit("player-exhausted", {});
+    }
+    return true;
+  }
+
+  private spendStamina(amount: number, nowMs: number): void {
+    const player = this.state.player;
+    player.stamina = Math.max(0, player.stamina - amount);
+    this.lastStaminaSpendMs = nowMs;
+    events.emit("player-stamina-changed", { current: player.stamina, max: player.maxStamina });
+  }
+
+  // Regen holds off briefly after the last exertion, so tapping sprint doesn't
+  // top the bar straight back up.
+  private regenStamina(dt: number, nowMs: number): void {
+    const player = this.state.player;
+    if (player.stamina >= player.maxStamina) return;
+    if (nowMs - this.lastStaminaSpendMs < REGEN_DELAY_MS) return;
+    player.stamina = Math.min(player.maxStamina, player.stamina + REGEN_PER_SEC * dt);
+    events.emit("player-stamina-changed", { current: player.stamina, max: player.maxStamina });
+  }
+
   // Space jumps, gravity brings you back, and the terrain height is the floor.
   // Only the visual/camera height moves: gathering, building and combat all
   // test x/z distance, so being mid-air never changes what you can reach.
-  private updateVertical(dt: number, input: InputManager, groundY: number): void {
+  private updateVertical(dt: number, nowMs: number, input: InputManager, groundY: number): void {
     if (this.grounded && input.wasJustPressed("Space")) {
-      this.velocityY = JUMP_SPEED;
-      this.grounded = false;
+      // A jump you can't pay for simply doesn't happen — no half-height hop.
+      if (this.state.player.stamina >= JUMP_COST) {
+        this.spendStamina(JUMP_COST, nowMs);
+        this.velocityY = JUMP_SPEED;
+        this.grounded = false;
+        events.emit("player-jumped", {});
+      } else {
+        events.emit("player-exhausted", {});
+      }
     }
 
     if (this.grounded) {
@@ -153,6 +211,7 @@ export class PlayerController {
       this.state.player.y = groundY;
       this.velocityY = 0;
       this.grounded = true;
+      events.emit("player-landed", {});
     } else {
       this.state.player.y = y;
     }
@@ -164,8 +223,17 @@ export class PlayerController {
   private updateBob(dt: number, isMoving: boolean): void {
     if (isMoving) {
       this.bobPhase += dt * BOB_FREQUENCY * Math.PI * 2;
+      // One footstep per half bob cycle — the bob already models the gait, so
+      // deriving steps from it keeps sound and motion in phase by construction
+      // rather than by two timers that drift apart.
+      const step = Math.floor(this.bobPhase / Math.PI);
+      if (step !== this.lastStepIndex) {
+        this.lastStepIndex = step;
+        events.emit("player-footstep", {});
+      }
     } else {
       this.bobPhase = 0;
+      this.lastStepIndex = -1;
     }
     // The figure geometry is modelled feet-up from y=0, so the bob is the
     // body's whole vertical offset rather than an adjustment to a centre.

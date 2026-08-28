@@ -7,6 +7,9 @@ type ToneShape = OscillatorType;
 class SoundSystem {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
+  private ambientGain: GainNode | null = null;
+  private ambientFilter: BiquadFilterNode | null = null;
+  private lastAmbientDaylight = -1;
 
   private ensureContext(): AudioContext | null {
     if (this.ctx) return this.ctx;
@@ -25,6 +28,63 @@ class SoundSystem {
   unlock(): void {
     const ctx = this.ensureContext();
     if (ctx && ctx.state === "suspended") void ctx.resume();
+    this.startAmbient();
+  }
+
+  // A continuous bed of filtered noise reading as wind. One looping buffer
+  // rather than a stream of one-shots: the sound has to be seamless, and a
+  // gap between repeats is exactly what the ear picks out.
+  private startAmbient(): void {
+    const ctx = this.ensureContext();
+    if (!ctx || !this.masterGain || this.ambientGain) return;
+
+    const seconds = 3;
+    const size = Math.floor(ctx.sampleRate * seconds);
+    const buffer = ctx.createBuffer(1, size, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    // Brown-ish noise (a running sum of white) sits lower than white noise and
+    // reads as wind rather than as static.
+    let last = 0;
+    for (let i = 0; i < size; i++) {
+      const white = Math.random() * 2 - 1;
+      last = (last + 0.02 * white) / 1.02;
+      data[i] = last * 3.5;
+    }
+    // Match the ends so the loop point isn't an audible click.
+    const fade = Math.floor(ctx.sampleRate * 0.05);
+    for (let i = 0; i < fade; i++) {
+      const t = i / fade;
+      data[i] *= t;
+      data[size - 1 - i] *= t;
+    }
+
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
+
+    this.ambientFilter = ctx.createBiquadFilter();
+    this.ambientFilter.type = "lowpass";
+    this.ambientFilter.frequency.value = 420;
+
+    this.ambientGain = ctx.createGain();
+    this.ambientGain.gain.value = 0.5;
+
+    source.connect(this.ambientFilter);
+    this.ambientFilter.connect(this.ambientGain);
+    this.ambientGain.connect(this.masterGain);
+    source.start();
+  }
+
+  // daylight is 0 at night and 1 in full day. Night is quieter but darker in
+  // timbre, which reads as still air rather than as the sound being turned
+  // down. Called every frame, so it early-outs unless the value really moved.
+  updateAmbient(daylight: number): void {
+    if (!this.ctx || !this.ambientGain || !this.ambientFilter) return;
+    if (Math.abs(daylight - this.lastAmbientDaylight) < 0.02) return;
+    this.lastAmbientDaylight = daylight;
+    const now = this.ctx.currentTime;
+    this.ambientGain.gain.setTargetAtTime(0.35 + daylight * 0.35, now, 1.5);
+    this.ambientFilter.frequency.setTargetAtTime(240 + daylight * 320, now, 1.5);
   }
 
   private tone(freq: number, durationMs: number, shape: ToneShape, volume: number, glideTo?: number): void {
@@ -60,6 +120,45 @@ class SoundSystem {
     source.connect(gain);
     gain.connect(this.masterGain);
     source.start();
+  }
+
+  // Footsteps vary in pitch per step so a walk cycle doesn't turn into a
+  // metronome; the filter keeps them as soft thumps rather than clicks.
+  footstep(): void {
+    const ctx = this.ensureContext();
+    if (!ctx || !this.masterGain) return;
+    const size = Math.floor(ctx.sampleRate * 0.06);
+    const buffer = ctx.createBuffer(1, size, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < size; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / size, 2.5);
+    }
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.value = 700 + Math.random() * 500;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.18, ctx.currentTime);
+    source.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.masterGain);
+    source.start();
+  }
+
+  jump(): void {
+    this.tone(280, 130, "sine", 0.16, 460);
+  }
+
+  land(): void {
+    this.noiseBurst(90, 0.22);
+    this.tone(90, 110, "sine", 0.18);
+  }
+
+  // Deliberately unmusical and breathy: it should read as the body running out
+  // rather than as an error tone.
+  exhausted(): void {
+    this.noiseBurst(220, 0.14);
   }
 
   chop(): void {
