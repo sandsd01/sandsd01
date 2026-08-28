@@ -6,9 +6,11 @@ import { events } from "../utils/events";
 import { canAfford } from "./cost-line";
 import { el } from "./dom";
 import { icon, type IconName } from "./icons";
+import { keyLabel, type Bindings } from "../state/keybindings";
 
-// Number keys bound to the slots, in the order BUILDINGS declares them.
-export const HOTBAR_KEYS = ["Digit1", "Digit2", "Digit3", "Digit4"] as const;
+// Actions bound to the slots, in the order BUILDINGS declares them. The keys
+// themselves live in the binding map, so these stay correct after a rebind.
+export const HOTBAR_ACTIONS = ["hotbar1", "hotbar2", "hotbar3", "hotbar4"] as const;
 
 const BUILDING_ICONS: Record<string, IconName> = {
   wall: "fence",
@@ -35,6 +37,7 @@ export class BuildHotbar {
     private readonly buildingSystem: BuildingSystem,
     private readonly canvas: HTMLCanvasElement,
     private readonly state: GameState,
+    private bindings: Bindings,
   ) {
     this.root = el("div", "hud-hotbar");
     parent.appendChild(this.root);
@@ -51,7 +54,7 @@ export class BuildHotbar {
       const slot = el("button", "hud-hotbar-slot");
       slot.type = "button";
 
-      slot.appendChild(el("span", "hud-hotbar-key", String(index + 1)));
+      slot.appendChild(el("span", "hud-hotbar-key", keyLabel(this.bindings[HOTBAR_ACTIONS[index]][0] ?? "")));
       slot.appendChild(icon(BUILDING_ICONS[id] ?? "squareStack"));
       slot.appendChild(el("span", "hud-hotbar-name", def.name));
       slot.appendChild(
@@ -83,6 +86,16 @@ export class BuildHotbar {
     this.buildingSystem.selectBuilding(
       this.buildingSystem.getSelectedBuildingId() === id ? null : id,
     );
+  }
+
+  // Redraws the key badges after a rebind, so a slot never advertises a key
+  // that no longer selects it.
+  setBindings(bindings: Bindings): void {
+    this.bindings = bindings;
+    this.slots.forEach((slot, index) => {
+      const badge = slot.querySelector(".hud-hotbar-key");
+      if (badge) badge.textContent = keyLabel(this.bindings[HOTBAR_ACTIONS[index]][0] ?? "");
+    });
   }
 
   private refresh(): void {

@@ -307,7 +307,7 @@ export class PlayerController {
   // Only the visual/camera height moves: gathering, building and combat all
   // test x/z distance, so being mid-air never changes what you can reach.
   private updateVertical(dt: number, nowMs: number, input: InputManager, groundY: number): void {
-    if (this.grounded && input.wasJustPressed("Space")) {
+    if (this.grounded && input.wasActionPressed("jump")) {
       // A jump you can't pay for simply doesn't happen — no half-height hop.
       if (this.state.player.stamina >= JUMP_COST) {
         this.spendStamina(JUMP_COST, nowMs);

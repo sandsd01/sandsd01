@@ -603,3 +603,91 @@ body {
   outline: 2px solid var(--gold);
   outline-offset: 4px;
 }
+
+/* --- Mini-map ---
+   Bottom-right: the only free corner, and diagonally opposite the keybind card
+   so the two never crowd each other. */
+
+.hud-minimap {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  padding: 6px;
+  border-radius: 50%;
+  background: var(--slate);
+  border: 1px solid var(--edge);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(3px);
+  line-height: 0;
+}
+
+.hud-minimap canvas {
+  display: block;
+  border-radius: 50%;
+}
+
+/* --- Options: controls list --- */
+
+.panel-subheading {
+  margin: 18px 0 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--edge);
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.panel-keys {
+  display: flex;
+  flex: none;
+  gap: 6px;
+}
+
+.panel .panel-key {
+  min-width: 62px;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.panel .panel-key:hover {
+  background: rgba(255, 255, 255, 0.13);
+}
+
+.panel .panel-key.empty {
+  color: var(--ink-dim);
+}
+
+/* Listening for the next keystroke. Both the fill and the label change, so the
+   state is legible without relying on the gold alone. */
+.panel .panel-key.listening {
+  background: rgba(216, 180, 90, 0.22);
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+.panel .panel-reset {
+  width: 100%;
+  margin-top: 14px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 7px;
+  padding: 8px 14px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.panel .panel-reset:hover {
+  background: rgba(255, 255, 255, 0.13);
+}

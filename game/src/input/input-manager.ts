@@ -1,3 +1,5 @@
+import type { Action, Bindings } from "../state/keybindings";
+
 // Keyboard state + pointer-lock mouse-look, plus a simple "just pressed" queue
 // for one-shot actions (interact, open panels) that systems can drain per
 // frame. PC-only: mouse-look requires the Pointer Lock API, which has no
@@ -9,11 +11,26 @@ export class InputManager {
   mouseDeltaX = 0;
   mouseDeltaY = 0;
 
-  constructor(canvas: HTMLCanvasElement) {
+  // While the Options screen is listening for a new binding, keystrokes go to
+  // it instead of the game — otherwise binding "jump" to W would also walk the
+  // player forward on the way past.
+  private captureHandler: ((code: string) => void) | null = null;
+
+  constructor(
+    canvas: HTMLCanvasElement,
+    private bindings: Bindings,
+  ) {
     window.addEventListener("keydown", (e) => {
       // Tab would walk focus off the canvas and Space scrolls the page in some
       // browsers; both are bound to gameplay, so neither should do its default.
       if (e.code === "Tab" || e.code === "Space") e.preventDefault();
+      if (this.captureHandler) {
+        e.preventDefault();
+        const handler = this.captureHandler;
+        this.captureHandler = null;
+        handler(e.code);
+        return;
+      }
       if (!this.keys.has(e.code)) this.justPressed.add(e.code);
       this.keys.add(e.code);
     });
@@ -44,6 +61,33 @@ export class InputManager {
     return this.justPressed.has(code);
   }
 
+  // Gameplay asks by action, never by key code, so rebinding needs no changes
+  // anywhere else.
+  isActionDown(action: Action): boolean {
+    return this.bindings[action].some((code) => this.keys.has(code));
+  }
+
+  wasActionPressed(action: Action): boolean {
+    return this.bindings[action].some((code) => this.justPressed.has(code));
+  }
+
+  // Called after a rebind so the change takes effect without a reload.
+  setBindings(bindings: Bindings): void {
+    this.bindings = bindings;
+  }
+
+  captureNextKey(handler: (code: string) => void): void {
+    this.captureHandler = handler;
+  }
+
+  cancelCapture(): void {
+    this.captureHandler = null;
+  }
+
+  isCapturing(): boolean {
+    return this.captureHandler !== null;
+  }
+
   isPointerLocked(): boolean {
     return this.pointerLocked;
   }
@@ -53,15 +97,15 @@ export class InputManager {
   getMoveVector(): { x: number; y: number } {
     let x = 0;
     let y = 0;
-    if (this.isDown("KeyW")) y += 1;
-    if (this.isDown("KeyS")) y -= 1;
-    if (this.isDown("KeyD")) x += 1;
-    if (this.isDown("KeyA")) x -= 1;
+    if (this.isActionDown("moveForward")) y += 1;
+    if (this.isActionDown("moveBack")) y -= 1;
+    if (this.isActionDown("moveRight")) x += 1;
+    if (this.isActionDown("moveLeft")) x -= 1;
     return { x, y };
   }
 
   isSprinting(): boolean {
-    return this.isDown("ShiftLeft") || this.isDown("ShiftRight");
+    return this.isActionDown("sprint");
   }
 
   // Call once per frame after all systems have read input for this frame.

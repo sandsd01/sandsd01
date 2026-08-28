@@ -96,9 +96,21 @@ These follow the conventions of the genre rather than inventing new ones, so
 the bindings a player arrives with mostly work: `Space` jumps, `Esc` backs out
 of menus and doubles as the options screen, `Tab` and `I` both open the
 inventory (the genre is split between them), only one menu is open at a time,
-and movement stops while one is. Options covers the two settings every game
-here ships — look sensitivity and invert-Y — stored separately from the save
-so they survive starting a new world.
+and movement stops while one is.
+
+**Every key above is rebindable** from Options, with two slots per action so a
+split like `Tab`/`I` survives. Bindings are stored as `KeyboardEvent.code`,
+which is layout-independent — a binding made on AZERTY still means the same
+physical key. Gameplay code only ever asks about named actions
+(`src/state/keybindings.ts`), never about key codes, so nothing needs changing
+when a player rebinds. Options also carries look sensitivity and invert-Y.
+Preferences are stored separately from the save so they survive starting a new
+world.
+
+Sprinting and jumping draw on **stamina**, which regenerates after a short
+pause; emptying it locks sprinting until it has recovered a quarter of the way.
+A **mini-map** in the bottom-right corner shows the biomes, nearby resources,
+your buildings and any enemies, north-up with a marker for your heading.
 
 The build hotbar is always on screen and greys out pieces you can't yet
 afford, so building normally needs no menu at all — the `B` panel is only
