@@ -29,6 +29,15 @@ export class CraftingPanel {
     if (this.visible) this.render();
   }
 
+  close(): void {
+    this.visible = false;
+    this.panel.classList.remove("visible");
+  }
+
+  isVisible(): boolean {
+    return this.visible;
+  }
+
   private render(): void {
     this.list.replaceChildren(
       ...listRecipes().map((recipe) => {

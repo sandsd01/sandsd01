@@ -15,6 +15,11 @@ const PLAYER_HEIGHT = 1.7;
 const BOB_FREQUENCY = 9; // cycles/sec while moving at full speed
 const BOB_AMPLITUDE = 0.06;
 const SWING_DURATION_MS = 220;
+// Tuned so a jump clears roughly two thirds of the player's height and lands
+// in a little under half a second — the snappy, low-float arc this genre uses,
+// rather than a floaty moon-jump.
+const GRAVITY = 22;
+const JUMP_SPEED = 7;
 
 export class PlayerController {
   readonly object: THREE.Group;
@@ -22,6 +27,8 @@ export class PlayerController {
   private readonly weapon: THREE.Mesh;
   private bobPhase = 0;
   private swingStartMs = -Infinity;
+  private velocityY = 0;
+  private grounded = true;
 
   constructor(
     private readonly state: GameState,
@@ -116,11 +123,39 @@ export class PlayerController {
     const resolved = resolveCollisions(x, z, PLAYER_RADIUS, collidables);
     this.state.player.x = resolved.x;
     this.state.player.z = resolved.z;
-    this.state.player.y = this.terrain.heightAt(resolved.x, resolved.z);
+    this.updateVertical(dt, input, this.terrain.heightAt(resolved.x, resolved.z));
 
     this.syncObjectFromState();
-    this.updateBob(dt, isMoving);
+    // Bobbing mid-air would read as swimming, so it only runs on the ground.
+    this.updateBob(dt, isMoving && this.grounded);
     this.updateSwing(nowMs);
+  }
+
+  // Space jumps, gravity brings you back, and the terrain height is the floor.
+  // Only the visual/camera height moves: gathering, building and combat all
+  // test x/z distance, so being mid-air never changes what you can reach.
+  private updateVertical(dt: number, input: InputManager, groundY: number): void {
+    if (this.grounded && input.wasJustPressed("Space")) {
+      this.velocityY = JUMP_SPEED;
+      this.grounded = false;
+    }
+
+    if (this.grounded) {
+      // Walking over uneven ground follows the surface directly; applying
+      // gravity here would leave the player permanently falling down slopes.
+      this.state.player.y = groundY;
+      return;
+    }
+
+    this.velocityY -= GRAVITY * dt;
+    const y = this.state.player.y + this.velocityY * dt;
+    if (y <= groundY) {
+      this.state.player.y = groundY;
+      this.velocityY = 0;
+      this.grounded = true;
+    } else {
+      this.state.player.y = y;
+    }
   }
 
   // Cosmetic head-bob while walking — offsets the body mesh only, never the

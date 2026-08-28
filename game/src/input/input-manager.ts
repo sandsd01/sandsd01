@@ -11,6 +11,9 @@ export class InputManager {
 
   constructor(canvas: HTMLCanvasElement) {
     window.addEventListener("keydown", (e) => {
+      // Tab would walk focus off the canvas and Space scrolls the page in some
+      // browsers; both are bound to gameplay, so neither should do its default.
+      if (e.code === "Tab" || e.code === "Space") e.preventDefault();
       if (!this.keys.has(e.code)) this.justPressed.add(e.code);
       this.keys.add(e.code);
     });

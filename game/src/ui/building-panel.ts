@@ -45,6 +45,10 @@ export class BuildingPanel {
     this.panel.classList.remove("visible");
   }
 
+  isVisible(): boolean {
+    return this.visible;
+  }
+
   private render(): void {
     const selected = this.buildingSystem.getSelectedBuildingId();
     this.list.replaceChildren(

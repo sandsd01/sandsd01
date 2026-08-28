@@ -530,3 +530,53 @@ body {
   color: var(--ink-dim);
   font-variant-numeric: tabular-nums;
 }
+
+/* Options slider. A native range input, restyled to the HUD palette — the
+   track and thumb both need explicit colours or the browser default (a bright
+   blue) cuts straight across the parchment. */
+.panel-slider {
+  flex: none;
+  width: 148px;
+  height: 24px;
+  margin: 0;
+  background: transparent;
+  appearance: none;
+  cursor: pointer;
+}
+
+.panel-slider::-webkit-slider-runnable-track {
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.panel-slider::-moz-range-track {
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.panel-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: -6.5px;
+  border: none;
+  border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+
+.panel-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+
+.panel-slider:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 4px;
+}

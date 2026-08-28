@@ -65,11 +65,11 @@ export class Hud {
     // Keycaps rather than a wall of prose: the bindings are the thing being
     // scanned for, so they get to be the visually distinct part.
     keybinds.innerHTML =
-      "<div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move · <kbd>Shift</kbd> sprint</div>" +
+      "<div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move · <kbd>Shift</kbd> sprint · <kbd>Space</kbd> jump</div>" +
       "<div>Mouse look (click to lock) · Scroll to zoom</div>" +
       "<div><kbd>E</kbd> gather · <kbd>F</kbd> plant/harvest · <kbd>Click</kbd> attack</div>" +
       "<div><kbd>1</kbd>–<kbd>4</kbd> pick a build piece · <kbd>Q</kbd> cancel</div>" +
-      "<div><kbd>C</kbd> craft · <kbd>B</kbd> build menu · <kbd>I</kbd> inventory</div>";
+      "<div><kbd>C</kbd> craft · <kbd>B</kbd> build · <kbd>Tab</kbd> inventory · <kbd>Esc</kbd> options</div>";
 
     this.toast = el("div", "hud-toast");
     this.damageFlash = el("div", "hud-damage-flash");
