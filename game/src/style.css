@@ -343,6 +343,17 @@ body {
   color: var(--ink-dim);
 }
 
+/* Have/need counts (see ui/cost-line.ts). The numbers carry the information
+   on their own; colour is redundant reinforcement so a shortfall is scannable
+   without reading every row. */
+.cost-ok {
+  color: #b9d99a;
+}
+
+.cost-short {
+  color: #ef968f;
+}
+
 .panel button {
   flex: none;
   background: #47702f;
