@@ -23,6 +23,7 @@ import { Terrain } from "./world/terrain";
 import { scatterResourceNodes, addNodesToScene } from "./world/world-objects";
 import { createGrass } from "./world/grass";
 import { Water, WATER_LEVEL } from "./world/water";
+import { loadModels } from "./world/models";
 import { createComposer } from "./core/postprocessing";
 
 import { getInteractionPrompt, tryGather } from "./systems/gathering";
@@ -53,6 +54,12 @@ const state = loadGame() ?? createInitialState();
 // Input preferences live outside the save, so they survive a new world.
 const settings = loadSettings();
 
+// Models are fetched before anything is built, so props and the player are
+// created with their real meshes rather than being swapped mid-scene. A model
+// that fails to load leaves its slot empty and the procedural fallback stands
+// in, which is why this never rejects.
+const models = await loadModels();
+
 const sceneRig = createScene();
 const { scene } = sceneRig;
 const terrain = new Terrain(state.seed);
@@ -64,10 +71,10 @@ const input = new InputManager(canvas);
 const clock = new GameClock(state.elapsedMs);
 const dayNight = new DayNightSystem(sceneRig);
 
-const player = new PlayerController(state, terrain);
+const player = new PlayerController(state, terrain, models);
 scene.add(player.object);
 
-const resourceNodes = scatterResourceNodes(terrain, state.seed);
+const resourceNodes = scatterResourceNodes(terrain, state.seed, models);
 addNodesToScene(scene, resourceNodes);
 scene.add(createGrass(terrain, state.seed));
 
@@ -76,7 +83,7 @@ scene.add(water.mesh);
 
 const composer = createComposer(renderer, scene, camera.camera);
 
-const buildingSystem = new BuildingSystem(scene, terrain, state);
+const buildingSystem = new BuildingSystem(scene, terrain, state, models);
 const farmingSystem = new FarmingSystem(scene, terrain, state);
 const enemyManager = new EnemyManager(scene, terrain, state.seed);
 const playerCombat = new PlayerCombat();
@@ -235,6 +242,15 @@ const loop = new GameLoop((dt) => {
 
 loop.start();
 
+// Fade the splash out only once a frame has actually been drawn, so the world
+// is on screen behind it rather than a black canvas.
+requestAnimationFrame(() => {
+  const splash = document.getElementById("loading");
+  if (!splash) return;
+  splash.classList.add("done");
+  window.setTimeout(() => splash.remove(), 500);
+});
+
 window.setInterval(() => saveGame(state), 10_000);
 window.addEventListener("beforeunload", () => saveGame(state));
 
@@ -252,6 +268,10 @@ declare global {
       getResourceNodes: () => { id: string; kind: string; x: number; z: number; depleted: boolean }[];
       getTimeOfDay: () => number;
       setTimeOfDayFraction: (fraction: number) => void;
+      getPlayerRig: () => { clip: string; clips: number; skinned: number };
+      getStamina: () => { current: number; max: number };
+      getRigFingerprint: () => number;
+      getPlayerBounds: () => { height: number; minY: number; feetY: number };
       getCameraPitch: () => number;
       getCameraDistance: () => number;
       getRenderStats: () => Record<string, unknown>;
@@ -281,6 +301,15 @@ window.__gameDebug = {
     })),
   getTimeOfDay: () => dayNight.getTimeOfDay(currentNowMs),
   setTimeOfDayFraction: (fraction) => clock.setElapsed(DAY_LENGTH_MS * fraction),
+  getPlayerRig: () => player.getAnimationState(),
+  getStamina: () => ({ current: state.player.stamina, max: state.player.maxStamina }),
+  getRigFingerprint: () => player.getRigFingerprint(),
+  // Measured from the rendered object rather than from state, so a model that
+  // loaded at the wrong scale or sank into the terrain is caught.
+  getPlayerBounds: () => {
+    const box = new THREE.Box3().setFromObject(player.object);
+    return { height: box.max.y - box.min.y, minY: box.min.y, feetY: state.player.y };
+  },
   getCameraPitch: () => camera.pitch,
   getCameraDistance: () => camera.distance,
   terrainHeightAt: (x, z) => terrain.heightAt(x, z),

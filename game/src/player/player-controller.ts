@@ -7,6 +7,7 @@ import { resolveCollisions, type Collidable } from "../utils/collision";
 import { events } from "../utils/events";
 import { buildFigureGeometry, createFigureMaterial } from "../world/figures";
 import { merge, paint, placed } from "../world/geometry";
+import { instantiate, type ModelLibrary } from "../world/models";
 
 const MOVE_SPEED = 5;
 const SPRINT_MULTIPLIER = 1.6;
@@ -32,11 +33,28 @@ const REGEN_DELAY_MS = 700;
 // again — without it, running on empty degenerates into stutter-sprinting one
 // frame at a time.
 const SPRINT_RECOVERY_THRESHOLD = 25;
+// Animation clips shipped with the character model, mapped to states the game
+// already tracks. Anything missing simply never plays, so a model without a
+// given clip degrades rather than throwing.
+const CLIP_IDLE = "idle";
+const CLIP_WALK = "walk";
+const CLIP_SPRINT = "sprint";
+const CLIP_JUMP = "jump";
+const CLIP_FALL = "fall";
+const CLIP_ATTACK = "attack-melee-right";
+const CLIP_DIE = "die";
+const CROSSFADE_SECONDS = 0.16;
 
 export class PlayerController {
   readonly object: THREE.Group;
-  private readonly body: THREE.Mesh;
-  private readonly weapon: THREE.Mesh;
+  /** Present only when falling back to the procedural figure. */
+  private readonly body: THREE.Mesh | null = null;
+  private readonly weapon: THREE.Mesh | null = null;
+  private readonly mixer: THREE.AnimationMixer | null = null;
+  private readonly actions = new Map<string, THREE.AnimationAction>();
+  private currentClip = "";
+  private oneShotUntilMs = -Infinity;
+  private sprintingNow = false;
   private bobPhase = 0;
   private swingStartMs = -Infinity;
   private velocityY = 0;
@@ -44,12 +62,32 @@ export class PlayerController {
   private lastStaminaSpendMs = -Infinity;
   private sprintLocked = false;
   private lastStepIndex = -1;
+  private lastKnownNowMs = 0;
 
   constructor(
     private readonly state: GameState,
     private readonly terrain: Terrain,
+    models: ModelLibrary = {},
   ) {
     this.object = new THREE.Group();
+
+    const character = models["character-archer"];
+    if (character) {
+      const rig = instantiate(character);
+      this.object.add(rig);
+      // The mixer drives the model's own rig, so the head-bob and the hand-made
+      // weapon prop below are not created at all — the animations already carry
+      // the gait and the swing, and layering ours on top would fight them.
+      this.mixer = new THREE.AnimationMixer(rig);
+      for (const clip of character.animations) {
+        this.actions.set(clip.name, this.mixer.clipAction(clip));
+      }
+      this.playClip(CLIP_IDLE);
+      this.bindDeathAnimations();
+      this.syncObjectFromState();
+      return;
+    }
+
     this.body = new THREE.Mesh(
       buildFigureGeometry({
         height: PLAYER_HEIGHT,
@@ -81,6 +119,85 @@ export class PlayerController {
   // player attacks or places a building.
   triggerSwing(nowMs: number): void {
     this.swingStartMs = nowMs;
+    this.playOneShot(CLIP_ATTACK, nowMs);
+  }
+
+  // Exposed for headless verification (see window.__gameDebug in main.ts):
+  // which clip is playing is otherwise invisible from outside.
+  getAnimationState(): { clip: string; clips: number; skinned: number } {
+    let skinned = 0;
+    this.object.traverse((child) => {
+      if ((child as THREE.SkinnedMesh).isSkinnedMesh) skinned++;
+    });
+    return { clip: this.currentClip, clips: this.actions.size, skinned };
+  }
+
+  // A scalar fingerprint of every bone's local position. Verification uses it
+  // to prove the rig is genuinely being animated: the clip name alone only
+  // says what this class *intended* to play, which would still look right if
+  // the skeleton were mis-bound and the mesh never moved.
+  getRigFingerprint(): number {
+    let sum = 0;
+    this.object.traverse((child) => {
+      if ((child as THREE.Bone).isBone) {
+        sum += child.position.x + child.position.y + child.position.z;
+      }
+    });
+    return sum;
+  }
+
+  // Crossfades to a looping clip. A no-op if it's already playing or the model
+  // doesn't ship that clip.
+  private playClip(name: string): void {
+    if (this.currentClip === name) return;
+    const next = this.actions.get(name);
+    if (!next) return;
+    const previous = this.actions.get(this.currentClip);
+    next.reset().setLoop(THREE.LoopRepeat, Infinity).fadeIn(CROSSFADE_SECONDS).play();
+    if (previous) previous.fadeOut(CROSSFADE_SECONDS);
+    this.currentClip = name;
+  }
+
+  // Plays a clip once and holds the state machine off until it finishes, so an
+  // attack isn't cut short by a single frame of standing still.
+  private playOneShot(name: string, nowMs: number): void {
+    const action = this.actions.get(name);
+    if (!action) return;
+    const previous = this.actions.get(this.currentClip);
+    action.reset().setLoop(THREE.LoopOnce, 1).play();
+    action.clampWhenFinished = true;
+    action.fadeIn(0.05);
+    if (previous && previous !== action) previous.fadeOut(0.05);
+    this.currentClip = name;
+    this.oneShotUntilMs = nowMs + action.getClip().duration * 1000;
+  }
+
+  private bindDeathAnimations(): void {
+    events.on("player-died", () => {
+      this.playOneShot(CLIP_DIE, this.lastKnownNowMs);
+      // Hold the death pose until respawn rather than for the clip's length.
+      this.oneShotUntilMs = Infinity;
+    });
+    events.on("player-respawned", () => {
+      this.oneShotUntilMs = -Infinity;
+      this.currentClip = "";
+      this.playClip(CLIP_IDLE);
+    });
+  }
+
+  // Picks the looping clip that matches what the player is actually doing.
+  private updateAnimation(dt: number, nowMs: number, isMoving: boolean): void {
+    if (!this.mixer) return;
+    this.mixer.update(dt);
+    if (nowMs < this.oneShotUntilMs) return;
+
+    if (!this.grounded) {
+      this.playClip(this.velocityY > 0 ? CLIP_JUMP : CLIP_FALL);
+    } else if (isMoving) {
+      this.playClip(this.sprintingNow ? CLIP_SPRINT : CLIP_WALK);
+    } else {
+      this.playClip(CLIP_IDLE);
+    }
   }
 
   private syncObjectFromState(): void {
@@ -126,8 +243,10 @@ export class PlayerController {
     // direction — each axis alone is already exactly -1/0/1.
     if (move.lengthSq() > 1) move.normalize();
 
+    this.lastKnownNowMs = nowMs;
     const isMoving = move.lengthSq() > 0.0001;
     const sprinting = this.updateSprintState(dt, nowMs, input.isSprinting() && isMoving);
+    this.sprintingNow = sprinting;
     const speed = MOVE_SPEED * (sprinting ? SPRINT_MULTIPLIER : 1);
     let { x, z } = this.state.player;
     if (isMoving) {
@@ -143,9 +262,11 @@ export class PlayerController {
 
     this.regenStamina(dt, nowMs);
     this.syncObjectFromState();
-    // Bobbing mid-air would read as swimming, so it only runs on the ground.
+    // The bob phase always advances because footsteps are derived from it;
+    // whether it also moves the mesh depends on which body is in use.
     this.updateBob(dt, isMoving && this.grounded);
     this.updateSwing(nowMs);
+    this.updateAnimation(dt, nowMs, isMoving);
   }
 
   // Returns whether the player is actually sprinting this frame, which is only
@@ -236,12 +357,15 @@ export class PlayerController {
       this.lastStepIndex = -1;
     }
     // The figure geometry is modelled feet-up from y=0, so the bob is the
-    // body's whole vertical offset rather than an adjustment to a centre.
+    // body's whole vertical offset rather than an adjustment to a centre. The
+    // rigged model animates its own gait, so it is left alone.
+    if (!this.body) return;
     const bob = isMoving ? Math.abs(Math.sin(this.bobPhase)) * BOB_AMPLITUDE : 0;
     this.body.position.y = bob;
   }
 
   private updateSwing(nowMs: number): void {
+    if (!this.weapon) return;
     const elapsed = nowMs - this.swingStartMs;
     if (elapsed < 0 || elapsed >= SWING_DURATION_MS) {
       this.weapon.rotation.x = 0;

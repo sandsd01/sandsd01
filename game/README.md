@@ -17,6 +17,32 @@ browser.
 - No physics engine — simple circle-based collision and terrain-height
   sampling (see `src/utils/collision.ts`, `src/world/terrain.ts`)
 
+## Assets
+
+| What | Source | Licence |
+| --- | --- | --- |
+| Props, buildings and the player character | [Kenney](https://www.kenney.nl) — Mini Forest 1.0 | CC0 |
+| UI type (Rubik, Cinzel) | [Fontsource](https://fontsource.org) | OFL-1.1 |
+| HUD icons | [Lucide](https://lucide.dev) | ISC |
+
+The GLB models live in `public/models/` and are fetched at runtime rather than
+bundled, because they reference a shared `Textures/colormap.png` atlas by
+relative path. `src/world/models.ts` loads them, and each model declares which
+dimension to fit and the size to fit it to — the pack is authored against
+roughly 1-unit tiles, which is not this world's scale, and "the right size"
+differs by what the prop is (a tree is defined by its height, a floor patch by
+how much of a grid cell it covers).
+
+Any model that fails to load leaves its slot empty and the procedural geometry
+the game shipped with stands in, so a missing file costs polish rather than the
+world. `iron_vein` keeps its procedural mesh on purpose: its ore shards are the
+only thing that says "there is metal here", and nothing in the pack carries
+that signal.
+
+Fonts are bundled locally rather than linked from a CDN — a blocked font URL
+fails silently, and the HUD would drop back to `system-ui` with nothing in the
+console to explain why.
+
 ## Running it
 
 ```bash

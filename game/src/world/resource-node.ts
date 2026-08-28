@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { merge, paint, placed, roughen, varyColor } from "./geometry";
+import { instantiate, type ModelLibrary, type ModelName } from "./models";
 
 export type ResourceNodeKind = "tree" | "rock" | "berry_bush" | "clay_pit" | "iron_vein";
 
@@ -237,6 +238,21 @@ const GEOMETRY_BUILDERS: Record<ResourceNodeKind, (rand: () => number) => THREE.
   iron_vein: buildIronVeinGeometry,
 };
 
+// Which pack model stands in for each resource, where the pack has something
+// better than the procedural version. Two silhouettes per kind so a forest
+// isn't a row of clones.
+//
+// iron_vein deliberately keeps its procedural geometry: its ore shards are the
+// only thing that says "there is metal here", and nothing in the pack carries
+// that signal. Using a model that looks like an ordinary rock would cost the
+// player information, which is a worse trade than a slightly mixed art style.
+const MODEL_CHOICES: Partial<Record<ResourceNodeKind, ModelName[]>> = {
+  tree: ["tree", "tree-high"],
+  rock: ["rocks-low", "rocks-high"],
+  berry_bush: ["plant"],
+  clay_pit: ["patch-dirt"],
+};
+
 const HIT_PUNCH_MS = 160;
 const HIT_PUNCH_SCALE = 1.35;
 
@@ -245,19 +261,36 @@ let nextId = 0;
 export class ResourceNode {
   readonly id: string;
   readonly config: ResourceNodeConfig;
-  readonly object: THREE.Mesh;
+  readonly object: THREE.Object3D;
   hitsRemaining: number;
   depleted = false;
   private readonly baseScale: number;
   private depletedAtMs = 0;
   private hitAnimStartMs = -Infinity;
 
-  constructor(kind: ResourceNodeKind, x: number, y: number, z: number, rand: () => number) {
+  constructor(
+    kind: ResourceNodeKind,
+    x: number,
+    y: number,
+    z: number,
+    rand: () => number,
+    models: ModelLibrary = {},
+  ) {
     this.id = `node-${nextId++}`;
     this.config = RESOURCE_NODE_CONFIGS[kind];
-    this.object = new THREE.Mesh(GEOMETRY_BUILDERS[kind](rand), PROP_MATERIAL);
-    this.object.castShadow = true;
-    this.object.receiveShadow = true;
+
+    const choices = MODEL_CHOICES[kind];
+    const chosen = choices ? models[choices[Math.floor(rand() * choices.length)]] : undefined;
+    if (chosen) {
+      this.object = instantiate(chosen);
+    } else {
+      // No model for this kind, or the file failed to load: the procedural
+      // prop the game shipped with still works.
+      const mesh = new THREE.Mesh(GEOMETRY_BUILDERS[kind](rand), PROP_MATERIAL);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      this.object = mesh;
+    }
     this.object.position.set(x, y, z);
     this.object.rotation.y = rand() * Math.PI * 2;
     // Per-instance size wobble on top of the per-instance geometry, so even

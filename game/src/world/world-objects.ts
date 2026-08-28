@@ -3,6 +3,7 @@ import { mulberry32 } from "../utils/rng";
 import { getZone, type ZoneId } from "./zones";
 import { WORLD_SIZE, type Terrain } from "./terrain";
 import { ResourceNode, type ResourceNodeKind } from "./resource-node";
+import type { ModelLibrary } from "./models";
 
 // Which resource node(s) spawn in each biome, and how the pick is weighted —
 // a small chance of the "other" zone's staple resource, plus a rarer special
@@ -37,7 +38,11 @@ const CANDIDATE_ATTEMPTS = 900;
 // Uses simple jittered rejection sampling (retry-on-overlap) rather than a
 // full Poisson-disc implementation — sufficient for a bounded, non-streamed
 // MVP world.
-export function scatterResourceNodes(terrain: Terrain, seed: number): ResourceNode[] {
+export function scatterResourceNodes(
+  terrain: Terrain,
+  seed: number,
+  models: ModelLibrary = {},
+): ResourceNode[] {
   const rand = mulberry32(seed ^ 0x51ed270b);
   const nodes: ResourceNode[] = [];
   const half = WORLD_SIZE / 2;
@@ -60,7 +65,7 @@ export function scatterResourceNodes(terrain: Terrain, seed: number): ResourceNo
     const y = terrain.heightAt(x, z);
     // The node builds its own randomised geometry, rotation and scale from
     // this stream, so no two props of a kind come out identical.
-    nodes.push(new ResourceNode(kind, x, y, z, rand));
+    nodes.push(new ResourceNode(kind, x, y, z, rand, models));
   }
 
   return nodes;
