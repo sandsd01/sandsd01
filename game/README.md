@@ -71,17 +71,27 @@ The game is deployed on Vercel from this repo, built straight from source —
 there is no separate build artifact to commit.
 
 The Vercel project is linked to the GitHub repository, so **every push to
-`main` deploys automatically**; a pull request gets its own preview URL. The
-only non-default setting is the root directory, because this is one project
-inside a repo whose root is the unrelated POS app:
+`main` deploys automatically**; a pull request gets its own preview URL.
+
+The wiring lives in `vercel.json` at the **repository root** rather than in the
+dashboard, so it is visible and reviewable with the code:
 
 | Setting | Value |
 | --- | --- |
-| Root Directory | `game` |
+| Install Command | `npm install --prefix game` |
+| Build Command | `npm run build --prefix game` |
+| Output Directory | `game/dist` |
+| Framework | `null` (nothing to detect at the repo root) |
 | Production Branch | `main` |
-| Framework | Vite (auto-detected) |
-| Build Command | `npm run build` (i.e. `tsc -b && vite build`) |
-| Output Directory | `dist` |
+
+The install command is scoped to `game` on purpose: an install at the
+repository root would pull the unrelated POS backend and run its
+`postinstall` (`prisma generate`), neither of which this build needs.
+
+Setting the project's Root Directory to `game` in the dashboard instead works
+just as well — Vercel then auto-detects Vite and ignores the root
+`vercel.json`. Either arrangement builds correctly; the file just means a fresh
+clone deploys without anyone having to configure the dashboard first.
 
 `npm run build` type-checks before bundling, so a type error fails the deploy
 rather than shipping a broken build. Nothing here reads an environment
