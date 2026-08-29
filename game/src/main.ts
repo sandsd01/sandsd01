@@ -26,7 +26,16 @@ import { Water, WATER_LEVEL } from "./world/water";
 import { loadModels } from "./world/models";
 import { createComposer } from "./core/postprocessing";
 
-import { getInteractionPrompt, tryGather } from "./systems/gathering";
+import {
+  GATHER_TIME_MS,
+  aimedNode,
+  canGather,
+  getInteractionPrompt,
+  nearestNode,
+  tryGather,
+} from "./systems/gathering";
+import { Targeting, type Target } from "./systems/targeting";
+import { TargetOutline } from "./world/target-outline";
 import { addItem } from "./systems/inventory";
 import { BuildingSystem } from "./systems/building";
 import { FarmingSystem } from "./systems/farming";
@@ -39,7 +48,7 @@ import { createInitialState, type GameState } from "./state/game-state";
 import { loadSettings } from "./state/settings";
 import { loadBindings, saveBindings } from "./state/keybindings";
 
-import { Hud } from "./ui/hud";
+import { Hud, type CrosshairState } from "./ui/hud";
 import { InventoryPanel } from "./ui/inventory-panel";
 import { CraftingPanel } from "./ui/crafting-panel";
 import { BuildingPanel } from "./ui/building-panel";
@@ -91,6 +100,13 @@ const buildingSystem = new BuildingSystem(scene, terrain, state, models);
 const farmingSystem = new FarmingSystem(scene, terrain, state);
 const enemyManager = new EnemyManager(scene, terrain, state.seed);
 const playerCombat = new PlayerCombat();
+
+// What the crosshair is on, resolved once a frame and shared by every system
+// that used to run its own "nearest thing within a radius" search.
+const targeting = new Targeting();
+const targetOutline = new TargetOutline();
+scene.add(targetOutline.object);
+let target: Target = targeting.getTarget();
 
 const hud = new Hud(uiRoot, state);
 new AudioHooks();
@@ -144,6 +160,9 @@ function togglePanel(target: TogglablePanel): void {
   target.toggle();
 }
 
+// Where the camera pivots and, in first person, where it sits.
+const EYE_HEIGHT = 1.85;
+
 let currentNowMs = 0;
 let respawnScheduled = false;
 
@@ -156,27 +175,75 @@ function scheduleRespawnIfDead(): void {
   }, 2000);
 }
 
-function performPrimaryAction(): void {
-  if (isPlayerDead(state)) return;
-  const feet = player.getFeetPosition();
-  const forward = camera.getForward();
-  player.triggerSwing(currentNowMs);
-  if (buildingSystem.getSelectedBuildingId()) {
-    buildingSystem.tryPlace(feet, forward, currentNowMs);
-  } else {
-    playerCombat.tryAttack(state, enemyManager, feet.x, feet.z, currentNowMs);
+// Held-button gathering. Progress is tracked per node, so drifting the
+// crosshair onto a different tree restarts the swing instead of carrying the
+// first tree's progress over to it.
+let gatherNodeId: string | null = null;
+let gatherProgressMs = 0;
+
+function resetGather(): void {
+  gatherNodeId = null;
+  gatherProgressMs = 0;
+}
+
+// Left mouse, held: work the aimed node, or swing at whatever is there. One
+// hit lands per full ring, matching the node's own hits-to-deplete model —
+// four rings on a tree, four wood.
+function updatePrimaryAction(dtSeconds: number): void {
+  const node = aimedNode(target);
+  if (node && canGather(state, node)) {
+    if (gatherNodeId !== node.id) {
+      gatherNodeId = node.id;
+      gatherProgressMs = 0;
+      player.triggerSwing(currentNowMs);
+    }
+    gatherProgressMs += dtSeconds * 1000;
+    if (gatherProgressMs >= GATHER_TIME_MS) {
+      tryGather(state, node, currentNowMs);
+      gatherProgressMs = 0;
+      // Straight into the next swing, so holding the button reads as a
+      // continuous action rather than a stutter between hits.
+      player.triggerSwing(currentNowMs);
+    }
+    return;
+  }
+
+  resetGather();
+  // Nothing to gather: swing. The swing plays whether or not it connects —
+  // a miss should look like a miss, not like a dead button.
+  if (playerCombat.canAttack(currentNowMs)) {
+    player.triggerSwing(currentNowMs);
+    playerCombat.tryAttack(state, enemyManager, target, currentNowMs);
   }
 }
 
-canvas.addEventListener("mousedown", (e) => {
-  if (e.button !== 0) return;
-  if (!input.isPointerLocked()) return;
-  performPrimaryAction();
-});
+// Right mouse: place the selected piece where the crosshair points, or work
+// the aimed plot. Left destroys/collects, right places/uses — the split every
+// player of this genre already has in their hands.
+function performSecondaryAction(): void {
+  const feet = player.getFeetPosition();
+  if (buildingSystem.getSelectedBuildingId()) {
+    buildingSystem.tryPlace(targeting.aimPoint(feet, camera.getForward()), currentNowMs);
+    return;
+  }
+  if (target.kind === "plot" && target.plot) {
+    farmingSystem.tryInteract(target.plot, selectedSeedItemId, currentNowMs);
+  }
+}
 
 // Browsers block audio until a user gesture; the same click that requests
 // pointer lock doubles as that gesture.
 canvas.addEventListener("click", () => sound.unlock());
+
+// A selected build piece outranks whatever is under the crosshair: while
+// placing, what matters is where the piece lands, not what is standing there.
+function crosshairStateFor(current: Target): CrosshairState {
+  if (buildingSystem.getSelectedBuildingId()) return "place";
+  if (current.kind === "node" || current.kind === "enemy" || current.kind === "plot") {
+    return current.kind;
+  }
+  return "none";
+}
 
 function getCollidables(): Collidable[] {
   const nodeCollidables: Collidable[] = resourceNodes
@@ -202,7 +269,11 @@ const loop = new GameLoop((dt) => {
   const feet = player.getFeetPosition();
   // Re-centre the sun's shadow frustum on the player before anything renders.
   updateSunTarget(sceneRig, dayNight.getSunDirection(), feet);
-  camera.update(feet.clone().add(new THREE.Vector3(0, 1.3, 0)), [terrain.mesh]);
+  // The pivot sits just above the character's head (they are 1.70 tall), not
+  // at chest height. The crosshair ray passes through this point, so a pivot
+  // inside the body put the character between the camera and whatever was
+  // being aimed at — the placement ghost was hidden behind their own head.
+  camera.update(feet.clone().add(new THREE.Vector3(0, EYE_HEIGHT, 0)), [terrain.mesh]);
 
   for (const node of resourceNodes) node.update(currentNowMs);
   farmingSystem.update(currentNowMs);
@@ -214,15 +285,60 @@ const loop = new GameLoop((dt) => {
     });
   }
 
-  const forward = camera.getForward();
-  buildingSystem.update(feet, forward, currentNowMs);
+  // Aiming is resolved after the camera has moved and before anything reads
+  // it, so every system sees the same answer for this frame.
+  target = targeting.update(camera.camera, feet, {
+    nodes: resourceNodes,
+    enemies: enemyManager.getEnemies(),
+    terrain: terrain.mesh,
+    buildings: buildingSystem,
+    state,
+  });
 
   const canAct = !isPlayerDead(state) && !menuOpen;
+  const aim = targeting.aimPoint(feet, camera.getForward());
+  buildingSystem.update(aim, currentNowMs);
+
+  // Mouse: left held works the target, right places/uses. Both are ignored
+  // behind a menu and while dead.
+  // A short click can begin and end between two frames, so the press event
+  // counts as well as the held state — otherwise a quick click to attack would
+  // do nothing at all on a slow machine.
+  const primaryHeld = input.isMouseDown(0) || input.wasMousePressed(0);
+  if (canAct && primaryHeld && input.isPointerLocked()) {
+    updatePrimaryAction(dt);
+  } else {
+    resetGather();
+  }
+  if (canAct && input.wasMousePressed(2)) performSecondaryAction();
+  hud.setActionProgress(gatherNodeId ? gatherProgressMs / GATHER_TIME_MS : 0);
+
+  // The wheel cycles build pieces as it does in Minecraft; zoom moved behind
+  // Ctrl so the bare scroll can mean the thing players reach for it to mean.
+  const wheel = input.takeWheel();
+  if (wheel.delta !== 0) {
+    if (wheel.withCtrl) camera.zoomBy(wheel.delta);
+    else if (canAct) buildHotbar.cycle(wheel.delta > 0 ? 1 : -1);
+  }
+
+  if (input.wasActionPressed("toggleView")) {
+    // The model is doubleSided, so leaving it visible in first person puts the
+    // inside of the character's head across the screen.
+    player.object.visible = !camera.toggleFirstPerson();
+  }
+
+  // The keys keep working, and now prefer whatever is aimed at — aiming is
+  // added on top of what players already knew, not swapped in for it.
+  const keyNode = aimedNode(target) ?? nearestNode(resourceNodes, feet.x, feet.z);
+  const keyPlot = target.kind === "plot" && target.plot
+    ? target.plot
+    : farmingSystem.nearestPlot(feet.x, feet.z);
   if (input.wasActionPressed("gather") && canAct) {
-    tryGather(state, resourceNodes, feet.x, feet.z, currentNowMs);
+    player.triggerSwing(currentNowMs);
+    tryGather(state, keyNode, currentNowMs);
   }
   if (input.wasActionPressed("farm") && canAct) {
-    farmingSystem.tryInteract(feet.x, feet.z, selectedSeedItemId, currentNowMs);
+    farmingSystem.tryInteract(keyPlot, selectedSeedItemId, currentNowMs);
   }
   if (input.wasActionPressed("crafting")) togglePanel(craftingPanel);
   if (input.wasActionPressed("building")) togglePanel(buildingPanel);
@@ -241,10 +357,16 @@ const loop = new GameLoop((dt) => {
   const hotbarSlot = HOTBAR_ACTIONS.findIndex((action) => input.wasActionPressed(action));
   if (hotbarSlot >= 0 && canAct) buildHotbar.selectSlot(hotbarSlot);
 
-  const gatherPrompt = getInteractionPrompt(state, resourceNodes, feet.x, feet.z);
-  const farmPrompt = farmingSystem.getPrompt(feet.x, feet.z, selectedSeedItemId, currentNowMs);
+  const gatherPrompt = getInteractionPrompt(state, keyNode);
+  const farmPrompt = farmingSystem.getPrompt(keyPlot, selectedSeedItemId, currentNowMs);
   const placementPrompt = buildingSystem.getPlacementPrompt();
   hud.setPrompt(placementPrompt ?? gatherPrompt ?? farmPrompt);
+
+  // The outline says which object an action would hit; the crosshair shape
+  // says what kind of thing it is. Neither relies on colour to be read.
+  if (target.object && target.kind !== "ground") targetOutline.surround(target.object);
+  else targetOutline.hide();
+  hud.setCrosshairState(crosshairStateFor(target));
 
   minimap.update(currentNowMs, state, resourceNodes, enemyManager.getEnemies(), (id) =>
     buildingSystem.getMesh(id),
@@ -297,6 +419,22 @@ declare global {
       ) => { height: number; minY: number; terrainY: number } | null;
       getCameraPitch: () => number;
       getCameraDistance: () => number;
+      getCameraYaw: () => number;
+      setCameraYaw: (yaw: number) => void;
+      getAimPoint: () => { x: number; z: number };
+      isFirstPerson: () => boolean;
+      isPlayerVisible: () => boolean;
+      getTarget: () => {
+        kind: string;
+        id: string | null;
+        distance: number;
+        x: number;
+        z: number;
+      };
+      getCrosshairState: () => string;
+      getOutline: () => { visible: boolean; size: [number, number, number] };
+      getSelectedBuilding: () => string | null;
+      getActionProgress: () => number;
       getRenderStats: () => Record<string, unknown>;
       terrainHeightAt: (x: number, z: number) => number;
       getWaterLevel: () => number;
@@ -350,6 +488,37 @@ window.__gameDebug = {
   },
   getCameraPitch: () => camera.pitch,
   getCameraDistance: () => camera.distance,
+  getCameraYaw: () => camera.yaw,
+  setCameraYaw: (yaw) => {
+    camera.yaw = yaw;
+  },
+  getAimPoint: () => {
+    const point = targeting.aimPoint(player.getFeetPosition(), camera.getForward());
+    return { x: Number(point.x.toFixed(2)), z: Number(point.z.toFixed(2)) };
+  },
+  isFirstPerson: () => camera.firstPerson,
+  isPlayerVisible: () => player.object.visible,
+  // Aiming state, read straight off what the frame actually resolved rather
+  // than recomputed — a test that recomputes it can agree with itself while
+  // the game does something else.
+  getTarget: () => ({
+    kind: target.kind,
+    id: target.node?.id ?? target.enemy?.id ?? target.plot?.buildingId ?? null,
+    distance: Number.isFinite(target.distance) ? Number(target.distance.toFixed(2)) : -1,
+    x: Number(target.point.x.toFixed(2)),
+    z: Number(target.point.z.toFixed(2)),
+  }),
+  getCrosshairState: () => crosshairStateFor(target),
+  getOutline: () => ({
+    visible: targetOutline.object.visible,
+    size: targetOutline.object.scale.toArray().map((n) => Number(n.toFixed(2))) as [
+      number,
+      number,
+      number,
+    ],
+  }),
+  getSelectedBuilding: () => buildingSystem.getSelectedBuildingId(),
+  getActionProgress: () => (gatherNodeId ? gatherProgressMs / GATHER_TIME_MS : 0),
   terrainHeightAt: (x, z) => terrain.heightAt(x, z),
   getWaterLevel: () => WATER_LEVEL,
   // Lighting/shadow state, for checking that a visual change actually took

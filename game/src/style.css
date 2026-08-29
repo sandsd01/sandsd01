@@ -214,7 +214,24 @@ body {
   white-space: nowrap;
 }
 
+/* The crosshair carries the aiming state. A 40px box holds the progress ring;
+   the dot itself is drawn with ::before so the ring can sit around it.
+
+   Each state gets its own *shape* — a dot, a square, a diamond, a wide
+   bracket — because colour alone can't be the signal (see CLAUDE.md). The
+   tints only reinforce what the shape already says. */
 .hud-crosshair {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 40px;
+  height: 40px;
+  margin: -20px 0 0 -20px;
+  pointer-events: none;
+}
+
+.hud-crosshair::before {
+  content: "";
   position: absolute;
   top: 50%;
   left: 50%;
@@ -226,6 +243,83 @@ body {
   box-shadow:
     0 0 0 1px rgba(0, 0, 0, 0.45),
     0 0 6px rgba(0, 0, 0, 0.5);
+  transition:
+    width 90ms ease-out,
+    height 90ms ease-out,
+    margin 90ms ease-out,
+    border-radius 90ms ease-out,
+    transform 90ms ease-out;
+}
+
+/* A gatherable node: a square, reading as "something solid to work on". */
+.hud-crosshair.on-node::before {
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.2);
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 255, 255, 0.95),
+    0 0 0 1px rgba(0, 0, 0, 0.55);
+}
+
+/* An enemy: the same square turned on its corner, and tinted with the red
+   already reserved for threats on the mini-map. */
+.hud-crosshair.on-enemy::before {
+  width: 13px;
+  height: 13px;
+  margin: -6.5px 0 0 -6.5px;
+  border-radius: 1px;
+  transform: rotate(45deg);
+  background: rgba(229, 57, 53, 0.3);
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 138, 128, 0.98),
+    0 0 0 1px rgba(0, 0, 0, 0.55);
+}
+
+/* A plot, and a spot where a piece would land: a wide, flat bracket — the
+   shape of ground rather than of a thing. */
+.hud-crosshair.on-plot::before,
+.hud-crosshair.on-place::before {
+  width: 18px;
+  height: 8px;
+  margin: -4px 0 0 -9px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow:
+    inset 0 0 0 2px rgba(160, 226, 140, 0.95),
+    0 0 0 1px rgba(0, 0, 0, 0.55);
+}
+
+/* Gather progress. Hidden until there is progress to show, so the resting
+   crosshair stays a bare dot. */
+.hud-crosshair-ring {
+  position: absolute;
+  inset: 0;
+  width: 40px;
+  height: 40px;
+  opacity: 0;
+  /* Start the sweep at 12 o'clock and run clockwise, which is how a timer is
+     read; SVG's own zero angle is at 3 o'clock. */
+  transform: rotate(-90deg);
+  transition: opacity 120ms ease-out;
+}
+
+.hud-crosshair-ring.visible {
+  opacity: 1;
+}
+
+.hud-crosshair-ring-track {
+  fill: none;
+  stroke: rgba(0, 0, 0, 0.45);
+  stroke-width: 3;
+}
+
+.hud-crosshair-ring-progress {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.95);
+  stroke-width: 3;
+  stroke-linecap: round;
 }
 
 /* --- Controls reference --- */

@@ -8,6 +8,12 @@ export class InputManager {
   private keys = new Set<string>();
   private justPressed = new Set<string>();
   private pointerLocked = false;
+  // Mouse buttons are held state, not just events: the primary action repeats
+  // while the button is down (hold to chop, hold to swing).
+  private mouseDown = new Set<number>();
+  private mouseJustPressed = new Set<number>();
+  private wheelDelta = 0;
+  private wheelWithCtrl = false;
   mouseDeltaX = 0;
   mouseDeltaY = 0;
 
@@ -42,8 +48,35 @@ export class InputManager {
       if (!this.pointerLocked) canvas.requestPointerLock();
     });
 
+    canvas.addEventListener("mousedown", (e) => {
+      // A click that only acquires pointer lock must not also swing: the
+      // player is asking for control of the mouse, not for an action.
+      if (!this.pointerLocked) return;
+      if (!this.mouseDown.has(e.button)) this.mouseJustPressed.add(e.button);
+      this.mouseDown.add(e.button);
+    });
+    window.addEventListener("mouseup", (e) => {
+      this.mouseDown.delete(e.button);
+    });
+    // Right-click is the place/use button; the browser menu would eat it.
+    canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+
+    // The wheel is routed by main.ts: bare scroll cycles the build hotbar
+    // (as in Minecraft), Ctrl+scroll zooms the camera.
+    window.addEventListener(
+      "wheel",
+      (e) => {
+        this.wheelDelta += e.deltaY;
+        this.wheelWithCtrl = e.ctrlKey;
+      },
+      { passive: true },
+    );
+
     document.addEventListener("pointerlockchange", () => {
       this.pointerLocked = document.pointerLockElement === canvas;
+      // Losing the lock (Escape, alt-tab) delivers no mouseup, so a held
+      // button would stay down and keep acting behind an open menu.
+      if (!this.pointerLocked) this.mouseDown.clear();
     });
 
     document.addEventListener("mousemove", (e) => {
@@ -92,6 +125,22 @@ export class InputManager {
     return this.pointerLocked;
   }
 
+  isMouseDown(button: number): boolean {
+    return this.mouseDown.has(button);
+  }
+
+  wasMousePressed(button: number): boolean {
+    return this.mouseJustPressed.has(button);
+  }
+
+  /** Consumes the wheel movement accumulated since the last frame. */
+  takeWheel(): { delta: number; withCtrl: boolean } {
+    const result = { delta: this.wheelDelta, withCtrl: this.wheelWithCtrl };
+    this.wheelDelta = 0;
+    this.wheelWithCtrl = false;
+    return result;
+  }
+
   // Movement as a 2D vector (x = strafe, y = forward/back) in [-1, 1] per
   // axis, derived from WASD key state.
   getMoveVector(): { x: number; y: number } {
@@ -111,6 +160,7 @@ export class InputManager {
   // Call once per frame after all systems have read input for this frame.
   endFrame(): void {
     this.justPressed.clear();
+    this.mouseJustPressed.clear();
     this.mouseDeltaX = 0;
     this.mouseDeltaY = 0;
   }
