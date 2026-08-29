@@ -41,6 +41,14 @@ export interface GameState {
   inventory: InventorySlot[];
   placedBuildings: PlacedBuilding[];
   plots: PlotState[];
+  /**
+   * Recipe ids the player has discovered. A recipe is learned the first time
+   * they hold one of its ingredients, so the crafting panel grows with the
+   * world instead of listing everything from the first minute.
+   */
+  knownRecipes: string[];
+  /** Discovered but not yet looked at — drives the NEW badge in the panel. */
+  unseenRecipes: string[];
 }
 
 export function createInitialState(seedInput: string | number = "romestead"): GameState {
@@ -58,5 +66,12 @@ export function createInitialState(seedInput: string | number = "romestead"): Ga
     ],
     placedBuildings: [],
     plots: [],
+    // Nothing consumes the starting axe, pickaxe or seeds, so discovery alone
+    // would open the panel completely empty. Plank is the one recipe that
+    // turns a raw gathered thing into the input for everything else, so it is
+    // the thread to pull: its row reads "Needs: x Wood 0/2", which says where
+    // to go next. Holding a plank then unlocks the tools and the sword.
+    knownRecipes: ["plank"],
+    unseenRecipes: [],
   };
 }

@@ -6,6 +6,11 @@ export interface ItemDef {
   category: ItemCategory;
   stackSize: number;
   color: number;
+  /**
+   * Health restored when eaten. Only edible items carry it — its presence is
+   * what makes an item edible, so there's no separate flag to keep in step.
+   */
+  heals?: number;
 }
 
 // Content is data, not code: add a new item by adding a row here, not by
@@ -25,12 +30,30 @@ export const ITEMS: Record<string, ItemDef> = {
     color: 0xd4c26a,
   },
   wheat: { id: "wheat", name: "Wheat", category: "crop", stackSize: 99, color: 0xe8c840 },
-  berry: { id: "berry", name: "Berry", category: "resource", stackSize: 99, color: 0x9a2a4a },
+  // Berries are the field snack: picked, not cooked, so they heal a little.
+  berry: {
+    id: "berry",
+    name: "Berry",
+    category: "resource",
+    stackSize: 99,
+    color: 0x9a2a4a,
+    heals: 8,
+  },
   clay: { id: "clay", name: "Clay", category: "resource", stackSize: 99, color: 0x8a5a42 },
   iron_ore: { id: "iron_ore", name: "Iron Ore", category: "resource", stackSize: 99, color: 0x6a5a52 },
   iron_ingot: { id: "iron_ingot", name: "Iron Ingot", category: "resource", stackSize: 99, color: 0xd8d8e0 },
   brick: { id: "brick", name: "Brick", category: "resource", stackSize: 99, color: 0xa85c3a },
   iron_sword: { id: "iron_sword", name: "Iron Sword", category: "tool", stackSize: 1, color: 0xe0e0f0 },
+  iron_axe: { id: "iron_axe", name: "Iron Axe", category: "tool", stackSize: 1, color: 0xc8cad6 },
+  iron_pickaxe: {
+    id: "iron_pickaxe",
+    name: "Iron Pickaxe",
+    category: "tool",
+    stackSize: 1,
+    color: 0xc8cad6,
+  },
+  // What farming is finally for: wheat had no use but growing more wheat.
+  bread: { id: "bread", name: "Bread", category: "crop", stackSize: 99, color: 0xd9a441, heals: 40 },
 };
 
 export function getItem(id: string): ItemDef {

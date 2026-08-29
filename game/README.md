@@ -166,9 +166,64 @@ world.
 Sprinting and jumping draw on **stamina**, which regenerates after a short
 pause; emptying it locks sprinting until it has recovered a quarter of the way.
 
-Most recipes craft anywhere, but **smelting and smithing need a Forge standing
-nearby** — build one from the hotbar first. A recipe that is blocked says so in
-words next to the disabled button rather than just greying out.
+## Crafting
+
+Crafting is **instant** — there is no timer and no queue, by choice. Waiting on
+a progress bar to hand over something you have already paid for is the most
+complained-about pattern in this genre's crafting, and the recipe data no
+longer carries a duration field pretending otherwise.
+
+### Learning recipes
+
+You do not start with the book. A recipe is **learned the first time you hold
+one of its ingredients**, so the panel grows with the world instead of opening
+as a wall of things you cannot make. A new world knows only `Plank` — the one
+recipe that turns a raw gathered thing into the input for everything else, and
+whose row reads `Needs: x Wood 0/2`, which tells you where to go.
+
+Newly learned recipes carry a **NEW** badge that stays until you close the
+panel. The toast that announces them is deliberately a single summary line
+("3 new recipes") rather than one per recipe: the HUD has one toast element
+that overwrites itself, so a burst would leave only the last one readable.
+Once learned, a recipe never disappears — an unaffordable one stays listed and
+says what it is short of.
+
+### Stations
+
+Each station has its own job, and all three now gate something:
+
+| Station | Makes |
+| --- | --- |
+| *(none)* | Plank, Axe, Pickaxe, Sword, Wheat Seeds |
+| **Forge** | Iron Ingot |
+| **Anvil** | Iron Sword |
+| **Workbench** | Iron Axe, Iron Pickaxe, Bread |
+
+A station counts as available within 5 units of where you are standing. A
+recipe blocked by a missing one says so in words next to the disabled button
+rather than just greying out.
+
+### Tools and food
+
+Iron tools are not a nicer label on the same swing: `src/data/tools.ts` gives
+each tool a speed multiplier, and an iron axe fells a tree in 270ms against a
+plain axe's 450ms. The requirement is on the *kind* of tool, not the item id,
+so an upgrade is never a downgrade.
+
+`Bread` is what farming is finally for — wheat previously had no use but
+growing more wheat. Anything with a `heals` value can be eaten from the
+inventory panel.
+
+### Reading a row
+
+A row shows its category glyph, what it makes, and what it costs. An
+ingredient you are short of is marked `x` as well as tinted red: `1/3` and
+`5/2` are the same shape at a glance, so the colour was carrying that on its
+own — which is exactly what the rest of this HUD refuses to do. Filter chips
+narrow by category, and **Craftable now** hides everything you cannot make
+this second. `Craft xN` names the real number it will make, so the cost of
+pressing it is visible before you press it.
+
 A **mini-map** in the bottom-right corner shows the biomes, nearby resources,
 your buildings and any enemies, north-up with a marker for your heading.
 

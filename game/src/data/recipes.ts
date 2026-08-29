@@ -3,15 +3,38 @@ export interface ItemStack {
   qty: number;
 }
 
+// What the crafting panel's filter chips are built from. A recipe belongs to
+// exactly one — the categories are for finding things, and an item that could
+// arguably sit in two would only make the list harder to scan.
+export type RecipeCategory = "materials" | "tools" | "weapons" | "farming" | "food";
+
+export const RECIPE_CATEGORIES: RecipeCategory[] = [
+  "materials",
+  "tools",
+  "weapons",
+  "farming",
+  "food",
+];
+
+export const RECIPE_CATEGORY_LABELS: Record<RecipeCategory, string> = {
+  materials: "Materials",
+  tools: "Tools",
+  weapons: "Weapons",
+  farming: "Farming",
+  food: "Food",
+};
+
 export interface RecipeDef {
   id: string;
   name: string;
   inputs: ItemStack[];
   output: ItemStack;
-  craftTimeMs: number;
+  category: RecipeCategory;
   /**
-   * Building id that must be standing nearby to craft this. Smelting and
-   * smithing need a Forge; everything else is craftable in the field.
+   * Building id that must be standing nearby to craft this. Each station has
+   * its own job: the Forge smelts, the Anvil shapes metal into weapons, and
+   * the Workbench assembles everything else. Anything without one is
+   * craftable in the field.
    */
   requiresStation?: string;
 }
@@ -22,7 +45,7 @@ export const RECIPES: RecipeDef[] = [
     name: "Plank",
     inputs: [{ itemId: "wood", qty: 2 }],
     output: { itemId: "plank", qty: 1 },
-    craftTimeMs: 500,
+    category: "materials",
   },
   {
     id: "axe",
@@ -32,7 +55,7 @@ export const RECIPES: RecipeDef[] = [
       { itemId: "stone", qty: 1 },
     ],
     output: { itemId: "axe", qty: 1 },
-    craftTimeMs: 1500,
+    category: "tools",
   },
   {
     id: "pickaxe",
@@ -42,7 +65,7 @@ export const RECIPES: RecipeDef[] = [
       { itemId: "stone", qty: 2 },
     ],
     output: { itemId: "pickaxe", qty: 1 },
-    craftTimeMs: 1500,
+    category: "tools",
   },
   {
     id: "sword",
@@ -52,21 +75,21 @@ export const RECIPES: RecipeDef[] = [
       { itemId: "stone", qty: 3 },
     ],
     output: { itemId: "sword", qty: 1 },
-    craftTimeMs: 2000,
+    category: "weapons",
   },
   {
     id: "wheat_seed",
     name: "Wheat Seeds (from Wheat)",
     inputs: [{ itemId: "wheat", qty: 1 }],
     output: { itemId: "wheat_seed", qty: 2 },
-    craftTimeMs: 500,
+    category: "farming",
   },
   {
     id: "brick",
     name: "Brick",
     inputs: [{ itemId: "clay", qty: 2 }],
     output: { itemId: "brick", qty: 1 },
-    craftTimeMs: 1000,
+    category: "materials",
   },
   {
     id: "iron_ingot",
@@ -76,7 +99,7 @@ export const RECIPES: RecipeDef[] = [
       { itemId: "wood", qty: 1 },
     ],
     output: { itemId: "iron_ingot", qty: 1 },
-    craftTimeMs: 2000,
+    category: "materials",
     requiresStation: "forge",
   },
   {
@@ -87,8 +110,40 @@ export const RECIPES: RecipeDef[] = [
       { itemId: "plank", qty: 1 },
     ],
     output: { itemId: "iron_sword", qty: 1 },
-    craftTimeMs: 2500,
-    requiresStation: "forge",
+    category: "weapons",
+    // Shaping a blade belongs at the anvil, not in the smelter. This also
+    // gives the anvil a job: it was buildable but gated nothing.
+    requiresStation: "anvil",
+  },
+  {
+    id: "iron_axe",
+    name: "Iron Axe",
+    inputs: [
+      { itemId: "iron_ingot", qty: 2 },
+      { itemId: "plank", qty: 2 },
+    ],
+    output: { itemId: "iron_axe", qty: 1 },
+    category: "tools",
+    requiresStation: "workbench",
+  },
+  {
+    id: "iron_pickaxe",
+    name: "Iron Pickaxe",
+    inputs: [
+      { itemId: "iron_ingot", qty: 2 },
+      { itemId: "plank", qty: 2 },
+    ],
+    output: { itemId: "iron_pickaxe", qty: 1 },
+    category: "tools",
+    requiresStation: "workbench",
+  },
+  {
+    id: "bread",
+    name: "Bread",
+    inputs: [{ itemId: "wheat", qty: 3 }],
+    output: { itemId: "bread", qty: 1 },
+    category: "food",
+    requiresStation: "workbench",
   },
 ];
 

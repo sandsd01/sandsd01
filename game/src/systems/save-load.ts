@@ -1,4 +1,5 @@
 import { createInitialState, type GameState } from "../state/game-state";
+import { learnAllRecipes } from "./crafting";
 import { events } from "../utils/events";
 
 const STORAGE_KEY = "romestead-save-v1";
@@ -39,6 +40,20 @@ function backfillDefaults(state: GameState): void {
   const defaults = createInitialState().player;
   for (const key of Object.keys(defaults) as (keyof typeof defaults)[]) {
     if (typeof state.player[key] !== "number") state.player[key] = defaults[key];
+  }
+
+  // Top-level arrays added later. Anything that iterates them would throw on
+  // an older save, so they have to exist before anything else touches state.
+  if (!Array.isArray(state.placedBuildings)) state.placedBuildings = [];
+  if (!Array.isArray(state.plots)) state.plots = [];
+  if (!Array.isArray(state.unseenRecipes)) state.unseenRecipes = [];
+
+  if (!Array.isArray(state.knownRecipes)) {
+    // A save written before recipes could be discovered belongs to someone who
+    // has always been able to see all of them. Deriving their known set from
+    // what happens to be in their pockets right now would take recipes away
+    // from a player who already had them — so an old save learns everything.
+    learnAllRecipes(state);
   }
 }
 

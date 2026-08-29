@@ -27,9 +27,9 @@ import { loadModels } from "./world/models";
 import { createComposer } from "./core/postprocessing";
 
 import {
-  GATHER_TIME_MS,
   aimedNode,
   canGather,
+  gatherTimeFor,
   getInteractionPrompt,
   nearestNode,
   tryGather,
@@ -37,6 +37,13 @@ import {
 import { Targeting, type Target } from "./systems/targeting";
 import { TargetOutline } from "./world/target-outline";
 import { addItem } from "./systems/inventory";
+import {
+  canCraft,
+  craftMany,
+  discoverFrom,
+  discoverFromInventory,
+  listKnownRecipes,
+} from "./systems/crafting";
 import { BuildingSystem } from "./systems/building";
 import { FarmingSystem } from "./systems/farming";
 import { EnemyManager } from "./systems/enemy-ai";
@@ -56,6 +63,7 @@ import { BuildHotbar, HOTBAR_ACTIONS } from "./ui/build-hotbar";
 import { SettingsPanel } from "./ui/settings-panel";
 import { Minimap } from "./ui/minimap";
 import { AudioHooks } from "./systems/audio-hooks";
+import { events } from "./utils/events";
 import { sound } from "./utils/audio";
 import type { Collidable } from "./utils/collision";
 
@@ -63,6 +71,10 @@ const canvas = document.getElementById("game-canvas") as HTMLCanvasElement;
 const uiRoot = document.getElementById("ui-root") as HTMLElement;
 
 const state = loadGame() ?? createInitialState();
+// A fresh world starts knowing only what its starting kit implies; everything
+// else is learned by picking the ingredient up. A loaded save has already had
+// its known set backfilled by save-load.
+discoverFromInventory(state);
 // Input preferences live outside the save, so they survive a new world.
 const settings = loadSettings();
 const bindings = loadBindings();
@@ -110,6 +122,22 @@ let target: Target = targeting.getTarget();
 
 const hud = new Hud(uiRoot, state);
 new AudioHooks();
+
+// Discovery rides on the inventory rather than on gathering specifically, so a
+// crafted, harvested or granted item all teach equally. One toast per batch of
+// unlocks: the HUD has a single toast element, so announcing each recipe would
+// leave only the last one readable — the exact complaint players have about
+// how Valheim does this. The panel's NEW badge is the durable half.
+events.on("inventory-changed", ({ itemId }) => {
+  const learned = discoverFrom(state, itemId);
+  if (learned.length === 0) return;
+  events.emit("notification", {
+    message:
+      learned.length === 1
+        ? `New recipe: ${learned[0].name}`
+        : `${learned.length} new recipes`,
+  });
+});
 let selectedSeedItemId: string | null = null;
 const inventoryPanel = new InventoryPanel(
   uiRoot,
@@ -122,9 +150,9 @@ const inventoryPanel = new InventoryPanel(
 // Station checks run against wherever the player is standing. Movement is
 // blocked while a menu is open, so the answer can't go stale mid-panel.
 const STATION_RANGE = 5;
-const craftingPanel = new CraftingPanel(uiRoot, state, (buildingId) =>
-  buildingSystem.hasNearby(buildingId, state.player.x, state.player.z, STATION_RANGE),
-);
+const stationCheck = (buildingId: string) =>
+  buildingSystem.hasNearby(buildingId, state.player.x, state.player.z, STATION_RANGE);
+const craftingPanel = new CraftingPanel(uiRoot, state, stationCheck);
 const buildingPanel = new BuildingPanel(uiRoot, buildingSystem, canvas, state);
 const buildHotbar = new BuildHotbar(uiRoot, buildingSystem, canvas, state, bindings);
 const settingsPanel = new SettingsPanel(uiRoot, settings, bindings, input, () => {
@@ -198,7 +226,9 @@ function updatePrimaryAction(dtSeconds: number): void {
       player.triggerSwing(currentNowMs);
     }
     gatherProgressMs += dtSeconds * 1000;
-    if (gatherProgressMs >= GATHER_TIME_MS) {
+    // The swing length depends on the tool in hand, so an iron axe visibly
+    // fills the ring faster than a plain one.
+    if (gatherProgressMs >= gatherTimeFor(state, node)) {
       tryGather(state, node, currentNowMs);
       gatherProgressMs = 0;
       // Straight into the next swing, so holding the button reads as a
@@ -311,7 +341,9 @@ const loop = new GameLoop((dt) => {
     resetGather();
   }
   if (canAct && input.wasMousePressed(2)) performSecondaryAction();
-  hud.setActionProgress(gatherNodeId ? gatherProgressMs / GATHER_TIME_MS : 0);
+  hud.setActionProgress(
+    gatherNodeId ? gatherProgressMs / gatherTimeFor(state, aimedNode(target)) : 0,
+  );
 
   // The wheel cycles build pieces as it does in Minecraft; zoom moved behind
   // Ctrl so the bare scroll can mean the thing players reach for it to mean.
@@ -435,6 +467,13 @@ declare global {
       getOutline: () => { visible: boolean; size: [number, number, number] };
       getSelectedBuilding: () => string | null;
       getActionProgress: () => number;
+      getGatherTime: () => number;
+      getHealth: () => { current: number; max: number };
+      damagePlayer: (amount: number) => void;
+      getKnownRecipes: () => string[];
+      getUnseenRecipes: () => string[];
+      getCraftableRecipes: () => string[];
+      craftRecipe: (recipeId: string, count?: number) => number;
       getRenderStats: () => Record<string, unknown>;
       terrainHeightAt: (x: number, z: number) => number;
       getWaterLevel: () => number;
@@ -518,7 +557,22 @@ window.__gameDebug = {
     ],
   }),
   getSelectedBuilding: () => buildingSystem.getSelectedBuildingId(),
-  getActionProgress: () => (gatherNodeId ? gatherProgressMs / GATHER_TIME_MS : 0),
+  getActionProgress: () =>
+    gatherNodeId ? gatherProgressMs / gatherTimeFor(state, aimedNode(target)) : 0,
+  // The swing length for whatever is aimed at, so a test can prove an iron
+  // tool is actually faster rather than inferring it from the tier name.
+  getGatherTime: () => gatherTimeFor(state, aimedNode(target)),
+  // Crafting had no debug surface at all, so every crafting test had to drive
+  // the DOM and none could check discovery, which has no DOM of its own.
+  getHealth: () => ({ current: state.player.health, max: state.player.maxHealth }),
+  damagePlayer: (amount) => damagePlayer(state, amount),
+  getKnownRecipes: () => listKnownRecipes(state).map((recipe) => recipe.id),
+  getUnseenRecipes: () => [...state.unseenRecipes],
+  getCraftableRecipes: () =>
+    listKnownRecipes(state)
+      .filter((recipe) => canCraft(state, recipe.id, stationCheck))
+      .map((recipe) => recipe.id),
+  craftRecipe: (recipeId, count = 1) => craftMany(state, recipeId, count, stationCheck),
   terrainHeightAt: (x, z) => terrain.heightAt(x, z),
   getWaterLevel: () => WATER_LEVEL,
   // Lighting/shadow state, for checking that a visual change actually took
