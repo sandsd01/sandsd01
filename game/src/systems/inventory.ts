@@ -1,4 +1,5 @@
 import { getItem } from "../data/items";
+import { healPlayer } from "../player/player-state";
 import type { GameState, InventorySlot } from "../state/game-state";
 import { events } from "../utils/events";
 
@@ -53,5 +54,22 @@ export function removeItem(state: GameState, itemId: string, qty: number): boole
   state.inventory = state.inventory.filter((slot) => slot.qty > 0);
 
   events.emit("inventory-changed", { itemId });
+  return true;
+}
+
+// Eats one of an edible item, healing the player. Edibility is the presence of
+// `heals` on the item — there is no separate flag that could fall out of step
+// with it.
+export function consumeItem(state: GameState, itemId: string): boolean {
+  const def = getItem(itemId);
+  if (def.heals === undefined) return false;
+  if (!hasQty(state, itemId, 1)) return false;
+  if (state.player.health >= state.player.maxHealth) {
+    events.emit("notification", { message: "Already at full health" });
+    return false;
+  }
+  removeItem(state, itemId, 1);
+  const healed = healPlayer(state, def.heals);
+  events.emit("notification", { message: `Ate ${def.name} (+${healed} health)` });
   return true;
 }

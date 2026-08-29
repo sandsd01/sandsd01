@@ -491,15 +491,150 @@ body {
   color: var(--ink-dim);
 }
 
-/* Have/need counts (see ui/cost-line.ts). The numbers carry the information
-   on their own; colour is redundant reinforcement so a shortfall is scannable
-   without reading every row. */
+/* Have/need counts (see ui/cost-line.ts). A shortfall is marked with a glyph
+   as well as tinted: "1/3" and "5/2" are the same shape at a glance, so the
+   colour was doing the work on its own — which is exactly what the rest of
+   this HUD refuses to do. Tabular figures keep the columns of numbers from
+   jittering between rows. */
+.cost-ok,
+.cost-short {
+  font-variant-numeric: tabular-nums;
+}
+
 .cost-ok {
   color: #b9d99a;
 }
 
 .cost-short {
   color: #ef968f;
+}
+
+.cost-mark {
+  margin-right: 3px;
+  font-weight: 700;
+}
+
+/* --- Crafting panel: filters, search and batch --- */
+
+.panel-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 10px;
+}
+
+.panel .panel-chip {
+  padding: 4px 9px;
+  font-size: 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--edge);
+  color: var(--ink-dim);
+  cursor: pointer;
+}
+
+.panel .panel-chip:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* The active filter is marked by weight and a gold rule as well as by fill,
+   so which one is on does not depend on telling two greys apart. */
+.panel .panel-chip.selected {
+  background: rgba(216, 180, 90, 0.18);
+  border-color: var(--gold);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.panel-controls {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.panel-search {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 9px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--ink);
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--edge);
+  border-radius: 7px;
+}
+
+.panel-search::placeholder {
+  color: rgba(244, 238, 226, 0.4);
+}
+
+.panel .panel-toggle {
+  flex: none;
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--edge);
+  color: var(--ink-dim);
+  cursor: pointer;
+}
+
+.panel .panel-toggle.selected {
+  background: rgba(216, 180, 90, 0.18);
+  border-color: var(--gold);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.panel-row-main {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.panel-row-icon {
+  flex: none;
+  color: var(--ink-dim);
+}
+
+/* Block, not flex: a flexed badge next to a title that wraps to two lines gets
+   pushed to the far edge of the row, adrift from the name it belongs to. Inline
+   flow keeps it hard against the last word. */
+.panel-row-heading {
+  display: block;
+}
+
+/* A recipe you have just learned stays marked until you close the panel — a
+   toast that has already faded is no help when you finally come looking. */
+.panel-badge {
+  display: inline-block;
+  margin-left: 6px;
+  vertical-align: 1px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--gold);
+  color: #23180a;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.panel-row-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: none;
+}
+
+.panel-batch {
+  font-variant-numeric: tabular-nums;
+}
+
+.panel-empty {
+  margin: 12px 2px;
+  font-size: 12px;
+  color: var(--ink-dim);
 }
 
 .panel button {

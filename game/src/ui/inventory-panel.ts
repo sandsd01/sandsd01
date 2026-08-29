@@ -1,4 +1,5 @@
 import { getItem } from "../data/items";
+import { consumeItem } from "../systems/inventory";
 import type { GameState } from "../state/game-state";
 import { events } from "../utils/events";
 import { el } from "./dom";
@@ -21,7 +22,7 @@ export class InventoryPanel {
     const hint = el(
       "p",
       "panel-hint",
-      "Click a seed to select it for planting. Press I to close.",
+      "Click a seed to select it for planting, or eat food to heal. Press I to close.",
     );
     this.panel.appendChild(hint);
     root.appendChild(this.panel);
@@ -56,6 +57,17 @@ export class InventoryPanel {
         info.appendChild(el("span", "panel-row-title", def.name));
         info.appendChild(el("span", "panel-row-sub", `x${slot.qty}`));
         row.appendChild(info);
+
+        // Anything with `heals` can be eaten from here — the only place the
+        // player can spend food, and what finally gives wheat somewhere to go.
+        if (def.heals !== undefined) {
+          const eat = el("button", undefined, "Eat");
+          eat.addEventListener("click", () => {
+            consumeItem(this.state, def.id);
+            this.render();
+          });
+          row.appendChild(eat);
+        }
 
         if (def.category === "seed") {
           const button = el("button", undefined, selected === def.id ? "Selected" : "Select");
