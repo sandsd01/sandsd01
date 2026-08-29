@@ -101,15 +101,52 @@ there is no deploy-time configuration to keep in sync.
 ## Controls
 
 - `WASD` — move, `Shift` — sprint, `Space` — jump, mouse — look
-- `E` — gather from the nearest tree/rock, or interact
+- **Left mouse (hold)** — chop/mine whatever the crosshair is on, or swing at it
+- **Right mouse** — place the selected build piece, or plant/harvest the aimed plot
+- Scroll — cycle the build hotbar, `Ctrl`+scroll — zoom the camera
+- `F5` or `V` — switch between third and first person
+- `E` — gather what you're aiming at, falling back to the nearest node in range
 - `F` — plant a selected seed into a farm plot / harvest a ready crop
-- Left-click — attack the nearest enemy in range, or place a selected building
 - `1`–`8` — pick a build piece straight from the hotbar (press again to cancel)
 - `Q` — cancel building placement
 - `C` — crafting, `B` — building menu, `Tab` or `I` — inventory (select seeds here)
 - `Esc` — close the open menu, or open Options when nothing is open
 
-Scroll to zoom. Click the canvas to lock the pointer for mouse-look.
+Click the canvas to lock the pointer for mouse-look.
+
+### Aiming
+
+Everything you can act on is chosen by **what the crosshair is on**, not by what
+happens to be nearest — the convention this genre runs on. One raycast a frame
+(`src/systems/targeting.ts`) answers "what is the player looking at?", and
+gathering, combat, farming and placement all read that one answer.
+
+Three details make it behave rather than merely work:
+
+- **Reach is measured from the character, not the camera.** In third person the
+  ray starts several units behind them, so a camera-relative reach would let you
+  chop a tree standing at your back. Anything past 5 units, or on the wrong side
+  of the player, is not a target.
+- **Aim assist is a distance, not a cone.** A target within a metre of the line
+  of sight can be picked when the ray slips past it. A fixed angle measured from
+  a camera that sits behind the player is both too tight far away and too loose
+  up close.
+- **Ground never wins over something you can use.** Terrain is under the
+  crosshair almost always, so it is the last thing considered, not the first.
+
+What you're aiming at gets a wireframe box around it, the crosshair changes
+shape for it (square = resource, diamond = enemy, bracket = ground or plot), and
+holding the button fills a ring around the crosshair — one full ring per hit, so
+a four-hit tree is four rings.
+
+The camera pivots just above the character's head rather than at their chest, so
+the crosshair line clears their body — otherwise you'd be aiming through your own
+head and the placement ghost would sit behind it. The character still stands at
+screen centre in third person, so first person (`F5`/`V`) is the precise mode.
+
+**Mouse buttons are not rebindable.** Bindings are stored as
+`KeyboardEvent.code` only; supporting mouse buttons means widening that type,
+which is a separate change rather than something to slip in here.
 
 These follow the conventions of the genre rather than inventing new ones, so
 the bindings a player arrives with mostly work: `Space` jumps, `Esc` backs out

@@ -10,7 +10,6 @@ import { events } from "../utils/events";
 import { merge, paint, placed } from "../world/geometry";
 import { instantiate, type ModelLibrary, type ModelName } from "../world/models";
 
-const PLACEMENT_DISTANCE = 3;
 const VALID_COLOR = 0x4caf50;
 const INVALID_COLOR = 0xe53935;
 const POP_IN_MS = 220;
@@ -150,10 +149,11 @@ export class BuildingSystem {
     this.scene.add(this.ghost);
   }
 
-  private anchorCellFor(playerPos: THREE.Vector3, forward: THREE.Vector3): Cell {
-    const targetX = playerPos.x + forward.x * PLACEMENT_DISTANCE;
-    const targetZ = playerPos.z + forward.z * PLACEMENT_DISTANCE;
-    return worldToCell(targetX, targetZ);
+  // The anchor is the grid cell under the crosshair, not a fixed distance
+  // ahead of the player: aiming is how a piece gets put somewhere specific,
+  // which is what made building awkward before.
+  private anchorCellFor(aim: { x: number; z: number }): Cell {
+    return worldToCell(aim.x, aim.z);
   }
 
   // Returns null when valid, or the reason it isn't — used both to color the
@@ -181,18 +181,18 @@ export class BuildingSystem {
     const def = getBuilding(this.selectedBuildingId);
     if (this.ghostValid) {
       const costText = def.cost.map((c) => `${c.qty} ${c.itemId}`).join(", ");
-      return `Left-click to place ${def.name} (${costText})`;
+      return `Right-click to place ${def.name} (${costText})`;
     }
     if (this.invalidReason === "occupied") return "Can't place here — space is occupied";
     return "Can only build in the open area near spawn";
   }
 
-  update(playerPos: THREE.Vector3, forward: THREE.Vector3, nowMs: number): void {
+  update(aim: { x: number; z: number }, nowMs: number): void {
     this.updatePopIns(nowMs);
 
     if (!this.selectedBuildingId || !this.ghost) return;
     const def = getBuilding(this.selectedBuildingId);
-    const anchor = this.anchorCellFor(playerPos, forward);
+    const anchor = this.anchorCellFor(aim);
     const worldX = anchor.x * GRID_CELL_SIZE;
     const worldZ = anchor.z * GRID_CELL_SIZE;
     const y = this.terrain.heightAt(worldX, worldZ);
@@ -205,10 +205,10 @@ export class BuildingSystem {
     );
   }
 
-  tryPlace(playerPos: THREE.Vector3, forward: THREE.Vector3, nowMs: number): boolean {
+  tryPlace(aim: { x: number; z: number }, nowMs: number): boolean {
     if (!this.selectedBuildingId) return false;
     const def = getBuilding(this.selectedBuildingId);
-    const anchor = this.anchorCellFor(playerPos, forward);
+    const anchor = this.anchorCellFor(aim);
     if (!this.isPlacementValid(def, anchor)) return false;
 
     for (const cost of def.cost) {

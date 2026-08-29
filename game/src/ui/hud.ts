@@ -29,7 +29,19 @@ const ITEM_COLORS: Record<string, number> = {
   wheat: 0xe8c840,
 };
 
+const SVG_NS = "http://www.w3.org/2000/svg";
+const RING_RADIUS = 15;
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+
+// Crosshair states, in the order the HUD prefers them. "none" is the resting
+// dot; the rest each get their own shape in style.css.
+export type CrosshairState = "none" | "node" | "enemy" | "plot" | "place";
+
 export class Hud {
+  private readonly crosshair: HTMLDivElement;
+  private readonly crosshairRing: SVGSVGElement;
+  private readonly crosshairProgress: SVGCircleElement;
+  private crosshairState: CrosshairState = "none";
   private readonly healthFill: HTMLDivElement;
   private readonly staminaFill: HTMLDivElement;
   private readonly resourceRow: HTMLDivElement;
@@ -70,7 +82,29 @@ export class Hud {
     this.prompt = el("div", "hud-prompt");
     this.prompt.style.display = "none";
 
-    const crosshair = el("div", "hud-crosshair");
+    // The crosshair is the game's main affordance now that aiming decides what
+    // you act on: it changes shape by target kind, and carries the gather
+    // progress ring. Shape and the ring do the work — colour only reinforces
+    // them, so nothing here is readable by colour alone.
+    this.crosshair = el("div", "hud-crosshair");
+    this.crosshairRing = document.createElementNS(SVG_NS, "svg");
+    this.crosshairRing.setAttribute("class", "hud-crosshair-ring");
+    this.crosshairRing.setAttribute("viewBox", "0 0 40 40");
+    const track = document.createElementNS(SVG_NS, "circle");
+    track.setAttribute("class", "hud-crosshair-ring-track");
+    const progress = document.createElementNS(SVG_NS, "circle");
+    progress.setAttribute("class", "hud-crosshair-ring-progress");
+    for (const circle of [track, progress]) {
+      circle.setAttribute("cx", "20");
+      circle.setAttribute("cy", "20");
+      circle.setAttribute("r", String(RING_RADIUS));
+    }
+    progress.setAttribute("stroke-dasharray", String(RING_CIRCUMFERENCE));
+    progress.setAttribute("stroke-dashoffset", String(RING_CIRCUMFERENCE));
+    this.crosshairRing.append(track, progress);
+    this.crosshairProgress = progress;
+    this.crosshair.appendChild(this.crosshairRing);
+    const crosshair = this.crosshair;
 
     this.keybinds = el("div", "hud-keybinds");
 
@@ -122,9 +156,10 @@ export class Hud {
     this.keybinds.innerHTML =
       `<div>${cap("moveForward")}${cap("moveLeft")}${cap("moveBack")}${cap("moveRight")} move · ` +
       `${cap("sprint")} sprint · ${cap("jump")} jump</div>` +
-      "<div>Mouse look (click to lock) · Scroll to zoom</div>" +
-      `<div>${cap("gather")} gather · ${cap("farm")} plant/harvest · <kbd>Click</kbd> attack</div>` +
-      `<div>${cap("hotbar1")}–${cap("hotbar8")} pick a build piece · ${cap("cancelBuild")} cancel</div>` +
+      `<div>Mouse look (click to lock) · ${cap("toggleView")} view</div>` +
+      "<div><kbd>LMB</kbd> gather/attack · <kbd>RMB</kbd> place/use</div>" +
+      `<div>${cap("gather")} gather · ${cap("farm")} plant/harvest</div>` +
+      `<div>${cap("hotbar1")}–${cap("hotbar8")} or scroll to pick a piece · ${cap("cancelBuild")} cancel</div>` +
       `<div>${cap("crafting")} craft · ${cap("building")} build · ` +
       `${cap("inventory")} inventory · ${cap("options")} options</div>`;
   }
@@ -165,6 +200,26 @@ export class Hud {
       this.timePhase = phase;
       this.timeIcon.innerHTML = iconSvg(phase);
     }
+  }
+
+  // Called every frame with what the crosshair is over. Kept idempotent so the
+  // per-frame call doesn't thrash the class list.
+  setCrosshairState(state: CrosshairState): void {
+    if (this.crosshairState === state) return;
+    this.crosshair.classList.remove(`on-${this.crosshairState}`);
+    this.crosshairState = state;
+    this.crosshair.classList.add(`on-${state}`);
+  }
+
+  // progress is 0..1; anything at or below 0 hides the ring entirely rather
+  // than leaving an empty circle sitting under the crosshair.
+  setActionProgress(progress: number): void {
+    const clamped = Math.max(0, Math.min(1, progress));
+    this.crosshairRing.classList.toggle("visible", clamped > 0);
+    this.crosshairProgress.setAttribute(
+      "stroke-dashoffset",
+      String(RING_CIRCUMFERENCE * (1 - clamped)),
+    );
   }
 
   setPrompt(text: string | null): void {

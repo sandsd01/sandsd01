@@ -101,6 +101,20 @@ export class BuildHotbar {
     );
   }
 
+  // Scrolling steps through the slots, as it does in Minecraft. Unlike the
+  // number keys this doesn't skip pieces the player can't afford — the wheel
+  // is how you browse what's there, and a disabled slot still shows its cost.
+  cycle(direction: number): void {
+    if (this.ids.length === 0) return;
+    const selected = this.buildingSystem.getSelectedBuildingId();
+    const current = selected === null ? -1 : this.ids.indexOf(selected);
+    // From nothing selected, scrolling forward starts at the first slot and
+    // scrolling back starts at the last.
+    const start = current === -1 ? (direction > 0 ? 0 : this.ids.length - 1) : current + direction;
+    const next = ((start % this.ids.length) + this.ids.length) % this.ids.length;
+    this.buildingSystem.selectBuilding(this.ids[next]);
+  }
+
   // Redraws the key badges after a rebind, so a slot never advertises a key
   // that no longer selects it.
   setBindings(bindings: Bindings): void {

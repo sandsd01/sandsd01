@@ -40,7 +40,9 @@ export class FarmingSystem {
     this.unsubscribe();
   }
 
-  private findNearestPlot(x: number, z: number): PlotState | null {
+  // The fallback for the farm *key*, mirroring gathering: the crosshair is the
+  // primary way to pick a bed, but F while standing on one should still work.
+  nearestPlot(x: number, z: number): PlotState | null {
     let nearest: PlotState | null = null;
     let nearestDist = INTERACT_RANGE;
     for (const plot of this.state.plots) {
@@ -66,19 +68,17 @@ export class FarmingSystem {
     return plot.cropId !== null && this.growthProgress(plot, nowMs) >= 1;
   }
 
-  getPrompt(x: number, z: number, selectedSeedItemId: string | null, nowMs: number): string | null {
-    const plot = this.findNearestPlot(x, z);
+  getPrompt(plot: PlotState | null, selectedSeedItemId: string | null, nowMs: number): string | null {
     if (!plot) return null;
     if (plot.cropId === null) {
       if (!selectedSeedItemId) return "Select a seed to plant here";
-      return `Press F to plant ${selectedSeedItemId}`;
+      return `Right-click to plant ${selectedSeedItemId}`;
     }
-    if (this.isReadyToHarvest(plot, nowMs)) return "Press F to harvest";
+    if (this.isReadyToHarvest(plot, nowMs)) return "Right-click to harvest";
     return "Growing...";
   }
 
-  tryInteract(x: number, z: number, selectedSeedItemId: string | null, nowMs: number): void {
-    const plot = this.findNearestPlot(x, z);
+  tryInteract(plot: PlotState | null, selectedSeedItemId: string | null, nowMs: number): void {
     if (!plot) return;
 
     if (plot.cropId === null) {
