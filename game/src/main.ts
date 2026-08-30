@@ -120,6 +120,33 @@ scene.add(player.object);
 
 const resourceNodes = scatterResourceNodes(terrain, state.seed, models);
 addNodesToScene(scene, resourceNodes);
+
+// Put back how far each node had been worked. Node ids come from a counter
+// that restarts at 0 on every page load and `scatterResourceNodes` is
+// deterministic from the seed, so the same node gets the same id each boot —
+// this depends on scattering exactly once per page, which is the case here.
+// Unknown ids are skipped so a save from a different seed or an older node mix
+// degrades to "untouched" rather than throwing.
+for (const node of resourceNodes) {
+  const saved = state.nodes[node.id];
+  if (saved) node.restore(saved);
+}
+
+/**
+ * Saves the game, first copying live node progress into the state object.
+ * Nodes are the one system whose state lives on scene objects rather than in
+ * `state`, so it has to be collected at the moment of saving — routing every
+ * save through here is what stops one of the three call sites forgetting to.
+ */
+function persist(): void {
+  const nodes: GameState["nodes"] = {};
+  for (const node of resourceNodes) {
+    const saved = node.serialise();
+    if (saved) nodes[node.id] = saved;
+  }
+  state.nodes = nodes;
+  saveGame(state);
+}
 scene.add(createGrass(terrain, state.seed));
 
 const water = new Water();
@@ -377,6 +404,14 @@ const loop = new GameLoop((dt) => {
     });
   }
 
+  // Also checked here, every frame, and deliberately outside the guard above.
+  // The enemy callback used to be the only caller, but it sits inside a branch
+  // that is skipped precisely when the player is dead — so a save written at
+  // 0 HP (autosave runs every 10s, and the respawn window is only 2s) loaded
+  // with nothing able to revive it, and no way out from inside the game. The
+  // function early-returns unless the player is dead and no respawn is pending.
+  scheduleRespawnIfDead();
+
   // Aiming is resolved after the camera has moved and before anything reads
   // it, so every system sees the same answer for this frame.
   target = targeting.update(camera.camera, feet, {
@@ -491,8 +526,8 @@ requestAnimationFrame(() => {
   window.setTimeout(() => splash.remove(), 500);
 });
 
-window.setInterval(() => saveGame(state), 10_000);
-window.addEventListener("beforeunload", () => saveGame(state));
+window.setInterval(persist, 10_000);
+window.addEventListener("beforeunload", persist);
 
 // Exposed for headless smoke-testing (see game/README.md verification section).
 declare global {
@@ -508,6 +543,9 @@ declare global {
       getResourceNodes: () => { id: string; kind: string; x: number; z: number; depleted: boolean }[];
       getTimeOfDay: () => number;
       setTimeOfDayFraction: (fraction: number) => void;
+      advanceClockMs: (ms: number) => void;
+      depleteNode: (nodeId: string) => { hits: number; depleted: boolean } | null;
+      getNodeState: (nodeId: string) => { hits: number; depleted: boolean } | null;
       getPlayerRig: () => { clip: string; clips: number; skinned: number };
       getStamina: () => { current: number; max: number };
       getRigFingerprint: () => number;
@@ -603,6 +641,21 @@ window.__gameDebug = {
     })),
   getTimeOfDay: () => dayNight.getTimeOfDay(currentNowMs),
   setTimeOfDayFraction: (fraction) => clock.setElapsed(DAY_LENGTH_MS * fraction),
+  // Push the world clock forward without waiting it out. Respawn timers run on
+  // this clock, so a test can check one without a 35-second sleep.
+  advanceClockMs: (ms) => clock.setElapsed(clock.now() + ms),
+  // Chop a node out from under the test rather than driving the mouse for it:
+  // software rendering makes a real hold-to-gather take most of a minute.
+  depleteNode: (nodeId) => {
+    const node = resourceNodes.find((n) => n.id === nodeId);
+    if (!node) return null;
+    while (!node.depleted) node.hit(clock.now());
+    return { hits: node.hitsRemaining, depleted: node.depleted };
+  },
+  getNodeState: (nodeId) => {
+    const node = resourceNodes.find((n) => n.id === nodeId);
+    return node ? { hits: node.hitsRemaining, depleted: node.depleted } : null;
+  },
   getPlayerRig: () => player.getAnimationState(),
   getStamina: () => ({ current: state.player.stamina, max: state.player.maxStamina }),
   getRigFingerprint: () => player.getRigFingerprint(),
@@ -676,7 +729,7 @@ window.__gameDebug = {
   getHeldDamage: () => heldDamage(state),
   depositToContainer: (buildingId, itemId, qty) => deposit(state, buildingId, itemId, qty),
   withdrawFromContainer: (buildingId, itemId, qty) => withdraw(state, buildingId, itemId, qty),
-  saveNow: () => saveGame(state),
+  saveNow: () => persist(),
   // Read off the rendered hand rather than off state, so a test can tell
   // "the game thinks you hold an axe" from "an axe is actually on the arm".
   getHeldItemMesh: () => player.getHeldItem(),
