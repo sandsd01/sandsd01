@@ -1,5 +1,6 @@
 import { createInitialState, type GameState } from "../state/game-state";
 import { learnAllRecipes } from "./crafting";
+import { assignFromInventory, normaliseHotbar } from "./equipment";
 import { events } from "../utils/events";
 
 const STORAGE_KEY = "romestead-save-v1";
@@ -47,6 +48,14 @@ function backfillDefaults(state: GameState): void {
   if (!Array.isArray(state.placedBuildings)) state.placedBuildings = [];
   if (!Array.isArray(state.plots)) state.plots = [];
   if (!Array.isArray(state.unseenRecipes)) state.unseenRecipes = [];
+  if (!state.containers || typeof state.containers !== "object") state.containers = {};
+
+  // A save written before the hotbar existed comes back with none. Fill it
+  // from what they are already carrying rather than handing them an empty bar
+  // and no way to hold the axe they have had all along.
+  const hadHotbar = Array.isArray(state.hotbar);
+  normaliseHotbar(state);
+  if (!hadHotbar) assignFromInventory(state);
 
   if (!Array.isArray(state.knownRecipes)) {
     // A save written before recipes could be discovered belongs to someone who

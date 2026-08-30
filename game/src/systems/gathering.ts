@@ -2,7 +2,7 @@ import type { GameState } from "../state/game-state";
 import type { ResourceNode } from "../world/resource-node";
 import type { Target } from "./targeting";
 import { addItem } from "./inventory";
-import { bestToolSpeed, TOOL_KIND_NAMES, type ToolKind } from "../data/tools";
+import { heldToolSpeed, TOOL_KIND_NAMES, type ToolKind } from "../data/tools";
 import { indefinite } from "../utils/text";
 import { events } from "../utils/events";
 
@@ -62,7 +62,7 @@ export function gatherTimeFor(state: GameState, node: ResourceNode | null): numb
   if (!node) return GATHER_TIME_MS;
   const kind = REQUIRED_TOOL[node.config.kind];
   if (!kind) return GATHER_TIME_MS;
-  const speed = bestToolSpeed(state, kind);
+  const speed = heldToolSpeed(state, kind);
   return GATHER_TIME_MS * (speed ?? 1);
 }
 
@@ -72,8 +72,10 @@ export function getInteractionPrompt(state: GameState, node: ResourceNode | null
   if (!node) return null;
   const verb = GATHER_VERB[node.config.kind] ?? "gather";
   const kind = REQUIRED_TOOL[node.config.kind];
-  if (kind && bestToolSpeed(state, kind) === null) {
-    return `Need ${indefinite(TOOL_KIND_NAMES[kind])} to ${verb} this`;
+  if (kind && heldToolSpeed(state, kind) === null) {
+    // "Hold", not "Need": the player may well own an axe and simply have a
+    // sword in hand, and the prompt should name the thing to do about it.
+    return `Hold ${indefinite(TOOL_KIND_NAMES[kind])} to ${verb} this`;
   }
   return `Hold left click to ${verb}`;
 }
@@ -83,16 +85,16 @@ export function getInteractionPrompt(state: GameState, node: ResourceNode | null
 export function canGather(state: GameState, node: ResourceNode | null): boolean {
   if (!node) return false;
   const kind = REQUIRED_TOOL[node.config.kind];
-  return !kind || bestToolSpeed(state, kind) !== null;
+  return !kind || heldToolSpeed(state, kind) !== null;
 }
 
 export function tryGather(state: GameState, node: ResourceNode | null, nowMs: number): void {
   if (!node) return;
 
   const kind = REQUIRED_TOOL[node.config.kind];
-  if (kind && bestToolSpeed(state, kind) === null) {
+  if (kind && heldToolSpeed(state, kind) === null) {
     events.emit("notification", {
-      message: `You need ${indefinite(TOOL_KIND_NAMES[kind])} for this`,
+      message: `Hold ${indefinite(TOOL_KIND_NAMES[kind])} to do this`,
     });
     return;
   }

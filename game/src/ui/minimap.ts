@@ -55,6 +55,7 @@ export class Minimap {
     nodes: ResourceNode[],
     enemies: Enemy[],
     buildingMesh: (id: string) => THREE.Object3D | undefined,
+    landmarks: { x: number; z: number }[] = [],
   ): void {
     const ctx = this.ctx;
     if (!ctx) return;
@@ -109,6 +110,22 @@ export class Minimap {
 
     // Enemies read as the one urgent thing on the map, so they get the only
     // outlined marker as well as the only red.
+    // Landmarks get an outlined triangle: a shape nothing else on the map
+    // uses, so which blip is which never depends on telling two tints apart.
+    for (const landmark of landmarks) {
+      const p = toMap(landmark.x, landmark.z);
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y - 5);
+      ctx.lineTo(p.x + 4.5, p.y + 3.5);
+      ctx.lineTo(p.x - 4.5, p.y + 3.5);
+      ctx.closePath();
+      ctx.fillStyle = "#f4eee2";
+      ctx.fill();
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = "rgba(20, 17, 14, 0.8)";
+      ctx.stroke();
+    }
+
     for (const enemy of enemies) {
       const p = toMap(enemy.object.position.x, enemy.object.position.z);
       ctx.beginPath();

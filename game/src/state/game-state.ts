@@ -49,6 +49,21 @@ export interface GameState {
   knownRecipes: string[];
   /** Discovered but not yet looked at — drives the NEW badge in the panel. */
   unseenRecipes: string[];
+  /**
+   * The eight quick slots, holding **item ids rather than inventory indices**.
+   * `removeItem` rebuilds `inventory` as a filtered copy every time anything
+   * is spent, so an index stored here would quietly come to point at a
+   * different item.
+   */
+  hotbar: (string | null)[];
+  /** Which of those slots is in hand. */
+  equippedSlot: number;
+  /**
+   * Contents of each placed container, keyed by `PlacedBuilding.id`. Kept out
+   * of the building record so a barrel with things in it is still just a
+   * building to everything that places and draws them.
+   */
+  containers: Record<string, InventorySlot[]>;
 }
 
 export function createInitialState(seedInput: string | number = "romestead"): GameState {
@@ -73,5 +88,10 @@ export function createInitialState(seedInput: string | number = "romestead"): Ga
     // to go next. Holding a plank then unlocks the tools and the sword.
     knownRecipes: ["plank"],
     unseenRecipes: [],
+    // Seeded from the starting kit by equipment.ts, so the player begins
+    // holding their axe rather than holding nothing.
+    hotbar: [null, null, null, null, null, null, null, null],
+    equippedSlot: 0,
+    containers: {},
   };
 }

@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { ValueNoise2D } from "./noise";
-import { getZone, ZONE_GROUND_COLOR } from "./zones";
+import { getZone, initZones, ZONE_GROUND_COLOR } from "./zones";
 
 // MVP world is a single fixed-size heightmap plane (not infinite/streamed).
 export const WORLD_SIZE = 200;
@@ -23,6 +23,9 @@ export class Terrain {
 
   constructor(seed: number) {
     this.noise = new ValueNoise2D(seed);
+    // Zone boundaries are warped from the same seed, and every getZone caller
+    // below (and in world-objects/building) runs after this.
+    initZones(seed);
 
     const geometry = new THREE.PlaneGeometry(WORLD_SIZE, WORLD_SIZE, SEGMENTS, SEGMENTS);
     geometry.rotateX(-Math.PI / 2);

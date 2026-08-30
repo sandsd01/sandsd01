@@ -24,6 +24,8 @@ export class EventBus<Events extends object> {
 
 export interface GameEvents {
   "inventory-changed": { itemId: string };
+  "equipped-changed": { itemId: string | null };
+  "container-changed": { buildingId: string };
   "player-health-changed": { current: number; max: number };
   "player-stamina-changed": { current: number; max: number };
   "player-damaged": { amount: number };

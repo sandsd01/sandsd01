@@ -1,5 +1,6 @@
 import { getItem } from "../data/items";
 import { consumeItem } from "../systems/inventory";
+import { assignToSlot } from "../systems/equipment";
 import type { GameState } from "../state/game-state";
 import { events } from "../utils/events";
 import { el } from "./dom";
@@ -68,6 +69,18 @@ export class InventoryPanel {
           });
           row.appendChild(eat);
         }
+
+        // Putting an item in hand. Auto-assignment fills the bar with whatever
+        // is picked up first, so by the time a sword is crafted every slot is
+        // usually taken — without this the player could never hold it.
+        const held = this.state.hotbar[this.state.equippedSlot] === def.id;
+        const hold = el("button", "panel-hold", held ? "Held" : "Hold");
+        if (held) hold.classList.add("selected");
+        hold.addEventListener("click", () => {
+          assignToSlot(this.state, this.state.equippedSlot, def.id);
+          this.render();
+        });
+        row.appendChild(hold);
 
         if (def.category === "seed") {
           const button = el("button", undefined, selected === def.id ? "Selected" : "Select");
