@@ -2,7 +2,7 @@ import type { GameState } from "../state/game-state";
 import type { ResourceNode } from "../world/resource-node";
 import type { Target } from "./targeting";
 import { addItem } from "./inventory";
-import { heldToolSpeed, TOOL_KIND_NAMES, type ToolKind } from "../data/tools";
+import { heldToolSpeed, heldYieldBonus, TOOL_KIND_NAMES, type ToolKind } from "../data/tools";
 import { indefinite } from "../utils/text";
 import { events } from "../utils/events";
 
@@ -88,7 +88,12 @@ export function canGather(state: GameState, node: ResourceNode | null): boolean 
   return !kind || heldToolSpeed(state, kind) !== null;
 }
 
-export function tryGather(state: GameState, node: ResourceNode | null, nowMs: number): void {
+export function tryGather(
+  state: GameState,
+  node: ResourceNode | null,
+  nowMs: number,
+  rand: () => number,
+): void {
   if (!node) return;
 
   const kind = REQUIRED_TOOL[node.config.kind];
@@ -99,8 +104,17 @@ export function tryGather(state: GameState, node: ResourceNode | null, nowMs: nu
     return;
   }
 
-  const result = node.hit(nowMs);
+  // A better tool pays out more, not just sooner. Nodes that need no tool at
+  // all (berries, clay) get no bonus, which is what keeps a pickaxe from
+  // quietly improving berry picking.
+  const result = node.hit(nowMs, rand, kind ? heldYieldBonus(state, kind) : 0);
   if (!result) return;
   addItem(state, result.itemId, result.qty);
-  events.emit("resource-gathered", { ...result, kind: node.config.kind });
+  if (result.bonus) addItem(state, result.bonus.itemId, result.bonus.qty);
+  events.emit("resource-gathered", {
+    itemId: result.itemId,
+    qty: result.qty,
+    kind: node.config.kind,
+    finalHit: result.finalHit,
+  });
 }

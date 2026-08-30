@@ -101,7 +101,8 @@ there is no deploy-time configuration to keep in sync.
 ## Controls
 
 - `WASD` — move, `Shift` — sprint, `Space` — jump, mouse — look
-- **Left mouse (hold)** — chop/mine whatever the crosshair is on, or swing at it
+- **Left mouse (hold)** — chop/mine whatever the crosshair is on, take down a
+  building you are aiming at, or swing at whatever else is there
 - **Right mouse** — place the selected build piece, open the aimed barrel, eat what
   you're holding, or plant/harvest the aimed plot
 - Scroll — change which item you're holding, `Ctrl`+scroll — zoom the camera
@@ -109,6 +110,7 @@ there is no deploy-time configuration to keep in sync.
 - `E` — gather what you're aiming at, falling back to the nearest node in range
 - `F` — plant a selected seed into a farm plot / harvest a ready crop
 - `1`–`8` — take that hotbar item in hand
+- `R` — rotate the build piece you are placing
 - `Q` — cancel building placement
 - `C` — crafting, `B` — building menu, `Tab` or `I` — inventory (select seeds here)
 - `Esc` — close the open menu, or open Options when nothing is open
@@ -281,6 +283,67 @@ all — nothing to steer by and nowhere to aim for.
   the barrel system has a purpose from the first minute. Loot one and it stays
   empty — the caches never refill.
 
+## Fighting and gathering pay out
+
+Killing something used to give nothing at all — the `enemy-killed` event had a
+single listener and it played a sound — so combat was a pure cost: health and
+time spent for a quieter field. And every resource node yielded exactly 1 per
+swing, forever, so a better tool only ever meant *sooner*, never *more*.
+
+- **Enemies drop loot on the ground** at the corpse, and you walk over to pick
+  it up. Tables are per enemy (`src/data/loot.ts`) with independent per-entry
+  chances, so a brute is reliably richer than a zombie rather than merely
+  slower to kill. Drops fade and vanish after a minute, and are deliberately
+  **not saved** — they belong to the fight that just happened, and a reload has
+  already thrown that fight away.
+- **Bone and Hide** are the two things only the dead carry, and both feed
+  recipes: a **Bone Club** (a weapon between the plain sword and iron, so the
+  first real upgrade can come from fighting rather than from finding iron) and
+  **Broth**, which doubles a food category that had exactly one recipe in it.
+- **Yields vary per swing**, each node kind has a small chance of something
+  else entirely, and **the blow that fells a node pays a bonus** — finishing a
+  tree beats tapping four different ones once each.
+- **Iron tools bring back more, not just faster.** `ToolDef.yieldBonusChance`
+  gives the iron tier a second dimension; measured over 20 trees each, an iron
+  axe returns roughly 30% more wood than a plain one.
+
+Feedback for all this deliberately avoids the toast: it is a single
+self-overwriting element (which is why crafting batches its messages), so
+announcing every pickup there would bury everything else under resource spam.
+A resource count that rises gets a brief lift on its HUD chip instead. Kills
+are rare enough to earn a toast.
+
+## Building is editable
+
+- **Anything placed can be taken back down**, refunding its full cost — hold
+  the left button on it. Nothing could be removed at all before: `occupancy`
+  and `meshes` were only ever written to and `placedBuildings` only ever
+  pushed, so a piece put down in the wrong cell was wrong for the life of the
+  save. Demolishing a stocked barrel **tips its contents onto the ground** as
+  ordinary drops rather than deleting them or force-feeding them to you.
+- **Pieces rotate** with `R`, in quarter turns. Every fence in the world used
+  to face the same way — `PlacedBuilding` had no such field.
+- **A piece can cover more than one cell.** `footprintCells` and everything
+  that walks it were written for this from the start and then never used;
+  every building was 1x1. The Long Wall is the first that isn't.
+- **Walls are solid, and floors are floors.** Collision was one circle at the
+  anchor cell: a multi-cell piece only blocked its first cell, and a run of
+  walls had a gap at every corner where the inscribed circles failed to meet.
+  It is now a box per occupied cell, and a face with a neighbour behind it is
+  excluded from push-out so arriving fast at a seam stops you instead of
+  sliding you into it. A `foundation` — a floor slab — no longer blocks the way.
+- **Walls are aimable**, which is what demolition needs and also what stops the
+  crosshair reaching through a brick wall to chop the tree behind it.
+- **The ghost tells the truth.** It shows every cell the piece will occupy, at
+  the height the piece will really stand — that came off `def.height`, which is
+  design intent and not what gets built. A Wall is declared 2 units tall and
+  the fence model placed for it is 0.35.
+
+The Build panel now has category chips and per-type icons, and a piece you
+cannot yet afford is still selectable so its cost can be read — matching what
+the crafting panel already did, instead of hiding the price behind a dead
+button.
+
 ## What the save holds
 
 Everything gameplay-relevant goes into one `localStorage` key
@@ -374,6 +437,21 @@ For the held item and the world there are also `getHotbar()`,
 checked without waiting it out, and `depleteNode(id)` / `getNodeState(id)` work
 a node without driving the mouse through a 35-second hold under software
 rendering.
+
+For loot and building: `getDroppedItems()`, `spawnDropAt(...)`,
+`rollLootFor(enemyId)` (rolls a table without needing a kill, so a test can
+average over hundreds of rolls), `killNearestEnemy()`, `getAllRecipes()`,
+`getOccupiedCells()`, `getBuildRotation()`, `placeBuildingAt(...)`,
+`demolishBuilding(id)` and `probeMoveTo(x, z, steps?)`.
+
+A third caution, and the one that invalidated the most: **a test cannot edit
+the save by evaluating a change and then reloading.** The game persists on
+`beforeunload`, so navigating away writes the live state straight back over the
+edit, and the reload then loads a perfectly modern save. Every "an old save
+still loads" check written that way was really checking that the current
+session round-trips. `scratchpad/legacysave.mjs` parks on the same origin with
+the game's scripts stubbed out so nothing can boot or re-save, edits there, and
+only then goes back.
 
 Two cautions learned the hard way, both about trusting an instrument:
 

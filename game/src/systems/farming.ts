@@ -19,6 +19,7 @@ function plotWorldPos(state: GameState, plot: PlotState): { x: number; z: number
 export class FarmingSystem {
   private readonly cropMeshes = new Map<string, THREE.Mesh>();
   private unsubscribe: () => void;
+  private unsubscribeRemoved: () => void;
 
   constructor(
     private readonly scene: THREE.Scene,
@@ -31,6 +32,17 @@ export class FarmingSystem {
       }
     });
 
+    // A plot's record has to go when the plot does. `state.plots` only ever
+    // grew before, because nothing could be taken down — a stale row would
+    // leave a crop mesh floating over bare ground and hand the next plot that
+    // reused the id a crop it never planted.
+    this.unsubscribeRemoved = events.on("building-removed", ({ id }) => {
+      const index = this.state.plots.findIndex((p) => p.buildingId === id);
+      if (index === -1) return;
+      this.removeCropMesh(this.state.plots[index]);
+      this.state.plots.splice(index, 1);
+    });
+
     for (const plot of state.plots) {
       if (plot.cropId) this.spawnCropMesh(plot);
     }
@@ -38,6 +50,7 @@ export class FarmingSystem {
 
   dispose(): void {
     this.unsubscribe();
+    this.unsubscribeRemoved();
   }
 
   // The fallback for the farm *key*, mirroring gathering: the crosshair is the

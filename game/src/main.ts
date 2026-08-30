@@ -16,7 +16,7 @@ import { GameLoop } from "./core/loop";
 import { GameClock } from "./core/clock";
 import { InputManager } from "./input/input-manager";
 
-import { PlayerController } from "./player/player-controller";
+import { PlayerController, PLAYER_RADIUS } from "./player/player-controller";
 import { damagePlayer, isPlayerDead, respawnPlayer } from "./player/player-state";
 
 import { Terrain } from "./world/terrain";
@@ -41,6 +41,8 @@ import { Targeting, type Target } from "./systems/targeting";
 import { TargetOutline } from "./world/target-outline";
 import { addItem, consumeItem } from "./systems/inventory";
 import { getItem } from "./data/items";
+import { getBuilding } from "./data/buildings";
+import { RECIPES } from "./data/recipes";
 import {
   assignFromInventory,
   assignToSlot,
@@ -67,6 +69,9 @@ import { deposit, withdraw } from "./systems/containers";
 import { heldDamage } from "./data/tools";
 
 import { createInitialState, type GameState } from "./state/game-state";
+import { mulberry32 } from "./utils/rng";
+import { DroppedItems } from "./world/dropped-item";
+import { rollLoot } from "./data/loot";
 import { loadSettings } from "./state/settings";
 import { loadBindings, saveBindings } from "./state/keybindings";
 
@@ -81,7 +86,7 @@ import { Minimap } from "./ui/minimap";
 import { AudioHooks } from "./systems/audio-hooks";
 import { events } from "./utils/events";
 import { sound } from "./utils/audio";
-import type { Collidable } from "./utils/collision";
+import { resolveCollisions, type Collidable } from "./utils/collision";
 
 const canvas = document.getElementById("game-canvas") as HTMLCanvasElement;
 const uiRoot = document.getElementById("ui-root") as HTMLElement;
@@ -117,6 +122,14 @@ const dayNight = new DayNightSystem(sceneRig);
 
 const player = new PlayerController(state, terrain, models);
 scene.add(player.object);
+
+// One runtime randomness stream, seeded from the world so a given save feels
+// consistent, but deliberately NOT reproducible across a reload: it advances
+// with every roll and its position is not saved. That is the same bargain
+// EnemyManager already makes with its spawn stream — runtime rolls are not
+// world generation, and pretending otherwise would mean persisting a cursor
+// nothing else needs.
+const runtimeRand = mulberry32(state.seed ^ 0x5eed10a7);
 
 const resourceNodes = scatterResourceNodes(terrain, state.seed, models);
 addNodesToScene(scene, resourceNodes);
@@ -160,6 +173,19 @@ createPointsOfInterest(state, landmarks, state.seed);
 
 const buildingSystem = new BuildingSystem(scene, terrain, state, models);
 const farmingSystem = new FarmingSystem(scene, terrain, state);
+
+// Loot on the floor. Not saved, on purpose and for the same reason enemies
+// are not: it belongs to the fight that just happened, and a reload has
+// already thrown that fight away.
+const droppedItems = new DroppedItems(scene, terrain);
+
+events.on("enemy-killed", ({ enemyId, x, z }) => {
+  droppedItems.spawnAll(rollLoot(enemyId, runtimeRand), x, z, currentNowMs);
+});
+
+events.on("item-picked-up", ({ itemId, qty }) => {
+  events.emit("notification", { message: `Picked up ${qty}x ${getItem(itemId).name}` });
+});
 const enemyManager = new EnemyManager(scene, terrain, state.seed);
 const playerCombat = new PlayerCombat();
 
@@ -281,15 +307,90 @@ function scheduleRespawnIfDead(): void {
 let gatherNodeId: string | null = null;
 let gatherProgressMs = 0;
 
+// Taking a building back down works the same way, tracked separately so
+// drifting between a wall and a tree cannot carry progress across.
+const DEMOLISH_MS = 900;
+let demolishBuildingId: string | null = null;
+let demolishProgressMs = 0;
+
 function resetGather(): void {
   gatherNodeId = null;
   gatherProgressMs = 0;
+}
+
+function resetDemolish(): void {
+  demolishBuildingId = null;
+  demolishProgressMs = 0;
+}
+
+/**
+ * How full the crosshair ring is, 0..1. One definition for both the HUD and
+ * the debug surface, so a test can never be told a different story from the
+ * one the player is being shown.
+ */
+function actionProgress(): number {
+  if (demolishBuildingId) return Math.min(1, demolishProgressMs / DEMOLISH_MS);
+  if (gatherNodeId) return gatherProgressMs / gatherTimeFor(state, aimedNode(target));
+  return 0;
+}
+
+/**
+ * Takes down the aimed building and hands back everything it cost. A barrel's
+ * contents are tipped onto the floor rather than deleted or force-fed to the
+ * player — the drop system already exists for exactly this, and it means
+ * demolishing a full barrel can never quietly destroy what was in it.
+ */
+function demolishAimed(placedId: string): void {
+  const stored = (state.containers[placedId] ?? []).map((slot) => ({ ...slot }));
+  // Where the piece stood, captured before it is removed — dropping at the
+  // player's feet instead would put the contents straight back in the bag,
+  // which is the same as handing them over with extra steps.
+  const site = state.placedBuildings.find((p) => p.id === placedId);
+  const dropX = site ? site.cellX : 0;
+  const dropZ = site ? site.cellZ : 0;
+
+  const result = buildingSystem.demolish(placedId);
+  if (!result) return;
+
+  for (const slot of stored) {
+    droppedItems.spawn(slot.itemId, slot.qty, dropX, dropZ, currentNowMs, 0.6);
+  }
+  delete state.containers[placedId];
+
+  const def = getBuilding(result.buildingId);
+  const parts = result.refunded.map((c) => `${c.qty}x ${getItem(c.itemId).name}`).join(", ");
+  events.emit("notification", {
+    message: parts ? `Removed ${def.name} (+${parts})` : `Removed ${def.name}`,
+  });
 }
 
 // Left mouse, held: work the aimed node, or swing at whatever is there. One
 // hit lands per full ring, matching the node's own hits-to-deplete model —
 // four rings on a tree, four wood.
 function updatePrimaryAction(dtSeconds: number): void {
+  // A building under the crosshair is taken down, not hit. Checked before
+  // gathering so a wall standing in front of a tree is what you act on —
+  // which is also what the ray now reports.
+  if (
+    (target.kind === "building" || target.kind === "container") &&
+    target.buildingId !== undefined &&
+    buildingSystem.getSelectedBuildingId() === null
+  ) {
+    const id = target.buildingId;
+    if (demolishBuildingId !== id) {
+      demolishBuildingId = id;
+      demolishProgressMs = 0;
+      player.triggerSwing(currentNowMs);
+    }
+    demolishProgressMs += dtSeconds * 1000;
+    if (demolishProgressMs >= DEMOLISH_MS) {
+      demolishAimed(id);
+      resetDemolish();
+    }
+    return;
+  }
+  resetDemolish();
+
   const node = aimedNode(target);
   if (node && canGather(state, node)) {
     if (gatherNodeId !== node.id) {
@@ -301,7 +402,7 @@ function updatePrimaryAction(dtSeconds: number): void {
     // The swing length depends on the tool in hand, so an iron axe visibly
     // fills the ring faster than a plain one.
     if (gatherProgressMs >= gatherTimeFor(state, node)) {
-      tryGather(state, node, currentNowMs);
+      tryGather(state, node, currentNowMs, runtimeRand);
       gatherProgressMs = 0;
       // Straight into the next swing, so holding the button reads as a
       // continuous action rather than a stutter between hits.
@@ -361,6 +462,8 @@ function crosshairStateFor(current: Target): CrosshairState {
   }
   // A barrel reads as somewhere to reach into, so it borrows the plot bracket.
   if (current.kind === "container") return "plot";
+  // Anything else you built reads as workable — it can be taken back down.
+  if (current.kind === "building") return "node";
   return "none";
 }
 
@@ -396,6 +499,7 @@ const loop = new GameLoop((dt) => {
 
   for (const node of resourceNodes) node.update(currentNowMs);
   farmingSystem.update(currentNowMs);
+  droppedItems.update(currentNowMs, state, feet.x, feet.z);
 
   if (!isPlayerDead(state)) {
     enemyManager.update(dt, currentNowMs, feet, (damage) => {
@@ -424,7 +528,9 @@ const loop = new GameLoop((dt) => {
 
   const canAct = !isPlayerDead(state) && !menuOpen;
   const aim = targeting.aimPoint(feet, camera.getForward());
-  buildingSystem.update(aim, currentNowMs);
+  // The ghost only belongs on screen while the player can actually place: it
+  // used to keep tracking and glowing behind an open panel and over a corpse.
+  buildingSystem.update(aim, currentNowMs, canAct);
 
   // Mouse: left held works the target, right places/uses. Both are ignored
   // behind a menu and while dead.
@@ -436,11 +542,10 @@ const loop = new GameLoop((dt) => {
     updatePrimaryAction(dt);
   } else {
     resetGather();
+    resetDemolish();
   }
   if (canAct && input.wasMousePressed(2)) performSecondaryAction();
-  hud.setActionProgress(
-    gatherNodeId ? gatherProgressMs / gatherTimeFor(state, aimedNode(target)) : 0,
-  );
+  hud.setActionProgress(actionProgress());
 
   // The wheel changes what is in hand, as it does in Minecraft; zoom stayed
   // behind Ctrl so the bare scroll means the thing players reach for.
@@ -464,7 +569,7 @@ const loop = new GameLoop((dt) => {
     : farmingSystem.nearestPlot(feet.x, feet.z);
   if (input.wasActionPressed("gather") && canAct) {
     player.triggerSwing(currentNowMs);
-    tryGather(state, keyNode, currentNowMs);
+    tryGather(state, keyNode, currentNowMs, runtimeRand);
   }
   if (input.wasActionPressed("farm") && canAct) {
     farmingSystem.tryInteract(keyPlot, selectedSeedItemId, currentNowMs);
@@ -482,6 +587,7 @@ const loop = new GameLoop((dt) => {
     }
   }
   if (input.wasActionPressed("cancelBuild") && canAct) buildingSystem.selectBuilding(null);
+  if (input.wasActionPressed("rotateBuild") && canAct) buildingSystem.rotateSelection();
   // Hotbar keys put an item in hand.
   const hotbarSlot = HOTBAR_ACTIONS.findIndex((action) => input.wasActionPressed(action));
   if (hotbarSlot >= 0 && canAct) selectSlot(state, hotbarSlot);
@@ -546,6 +652,13 @@ declare global {
       advanceClockMs: (ms: number) => void;
       depleteNode: (nodeId: string) => { hits: number; depleted: boolean } | null;
       getNodeState: (nodeId: string) => { hits: number; depleted: boolean } | null;
+      getDroppedItems: () => { itemId: string; qty: number; x: number; z: number }[];
+      rollLootFor: (enemyId: string) => { itemId: string; qty: number }[];
+      spawnDropAt: (itemId: string, qty: number, x: number, z: number) => void;
+      hitNodeOnce: (
+        nodeId: string,
+      ) => { itemId: string; qty: number; finalHit: boolean; bonus?: { itemId: string; qty: number } } | null;
+      killNearestEnemy: () => { id: string; enemyId: string; x: number; z: number } | null;
       getPlayerRig: () => { clip: string; clips: number; skinned: number };
       getStamina: () => { current: number; max: number };
       getRigFingerprint: () => number;
@@ -571,6 +684,16 @@ declare global {
       getCrosshairState: () => string;
       getOutline: () => { visible: boolean; size: [number, number, number] };
       getSelectedBuilding: () => string | null;
+      getBuildRotation: () => number;
+      getOccupiedCells: () => Record<string, string>;
+      demolishBuilding: (placedId: string) => boolean;
+      placeBuildingAt: (
+        buildingId: string,
+        cellX: number,
+        cellZ: number,
+        rotation: number,
+      ) => string | null;
+      probeMoveTo: (x: number, z: number, steps?: number) => { x: number; z: number };
       getHotbar: () => (string | null)[];
       getContainer: (buildingId: string) => { itemId: string; qty: number }[];
       getContainerPanelOpen: () => boolean;
@@ -602,6 +725,7 @@ declare global {
       getHealth: () => { current: number; max: number };
       damagePlayer: (amount: number) => void;
       getKnownRecipes: () => string[];
+      getAllRecipes: () => { id: string; name: string; category: string }[];
       getUnseenRecipes: () => string[];
       getCraftableRecipes: () => string[];
       craftRecipe: (recipeId: string, count?: number) => number;
@@ -649,12 +773,57 @@ window.__gameDebug = {
   depleteNode: (nodeId) => {
     const node = resourceNodes.find((n) => n.id === nodeId);
     if (!node) return null;
-    while (!node.depleted) node.hit(clock.now());
+    while (!node.depleted) node.hit(clock.now(), runtimeRand);
     return { hits: node.hitsRemaining, depleted: node.depleted };
   },
   getNodeState: (nodeId) => {
     const node = resourceNodes.find((n) => n.id === nodeId);
     return node ? { hits: node.hitsRemaining, depleted: node.depleted } : null;
+  },
+  getDroppedItems: () => droppedItems.list(),
+  // Rolls a table without needing an enemy to die, so a test can average over
+  // hundreds of rolls — a probabilistic table tells you nothing from one kill.
+  rollLootFor: (enemyId) => rollLoot(enemyId, runtimeRand),
+  spawnDropAt: (itemId, qty, x, z) => droppedItems.spawn(itemId, qty, x, z, clock.now(), 0),
+  // One swing's worth, through the real gathering path so the tool in hand and
+  // the yield roll both count — measuring per-hit yield by holding the mouse
+  // takes most of a minute under software rendering.
+  hitNodeOnce: (nodeId) => {
+    const node = resourceNodes.find((n) => n.id === nodeId);
+    if (!node || node.depleted) return null;
+    const before = state.inventory.map((slot) => ({ ...slot }));
+    tryGather(state, node, clock.now(), runtimeRand);
+    // Summed across slots, not read off the first one. An item can occupy
+    // several stacks (stackSize caps each at 99), so `find` reports whichever
+    // slot happens to come first and misses an addition that landed in a
+    // later one — which reads as a yield of zero.
+    const totalOf = (slots: { itemId: string; qty: number }[], itemId: string) =>
+      slots.reduce((sum, slot) => (slot.itemId === itemId ? sum + slot.qty : sum), 0);
+    const gained = (itemId: string) => totalOf(state.inventory, itemId) - totalOf(before, itemId);
+    const staple = node.config.yieldItemId;
+    const bonusId = node.config.bonus?.itemId;
+    const bonusQty = bonusId && bonusId !== staple ? gained(bonusId) : 0;
+    return {
+      itemId: staple,
+      qty: gained(staple),
+      finalHit: node.depleted,
+      ...(bonusQty > 0 ? { bonus: { itemId: bonusId!, qty: bonusQty } } : {}),
+    };
+  },
+  // Kills outright rather than swinging at it: landing a real melee hit under
+  // software rendering takes long enough to time a suite out.
+  killNearestEnemy: () => {
+    const feetNow = player.getFeetPosition();
+    let best: { enemy: ReturnType<typeof enemyManager.getEnemies>[number]; d: number } | null = null;
+    for (const enemy of enemyManager.getEnemies()) {
+      const d = enemy.object.position.distanceTo(feetNow);
+      if (!best || d < best.d) best = { enemy, d };
+    }
+    if (!best) return null;
+    const { id, def, object } = best.enemy;
+    const out = { id, enemyId: def.id, x: object.position.x, z: object.position.z };
+    enemyManager.removeEnemy(id, clock.now());
+    return out;
   },
   getPlayerRig: () => player.getAnimationState(),
   getStamina: () => ({ current: state.player.stamina, max: state.player.maxStamina }),
@@ -717,6 +886,39 @@ window.__gameDebug = {
     ],
   }),
   getSelectedBuilding: () => buildingSystem.getSelectedBuildingId(),
+  getBuildRotation: () => buildingSystem.getRotation(),
+  getOccupiedCells: () => buildingSystem.occupiedCells(),
+  // The same path the hold-to-demolish action takes, so a test exercises the
+  // real refund and cleanup rather than BuildingSystem.demolish in isolation.
+  placeBuildingAt: (buildingId, cellX, cellZ, rotation) =>
+    buildingSystem.placeAt(buildingId, cellX, cellZ, rotation, clock.now()),
+  // Walks the player toward a point in small steps, resolving collision at
+  // each one, and reports where they actually ended up. A single teleport
+  // would pass straight through anything, which is the opposite of the
+  // question being asked.
+  probeMoveTo: (x, z, steps = 120) => {
+    const start = player.getFeetPosition();
+    let cx = start.x;
+    let cz = start.z;
+    // Each step advances from where the body actually IS toward the target,
+    // and keeps the correction. Interpolating from the start instead would
+    // walk the sample point straight through a wall and hand back the far
+    // side, since a point beyond the wall overlaps nothing.
+    const stepX = (x - start.x) / steps;
+    const stepZ = (z - start.z) / steps;
+    for (let i = 0; i < steps; i++) {
+      const solved = resolveCollisions(cx + stepX, cz + stepZ, PLAYER_RADIUS, getCollidables());
+      cx = solved.x;
+      cz = solved.z;
+      player.teleport(cx, cz);
+    }
+    return { x: cx, z: cz };
+  },
+  demolishBuilding: (placedId) => {
+    const existed = state.placedBuildings.some((p) => p.id === placedId);
+    if (existed) demolishAimed(placedId);
+    return existed;
+  },
   getHotbar: () => [...state.hotbar],
   getContainer: (buildingId) => (state.containers[buildingId] ?? []).map((s) => ({ ...s })),
   getContainerPanelOpen: () => containerPanel.isVisible(),
@@ -772,8 +974,7 @@ window.__gameDebug = {
     }
     return { ...out, visible: false, firstHit: hits[0].object.name || hits[0].object.type };
   },
-  getActionProgress: () =>
-    gatherNodeId ? gatherProgressMs / gatherTimeFor(state, aimedNode(target)) : 0,
+  getActionProgress: () => actionProgress(),
   // The swing length for whatever is aimed at, so a test can prove an iron
   // tool is actually faster rather than inferring it from the tier name.
   getGatherTime: () => gatherTimeFor(state, aimedNode(target)),
@@ -782,6 +983,9 @@ window.__gameDebug = {
   getHealth: () => ({ current: state.player.health, max: state.player.maxHealth }),
   damagePlayer: (amount) => damagePlayer(state, amount),
   getKnownRecipes: () => listKnownRecipes(state).map((recipe) => recipe.id),
+  // The recipe book as data, so a test can ask what a category contains
+  // instead of hardcoding a list that every new recipe invalidates.
+  getAllRecipes: () => RECIPES.map((r) => ({ id: r.id, name: r.name, category: r.category })),
   getUnseenRecipes: () => [...state.unseenRecipes],
   getCraftableRecipes: () =>
     listKnownRecipes(state)

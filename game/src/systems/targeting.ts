@@ -14,7 +14,14 @@ import { getBuilding } from "../data/buildings";
 // crosshair is what this genre does, and it is what makes the mouse mean
 // something.
 
-export type TargetKind = "node" | "enemy" | "plot" | "container" | "ground" | "none";
+export type TargetKind =
+  | "node"
+  | "enemy"
+  | "plot"
+  | "container"
+  | "building"
+  | "ground"
+  | "none";
 
 export interface Target {
   kind: TargetKind;
@@ -23,6 +30,8 @@ export interface Target {
   plot?: PlotState;
   /** Placed building id of an aimed container. */
   containerId?: string;
+  /** Placed building id of any aimed building — set for containers too. */
+  buildingId?: string;
   /** Where the ray met the world. Meaningless when kind is "none". */
   point: THREE.Vector3;
   /** Distance from the *player*, not the camera — see REACH below. */
@@ -130,8 +139,9 @@ export class Targeting {
     for (const enemy of c.enemies) {
       this.register(enemy.object, { kind: "enemy", enemy, point: new THREE.Vector3(), distance: 0 });
     }
-    // Plots and containers are the placed buildings worth aiming at; a wall
-    // has nothing to do when you look at it.
+    // Every placed building is aimable. Plots and containers have their own
+    // verbs; the rest can at least be taken back down, and being in the ray's
+    // path is what makes a wall actually block line of sight.
     for (const placed of c.state.placedBuildings) {
       const def = getBuilding(placed.buildingId);
       const mesh = c.buildings.getMesh(placed.id);
@@ -145,6 +155,20 @@ export class Targeting {
         this.register(mesh, {
           kind: "container",
           containerId: placed.id,
+          buildingId: placed.id,
+          point: new THREE.Vector3(),
+          distance: 0,
+        });
+      } else {
+        // Everything else — walls, floors, stations. These were left out
+        // entirely on the grounds that "a wall has nothing to do when you
+        // look at it", but that also meant the ray passed straight through
+        // one: you could chop a tree from behind a brick wall. Now they can
+        // be aimed at, which is both what demolition needs and what stops a
+        // wall being transparent to every other interaction.
+        this.register(mesh, {
+          kind: "building",
+          buildingId: placed.id,
           point: new THREE.Vector3(),
           distance: 0,
         });

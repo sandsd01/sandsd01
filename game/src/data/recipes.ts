@@ -145,6 +145,34 @@ export const RECIPES: RecipeDef[] = [
     category: "food",
     requiresStation: "workbench",
   },
+  {
+    // A weapon between the plain sword and the iron one, made from what the
+    // dead leave behind — so the first real upgrade can come from fighting
+    // rather than from finding an iron vein.
+    id: "bone_club",
+    name: "Bone Club",
+    inputs: [
+      { itemId: "bone", qty: 3 },
+      { itemId: "hide", qty: 2 },
+      { itemId: "wood", qty: 2 },
+    ],
+    output: { itemId: "bone_club", qty: 1 },
+    category: "weapons",
+  },
+  {
+    // Food had exactly one recipe before this, which made a whole crafting
+    // category a single row. Broth also gives bone a use for a player who
+    // never gets round to a club.
+    id: "broth",
+    name: "Broth",
+    inputs: [
+      { itemId: "bone", qty: 2 },
+      { itemId: "berry", qty: 3 },
+    ],
+    output: { itemId: "broth", qty: 1 },
+    category: "food",
+    requiresStation: "workbench",
+  },
 ];
 
 export function getRecipe(id: string): RecipeDef {

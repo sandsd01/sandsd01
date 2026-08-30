@@ -171,6 +171,17 @@ body {
   top: 16px;
   right: 16px;
   display: flex;
+  /* Wraps rather than growing left into the clock. The row gained two chips
+     when loot became a thing you carry, and at anything under about 1280px
+     wide the extra width reached the centred clock and sat on top of it.
+     There is nothing but sky below, so a second line is free. */
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  /* Stop short of the centred clock rather than merely inside the viewport:
+     the row is anchored right, so without this its first line still reaches
+     left across the clock however much it wraps. Half the viewport, less the
+     clock's half-width and a gap. */
+  max-width: calc(50vw - 80px);
   gap: 4px;
   background: var(--slate);
   border: 1px solid var(--edge);
@@ -944,4 +955,33 @@ body {
 .panel-row-warn {
   font-size: 12px;
   color: #e8b26a;
+}
+
+/* A resource count that just went up. The animation runs once on the freshly
+   rendered chip — renderResources rebuilds the row wholesale, so there is no
+   old element left holding a spent animation. */
+.hud-resource-chip.gained {
+  animation: resource-gained 420ms ease-out;
+}
+
+@keyframes resource-gained {
+  0% {
+    transform: translateY(0) scale(1);
+    background: rgba(214, 178, 96, 0.42);
+  }
+  35% {
+    transform: translateY(-3px) scale(1.06);
+    background: rgba(214, 178, 96, 0.42);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* A build piece you cannot afford yet. It stays selectable so its cost can be
+   read; the cost line already marks the shortfall with a glyph as well as a
+   colour, so this only has to take the row's weight down a notch. */
+.panel-row.unaffordable .panel-row-title,
+.panel-row.unaffordable .panel-row-icon {
+  opacity: 0.62;
 }

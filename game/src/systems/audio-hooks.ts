@@ -27,5 +27,6 @@ export class AudioHooks {
     events.on("building-placed", () => sound.place());
     events.on("crop-planted", () => sound.plant());
     events.on("crop-harvested", () => sound.harvest());
+    events.on("item-picked-up", () => sound.gatherSoft());
   }
 }
