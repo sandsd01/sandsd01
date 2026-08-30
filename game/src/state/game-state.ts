@@ -64,6 +64,24 @@ export interface GameState {
    * building to everything that places and draws them.
    */
   containers: Record<string, InventorySlot[]>;
+  /**
+   * How far each resource node has been worked, keyed by `ResourceNode.id`.
+   * **Sparse on purpose** — a node that is still untouched is simply absent,
+   * so a fresh world adds nothing to the save rather than several hundred
+   * default entries.
+   *
+   * Without this the world is re-scattered from the seed on every boot, which
+   * made reloading the page a faster way to restock a felled tree than waiting
+   * out its 20-35 second respawn.
+   */
+  nodes: Record<string, NodeSaveState>;
+}
+
+/** Persisted per-node progress. `depletedAtMs` is on the `elapsedMs` clock. */
+export interface NodeSaveState {
+  hits: number;
+  depleted: boolean;
+  depletedAtMs: number;
 }
 
 export function createInitialState(seedInput: string | number = "romestead"): GameState {
@@ -93,5 +111,6 @@ export function createInitialState(seedInput: string | number = "romestead"): Ga
     hotbar: [null, null, null, null, null, null, null, null],
     equippedSlot: 0,
     containers: {},
+    nodes: {},
   };
 }

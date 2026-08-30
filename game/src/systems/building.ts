@@ -94,8 +94,6 @@ const BUILDING_MODELS: Record<string, ModelName> = {
   barrel: "barrel",
 };
 
-let nextBuildingInstanceId = 0;
-
 type InvalidReason = "occupied" | "zone";
 
 export class BuildingSystem {
@@ -106,6 +104,13 @@ export class BuildingSystem {
   private readonly meshes = new Map<string, THREE.Object3D>();
   private readonly occupancy = new Map<string, string>(); // cell key -> placedBuilding.id
   private readonly popIns: { mesh: THREE.Object3D; startMs: number }[] = [];
+  // Seeded from the loaded save rather than starting at zero. This used to be a
+  // module-level counter, which restarts at 0 on every page load while the save
+  // still holds building-0..N — so the first piece placed after a reload reused
+  // a live id. Ids key `state.containers`, `this.meshes`, `this.occupancy` and
+  // the `.find()` in farming's plotWorldPos, so a collision handed a new barrel
+  // an old barrel's contents and pinned a new plot to an old plot's cell.
+  private nextInstanceId = 0;
 
   constructor(
     private readonly scene: THREE.Scene,
@@ -117,6 +122,13 @@ export class BuildingSystem {
     for (const placed of state.placedBuildings) {
       this.occupyCells(placed);
       this.spawnMesh(placed);
+    }
+    // Start issuing ids past whatever the save already used. Only this class's
+    // own `building-N` ids matter here — the world's POI barrels carry a `poi-`
+    // prefix and can never collide with these.
+    for (const placed of state.placedBuildings) {
+      const match = /^building-(\d+)$/.exec(placed.id);
+      if (match) this.nextInstanceId = Math.max(this.nextInstanceId, Number(match[1]) + 1);
     }
   }
 
@@ -220,7 +232,7 @@ export class BuildingSystem {
     for (const cost of def.cost) removeItem(this.state, cost.itemId, cost.qty);
 
     const placed: PlacedBuilding = {
-      id: `building-${nextBuildingInstanceId++}`,
+      id: `building-${this.nextInstanceId++}`,
       buildingId: def.id,
       cellX: anchor.x,
       cellZ: anchor.z,

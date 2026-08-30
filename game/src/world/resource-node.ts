@@ -318,6 +318,31 @@ export class ResourceNode {
     this.object.visible = false;
   }
 
+  /**
+   * Progress worth saving, or null when this node is untouched — the caller
+   * keeps the record sparse so a fresh world writes nothing.
+   */
+  serialise(): { hits: number; depleted: boolean; depletedAtMs: number } | null {
+    if (!this.depleted && this.hitsRemaining === this.config.hitsToDeplete) return null;
+    return {
+      hits: this.hitsRemaining,
+      depleted: this.depleted,
+      depletedAtMs: this.depletedAtMs,
+    };
+  }
+
+  /**
+   * Puts back what `serialise` recorded. `depletedAtMs` is on the same clock
+   * that `update` compares against (`state.elapsedMs`), so a respawn carries on
+   * counting across a reload rather than restarting.
+   */
+  restore(saved: { hits: number; depleted: boolean; depletedAtMs: number }): void {
+    this.hitsRemaining = saved.hits;
+    this.depleted = saved.depleted;
+    this.depletedAtMs = saved.depletedAtMs;
+    this.object.visible = !saved.depleted;
+  }
+
   update(nowMs: number): void {
     if (this.depleted) {
       if (nowMs - this.depletedAtMs >= this.config.respawnMs) {

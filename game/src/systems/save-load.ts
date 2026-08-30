@@ -49,6 +49,10 @@ function backfillDefaults(state: GameState): void {
   if (!Array.isArray(state.plots)) state.plots = [];
   if (!Array.isArray(state.unseenRecipes)) state.unseenRecipes = [];
   if (!state.containers || typeof state.containers !== "object") state.containers = {};
+  // A save from before node progress was persisted loads with a full world,
+  // which is exactly what it had before — no node was ever recorded as worked,
+  // so there is nothing to restore and an empty record is the honest default.
+  if (!state.nodes || typeof state.nodes !== "object") state.nodes = {};
 
   // A save written before the hotbar existed comes back with none. Fill it
   // from what they are already carrying rather than handing them an empty bar

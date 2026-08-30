@@ -281,6 +281,36 @@ all — nothing to steer by and nowhere to aim for.
   the barrel system has a purpose from the first minute. Loot one and it stays
   empty — the caches never refill.
 
+## What the save holds
+
+Everything gameplay-relevant goes into one `localStorage` key
+(`romestead-save-v1`), written every 10 seconds and on unload: the world seed
+and clock, the player, inventory, hotbar, placed buildings, crops, known
+recipes, container contents, and **how far each resource node has been worked**.
+
+That last one is newer than the rest, and its absence used to be exploitable:
+nodes were re-scattered from the seed on every boot, so reloading the page
+restocked the whole world — faster than waiting out a tree's 20-second respawn.
+The record is deliberately sparse (an untouched node is simply absent, so a
+fresh world writes nothing) and `depletedAtMs` rides the same saved `elapsedMs`
+clock the respawn check reads, so a timer carries on across a reload instead of
+restarting.
+
+Two things that follow from ids being load-bearing, both fixed and both worth
+knowing if you touch this code:
+
+- Building ids (`building-N`) are issued from a counter **seeded from the loaded
+  save**, not from zero. It was module-level before, which meant the first piece
+  placed after a reload reused a live id — and since `state.containers` is keyed
+  by that id, a newly placed barrel opened holding an older barrel's contents.
+- Node ids are stable across boots only because scattering is deterministic from
+  the seed and happens exactly once per page load. Restoring skips ids it does
+  not recognise, so a save from a different seed degrades to "untouched" rather
+  than throwing.
+
+Preferences (`romestead-settings-v1`, `romestead-keybindings-v1`) are stored
+outside the save on purpose, so they survive starting a new world.
+
 Building moved off the number keys into the `B` panel when the hotbar became
 items. That does make laying several pieces slower than it was; if it grates,
 the fix is one bar holding both items and build pieces, the way Minecraft
@@ -339,7 +369,11 @@ For the held item and the world there are also `getHotbar()`,
 `getEquippedSlot()`, `getEquippedItem()`, `selectHotbarSlot(i)`,
 `holdItem(itemId)`, `getHeldDamage()`, `getHeldItemMesh()`,
 `getContainer(id)`, `depositToContainer(...)`, `withdrawFromContainer(...)`,
-`saveNow()`, `getLandmarks()` and `getZoneAt(x, z)`.
+`saveNow()`, `getLandmarks()` and `getZoneAt(x, z)`. For save behaviour:
+`advanceClockMs(ms)` pushes the world clock forward so a respawn timer can be
+checked without waiting it out, and `depleteNode(id)` / `getNodeState(id)` work
+a node without driving the mouse through a 35-second hold under software
+rendering.
 
 Two cautions learned the hard way, both about trusting an instrument:
 
