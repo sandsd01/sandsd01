@@ -53,6 +53,10 @@ function backfillDefaults(state: GameState): void {
   // which is exactly what it had before — no node was ever recorded as worked,
   // so there is nothing to restore and an empty record is the honest default.
   if (!state.nodes || typeof state.nodes !== "object") state.nodes = {};
+  // Pieces placed before rotation existed were all placed unrotated.
+  for (const placed of state.placedBuildings) {
+    if (typeof placed.rotation !== "number") placed.rotation = 0;
+  }
 
   // A save written before the hotbar existed comes back with none. Fill it
   // from what they are already carrying rather than handing them an empty bar

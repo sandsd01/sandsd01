@@ -1,9 +1,11 @@
 import * as THREE from "three";
 import { getBuilding, type BuildingDef } from "../data/buildings";
+import type { ItemStack } from "../data/recipes";
+import { getItem } from "../data/items";
 import { getZone } from "../world/zones";
 import type { Terrain } from "../world/terrain";
 import type { GameState, PlacedBuilding } from "../state/game-state";
-import { hasQty, removeItem } from "./inventory";
+import { addItem, hasQty, removeItem } from "./inventory";
 import { GRID_CELL_SIZE, cellKey, worldToCell, type Cell } from "../utils/grid";
 import type { Collidable } from "../utils/collision";
 import { events } from "../utils/events";
@@ -13,6 +15,17 @@ import { instantiate, type ModelLibrary, type ModelName } from "../world/models"
 const VALID_COLOR = 0x4caf50;
 const INVALID_COLOR = 0xe53935;
 const POP_IN_MS = 220;
+/**
+ * Anything declared this low is a floor, not an obstacle — step over it.
+ *
+ * Measured against `def.height`, which is design intent, NOT the height of the
+ * model that gets placed. Those differ a lot: the fence standing in for a Wall
+ * is really 0.35 units tall against a declared 2. Intent is the right source
+ * here — a low fence model still means "this is a wall, it stops you" — but
+ * swapping this to the measured height would silently make every wall in the
+ * game walkable.
+ */
+const WALKABLE_HEIGHT = 0.35;
 
 // Placed buildings share one flat-shaded material and carry their colours in
 // vertex data, same as the world props (see world/geometry.ts).
@@ -91,14 +104,41 @@ const BUILDING_MODELS: Record<string, ModelName> = {
   forge: "forge",
   anvil: "anvil",
   workbench: "workbench",
+  long_wall: "fence",
   barrel: "barrel",
 };
 
 type InvalidReason = "occupied" | "zone";
 
+/** The four placements a piece can take, in degrees. */
+export const ROTATION_STEPS = [0, 90, 180, 270] as const;
+
+/**
+ * A footprint turned by `rotation` degrees about the anchor cell. Cells are
+ * integer offsets, so a quarter turn is an exact swap — no rounding, and a
+ * rotated 2x1 covers exactly the two cells it looks like it covers.
+ */
+export function rotateFootprint(cells: readonly Cell[], rotation: number): Cell[] {
+  const turns = (((rotation / 90) | 0) % 4 + 4) % 4;
+  return cells.map((cell) => {
+    switch (turns) {
+      case 1:
+        return { x: -cell.z, z: cell.x };
+      case 2:
+        return { x: -cell.x, z: -cell.z };
+      case 3:
+        return { x: cell.z, z: -cell.x };
+      default:
+        return { x: cell.x, z: cell.z };
+    }
+  });
+}
+
 export class BuildingSystem {
   private selectedBuildingId: string | null = null;
-  private ghost: THREE.Mesh | null = null;
+  private ghost: THREE.Object3D | null = null;
+  /** Quarter turns applied to the piece being placed, in degrees. */
+  private rotation = 0;
   private ghostValid = false;
   private invalidReason: InvalidReason | null = null;
   private readonly meshes = new Map<string, THREE.Object3D>();
@@ -134,31 +174,85 @@ export class BuildingSystem {
 
   selectBuilding(buildingId: string | null): void {
     this.selectedBuildingId = buildingId;
+    this.rotation = 0;
     events.emit("building-selection-changed", { buildingId });
-    if (this.ghost) {
-      this.scene.remove(this.ghost);
-      this.ghost = null;
-    }
+    this.disposeGhost();
     if (buildingId) this.createGhost(getBuilding(buildingId));
+  }
+
+  /** Turns the piece being placed a quarter turn. */
+  rotateSelection(): void {
+    if (!this.selectedBuildingId) return;
+    this.rotation = (this.rotation + 90) % 360;
+    this.disposeGhost();
+    this.createGhost(getBuilding(this.selectedBuildingId));
+  }
+
+  getRotation(): number {
+    return this.rotation;
+  }
+
+  private disposeGhost(): void {
+    if (!this.ghost) return;
+    this.scene.remove(this.ghost);
+    // Each selection built a fresh geometry and material and dropped the old
+    // pair on the floor; over a building session that is a real leak.
+    this.ghost.traverse((child) => {
+      const mesh = child as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      mesh.geometry.dispose();
+      (mesh.material as THREE.Material).dispose();
+    });
+    this.ghost = null;
   }
 
   getSelectedBuildingId(): string | null {
     return this.selectedBuildingId;
   }
 
+  /** Every reserved cell, as "x,z" -> the placed id holding it. */
+  occupiedCells(): Record<string, string> {
+    return Object.fromEntries(this.occupancy);
+  }
+
+  /**
+   * One translucent box per cell the piece will actually occupy, at the height
+   * the piece will actually be.
+   *
+   * Both of those used to be wrong: the ghost was a single box regardless of
+   * footprint, and `def.height` is the *procedural fallback's* height, while
+   * the model that really gets placed is sized by its own spec — so a brick
+   * wall previewed at 2.4 units and arrived at whatever the GLB happened to
+   * be. A preview that lies about the thing it previews is worse than none.
+   */
   private createGhost(def: BuildingDef): void {
-    const geometry = new THREE.BoxGeometry(
-      GRID_CELL_SIZE * 0.9,
-      def.height,
-      GRID_CELL_SIZE * 0.9,
-    );
+    const group = new THREE.Group();
+    const height = this.placedHeightOf(def);
     const material = new THREE.MeshStandardMaterial({
       color: VALID_COLOR,
       transparent: true,
       opacity: 0.55,
     });
-    this.ghost = new THREE.Mesh(geometry, material);
-    this.scene.add(this.ghost);
+
+    for (const cell of rotateFootprint(def.footprintCells, this.rotation)) {
+      const geometry = new THREE.BoxGeometry(GRID_CELL_SIZE * 0.9, height, GRID_CELL_SIZE * 0.9);
+      const box = new THREE.Mesh(geometry, material);
+      box.position.set(cell.x * GRID_CELL_SIZE, height / 2, cell.z * GRID_CELL_SIZE);
+      group.add(box);
+    }
+
+    this.ghost = group;
+    this.scene.add(group);
+  }
+
+  /** How tall the piece will really stand, measured off the model when there is one. */
+  private placedHeightOf(def: BuildingDef): number {
+    const modelName = BUILDING_MODELS[def.id];
+    const model = modelName ? this.models[modelName] : undefined;
+    if (!model) return def.height;
+    const box = new THREE.Box3().setFromObject(model.scene);
+    const height = box.max.y - box.min.y;
+    return Number.isFinite(height) && height > 0.05 ? height : def.height;
   }
 
   // The anchor is the grid cell under the crosshair, not a fixed distance
@@ -171,7 +265,7 @@ export class BuildingSystem {
   // Returns null when valid, or the reason it isn't — used both to color the
   // ghost and to explain the block to the player via getPlacementPrompt().
   private placementInvalidReason(def: BuildingDef, anchor: Cell): InvalidReason | null {
-    for (const offset of def.footprintCells) {
+    for (const offset of rotateFootprint(def.footprintCells, this.rotation)) {
       const cell = { x: anchor.x + offset.x, z: anchor.z + offset.z };
       if (this.occupancy.has(cellKey(cell))) return "occupied";
       const worldX = cell.x * GRID_CELL_SIZE;
@@ -192,29 +286,63 @@ export class BuildingSystem {
     if (!this.selectedBuildingId) return null;
     const def = getBuilding(this.selectedBuildingId);
     if (this.ghostValid) {
-      const costText = def.cost.map((c) => `${c.qty} ${c.itemId}`).join(", ");
+      const costText = def.cost.map((c) => `${c.qty} ${getItem(c.itemId).name}`).join(", ");
       return `Right-click to place ${def.name} (${costText})`;
     }
     if (this.invalidReason === "occupied") return "Can't place here — space is occupied";
     return "Can only build in the open area near spawn";
   }
 
-  update(aim: { x: number; z: number }, nowMs: number): void {
+  update(aim: { x: number; z: number }, nowMs: number, canPlace = true): void {
     this.updatePopIns(nowMs);
 
-    if (!this.selectedBuildingId || !this.ghost) return;
+    if (this.ghost) this.ghost.visible = canPlace;
+    if (!this.selectedBuildingId || !this.ghost || !canPlace) return;
     const def = getBuilding(this.selectedBuildingId);
     const anchor = this.anchorCellFor(aim);
     const worldX = anchor.x * GRID_CELL_SIZE;
     const worldZ = anchor.z * GRID_CELL_SIZE;
     const y = this.terrain.heightAt(worldX, worldZ);
 
-    this.ghost.position.set(worldX, y + def.height / 2, worldZ);
+    this.ghost.position.set(worldX, y, worldZ);
     this.invalidReason = this.placementInvalidReason(def, anchor);
     this.ghostValid = this.invalidReason === null;
-    (this.ghost.material as THREE.MeshStandardMaterial).color.setHex(
-      this.ghostValid ? VALID_COLOR : INVALID_COLOR,
-    );
+    // Every box in the group shares one material, so recolouring once does it.
+    const first = this.ghost.children[0] as THREE.Mesh | undefined;
+    if (first) {
+      (first.material as THREE.MeshStandardMaterial).color.setHex(
+        this.ghostValid ? VALID_COLOR : INVALID_COLOR,
+      );
+    }
+  }
+
+  /**
+   * Places at an exact cell, bypassing aiming. For tests that need a known
+   * layout — driving the mouse into a precise grid cell under software
+   * rendering is slow and flaky, and the layout is the thing under test, not
+   * the aiming.
+   */
+  placeAt(buildingId: string, cellX: number, cellZ: number, rotation: number, nowMs: number):
+    string | null {
+    const def = getBuilding(buildingId);
+    const previous = this.rotation;
+    this.rotation = rotation;
+    const valid = this.isPlacementValid(def, { x: cellX, z: cellZ });
+    this.rotation = previous;
+    if (!valid) return null;
+
+    const placed: PlacedBuilding = {
+      id: `building-${this.nextInstanceId++}`,
+      rotation,
+      buildingId,
+      cellX,
+      cellZ,
+    };
+    this.state.placedBuildings.push(placed);
+    this.occupyCells(placed);
+    this.spawnMesh(placed, nowMs);
+    events.emit("building-placed", { id: placed.id, buildingId });
+    return placed.id;
   }
 
   tryPlace(aim: { x: number; z: number }, nowMs: number): boolean {
@@ -225,7 +353,7 @@ export class BuildingSystem {
 
     for (const cost of def.cost) {
       if (!hasQty(this.state, cost.itemId, cost.qty)) {
-        events.emit("notification", { message: `Not enough ${cost.itemId}` });
+        events.emit("notification", { message: `Not enough ${getItem(cost.itemId).name}` });
         return false;
       }
     }
@@ -233,6 +361,7 @@ export class BuildingSystem {
 
     const placed: PlacedBuilding = {
       id: `building-${this.nextInstanceId++}`,
+      rotation: this.rotation,
       buildingId: def.id,
       cellX: anchor.x,
       cellZ: anchor.z,
@@ -263,9 +392,63 @@ export class BuildingSystem {
     }
   }
 
+  /**
+   * Takes a placed piece back down and refunds what it cost, in full.
+   *
+   * Nothing could be removed before this: `occupancy` and `meshes` were only
+   * ever written to, and `state.placedBuildings` only ever pushed, so a piece
+   * put down in the wrong cell was wrong for the life of the save. Everything
+   * keyed by the building's id has to be released here — a leftover entry in
+   * any one of them is exactly the shape of the id-collision bug that let a
+   * new barrel open holding an old barrel's contents.
+   *
+   * Returns what was refunded, or null when there is nothing there.
+   */
+  demolish(placedId: string): { buildingId: string; refunded: ItemStack[] } | null {
+    const index = this.state.placedBuildings.findIndex((p) => p.id === placedId);
+    if (index === -1) return null;
+    const placed = this.state.placedBuildings[index];
+    const def = getBuilding(placed.buildingId);
+
+    this.state.placedBuildings.splice(index, 1);
+
+    for (const offset of rotateFootprint(def.footprintCells, placed.rotation ?? 0)) {
+      const cell = { x: placed.cellX + offset.x, z: placed.cellZ + offset.z };
+      const key = cellKey(cell);
+      // Only clear a cell this piece actually holds. Two pieces can share a
+      // key when a POI barrel was scattered onto an occupied cell, and taking
+      // one down must not free the other's ground.
+      if (this.occupancy.get(key) === placedId) this.occupancy.delete(key);
+    }
+
+    const mesh = this.meshes.get(placedId);
+    if (mesh) {
+      this.scene.remove(mesh);
+      this.meshes.delete(placedId);
+      const popIn = this.popIns.findIndex((p) => p.mesh === mesh);
+      if (popIn !== -1) this.popIns.splice(popIn, 1);
+    }
+
+    const refunded = def.cost.map((stack) => ({ ...stack }));
+    for (const stack of refunded) addItem(this.state, stack.itemId, stack.qty);
+
+    events.emit("building-removed", { id: placedId, buildingId: placed.buildingId });
+    return { buildingId: placed.buildingId, refunded };
+  }
+
+  /** Whether a cell holds something that blocks movement. */
+  private blocksAt(cellX: number, cellZ: number): boolean {
+    const id = this.occupancy.get(cellKey({ x: cellX, z: cellZ }));
+    if (!id) return false;
+    const placed = this.state.placedBuildings.find((p) => p.id === id);
+    if (!placed) return false;
+    const def = getBuilding(placed.buildingId);
+    return !def.isPlot && def.height > WALKABLE_HEIGHT;
+  }
+
   private occupyCells(placed: PlacedBuilding): void {
     const def = getBuilding(placed.buildingId);
-    for (const offset of def.footprintCells) {
+    for (const offset of rotateFootprint(def.footprintCells, placed.rotation ?? 0)) {
       const cell = { x: placed.cellX + offset.x, z: placed.cellZ + offset.z };
       this.occupancy.set(cellKey(cell), placed.id);
     }
@@ -293,7 +476,22 @@ export class BuildingSystem {
     }
     // Both the models and the procedural geometry are built from their base
     // up, so a piece sits on the terrain rather than being centred in it.
-    mesh.position.set(worldX, y, worldZ);
+    //
+    // A multi-cell piece is centred over the cells it occupies rather than
+    // hanging off its anchor: the anchor is where the grid bookkeeping starts,
+    // not where the object visually belongs.
+    const cells = rotateFootprint(def.footprintCells, placed.rotation ?? 0);
+    let offsetX = 0;
+    let offsetZ = 0;
+    for (const cell of cells) {
+      offsetX += cell.x;
+      offsetZ += cell.z;
+    }
+    offsetX = (offsetX / cells.length) * GRID_CELL_SIZE;
+    offsetZ = (offsetZ / cells.length) * GRID_CELL_SIZE;
+
+    mesh.position.set(worldX + offsetX, y, worldZ + offsetZ);
+    mesh.rotation.y = ((placed.rotation ?? 0) * Math.PI) / 180;
     mesh.name = placed.id;
     if (nowMs !== undefined) {
       mesh.scale.setScalar(0.05);
@@ -318,18 +516,39 @@ export class BuildingSystem {
     return this.meshes.get(placedId);
   }
 
-  // Only non-plot buildings block movement (walls, foundations) — plots are
-  // walkable low platforms the player stands on to plant/harvest.
+  /**
+   * What blocks movement, one box per occupied cell.
+   *
+   * Two things were wrong here. It emitted a single circle at the anchor, so a
+   * multi-cell piece only blocked its first cell and a run of walls had a
+   * diagonal gap at every join where the inscribed circles failed to meet the
+   * cell corners. And `isPlot` was the only exemption, which meant a
+   * foundation — a floor slab two tenths of a unit tall — stood in the
+   * player's way like a wall.
+   */
   getCollidables(): Collidable[] {
     const result: Collidable[] = [];
     for (const placed of this.state.placedBuildings) {
       const def = getBuilding(placed.buildingId);
-      if (def.isPlot) continue;
-      result.push({
-        x: placed.cellX * GRID_CELL_SIZE,
-        z: placed.cellZ * GRID_CELL_SIZE,
-        radius: GRID_CELL_SIZE * 0.5,
-      });
+      if (def.isPlot || def.height <= WALKABLE_HEIGHT) continue;
+      for (const offset of rotateFootprint(def.footprintCells, placed.rotation ?? 0)) {
+        const cx = placed.cellX + offset.x;
+        const cz = placed.cellZ + offset.z;
+        result.push({
+          x: cx * GRID_CELL_SIZE,
+          z: cz * GRID_CELL_SIZE,
+          radius: GRID_CELL_SIZE * 0.5,
+          halfExtent: GRID_CELL_SIZE * 0.5,
+          // A face with a solid neighbour behind it is internal to the run —
+          // see the note on Collidable.openFaces.
+          openFaces: {
+            xPos: !this.blocksAt(cx + 1, cz),
+            xNeg: !this.blocksAt(cx - 1, cz),
+            zPos: !this.blocksAt(cx, cz + 1),
+            zNeg: !this.blocksAt(cx, cz - 1),
+          },
+        });
+      }
     }
     return result;
   }

@@ -11,6 +11,13 @@ export interface PlacedBuilding {
   buildingId: string;
   cellX: number;
   cellZ: number;
+  /**
+   * Quarter turns about the anchor cell, in degrees. Optional because saves
+   * written before pieces could be turned have no such field, and a missing
+   * value means "unrotated" — which is exactly how every one of them was
+   * placed.
+   */
+  rotation?: number;
 }
 
 export interface PlotState {

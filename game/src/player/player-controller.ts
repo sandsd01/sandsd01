@@ -12,7 +12,7 @@ import { instantiate, type ModelLibrary } from "../world/models";
 
 const MOVE_SPEED = 5;
 const SPRINT_MULTIPLIER = 1.6;
-const PLAYER_RADIUS = 0.4;
+export const PLAYER_RADIUS = 0.4;
 const MOUSE_SENSITIVITY = 0.0025;
 const PLAYER_HEIGHT = 1.7;
 const BOB_FREQUENCY = 9; // cycles/sec while moving at full speed

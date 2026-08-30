@@ -54,6 +54,13 @@ export const ITEMS: Record<string, ItemDef> = {
   },
   // What farming is finally for: wheat had no use but growing more wheat.
   bread: { id: "bread", name: "Bread", category: "crop", stackSize: 99, color: 0xd9a441, heals: 40 },
+  // Dropped by the dead, and the only things that are. Killing used to pay
+  // nothing at all, so combat was a pure cost — these are what make a fight
+  // worth picking, and both feed recipes rather than sitting in the bag.
+  bone: { id: "bone", name: "Bone", category: "resource", stackSize: 99, color: 0xe6e0cc },
+  hide: { id: "hide", name: "Hide", category: "resource", stackSize: 99, color: 0x7a5238 },
+  bone_club: { id: "bone_club", name: "Bone Club", category: "tool", stackSize: 1, color: 0xdcd3b8 },
+  broth: { id: "broth", name: "Broth", category: "crop", stackSize: 99, color: 0xb5793c, heals: 25 },
 };
 
 export function getItem(id: string): ItemDef {

@@ -11,6 +11,7 @@ export type Action =
   | "gather"
   | "farm"
   | "cancelBuild"
+  | "rotateBuild"
   | "crafting"
   | "building"
   | "inventory"
@@ -37,6 +38,7 @@ export const ACTIONS: Action[] = [
   "gather",
   "farm",
   "cancelBuild",
+  "rotateBuild",
   "toggleView",
   "hotbar1",
   "hotbar2",
@@ -62,6 +64,7 @@ export const ACTION_LABELS: Record<Action, string> = {
   gather: "Gather / interact",
   farm: "Plant / harvest",
   cancelBuild: "Cancel placement",
+  rotateBuild: "Rotate piece",
   toggleView: "First / third person",
   crafting: "Crafting menu",
   building: "Build menu",
@@ -92,6 +95,7 @@ export const DEFAULT_BINDINGS: Bindings = {
   gather: ["KeyE"],
   farm: ["KeyF"],
   cancelBuild: ["KeyQ"],
+  rotateBuild: ["KeyR"],
   // F5 is the view-toggle key players arrive with from Minecraft; V is the
   // second slot for keyboards where F5 is claimed by the browser.
   toggleView: ["F5", "KeyV"],

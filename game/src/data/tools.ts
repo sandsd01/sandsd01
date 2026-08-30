@@ -16,19 +16,26 @@ export interface ToolDef {
    * inventory is not a reward.
    */
   speed: number;
+  /**
+   * Chance of an extra unit on top of a swing's normal roll. Speed alone
+   * stops being a reward once the player has time to spare — this makes the
+   * iron tier pay out more per node as well as sooner.
+   */
+  yieldBonusChance: number;
 }
 
 export const TOOLS: Record<string, ToolDef> = {
-  axe: { kind: "axe", speed: 1, damage: 14 },
-  pickaxe: { kind: "pickaxe", speed: 1, damage: 12 },
-  iron_axe: { kind: "axe", speed: 0.6, damage: 20 },
-  iron_pickaxe: { kind: "pickaxe", speed: 0.6, damage: 16 },
+  axe: { kind: "axe", speed: 1, damage: 14, yieldBonusChance: 0 },
+  pickaxe: { kind: "pickaxe", speed: 1, damage: 12, yieldBonusChance: 0 },
+  iron_axe: { kind: "axe", speed: 0.6, damage: 20, yieldBonusChance: 0.5 },
+  iron_pickaxe: { kind: "pickaxe", speed: 0.6, damage: 16, yieldBonusChance: 0.5 },
 };
 
 // Weapons live beside the tools rather than as constants inside combat.ts:
 // what you can hit with is content, and an axe is a poor weapon rather than
 // no weapon at all.
 export const WEAPON_DAMAGE: Record<string, number> = {
+  bone_club: 18,
   sword: 25,
   iron_sword: 40,
 };
@@ -52,10 +59,20 @@ export function heldDamage(state: GameState): number {
  * changed when you made one. What you hold is now what you work with.
  */
 export function heldToolSpeed(state: GameState, kind: ToolKind): number | null {
+  const held = heldToolFor(state, kind);
+  return held ? held.speed : null;
+}
+
+/** The bonus-yield chance of the tool in hand for this work, or 0 for none. */
+export function heldYieldBonus(state: GameState, kind: ToolKind): number {
+  return heldToolFor(state, kind)?.yieldBonusChance ?? 0;
+}
+
+function heldToolFor(state: GameState, kind: ToolKind): ToolDef | null {
   const held = equippedItemId(state);
   if (held === null) return null;
   const tool = TOOLS[held];
-  return tool && tool.kind === kind ? tool.speed : null;
+  return tool && tool.kind === kind ? tool : null;
 }
 
 // For the "you need an axe for this" message: the plainest name of the tier

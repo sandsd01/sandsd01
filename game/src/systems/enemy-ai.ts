@@ -185,7 +185,15 @@ export class EnemyManager {
     const enemy = this.enemies.find((e) => e.id === id);
     if (!enemy || enemy.dying) return;
     enemy.startDeathAnimation(nowMs);
-    events.emit("enemy-killed", { id });
+    // Carries where and what died, not just which id: loot has to land at the
+    // corpse, and by the time a listener could look the enemy up it may
+    // already have finished its death animation and left the list.
+    events.emit("enemy-killed", {
+      id,
+      enemyId: enemy.def.id,
+      x: enemy.object.position.x,
+      z: enemy.object.position.z,
+    });
   }
 
   update(

@@ -1,38 +1,83 @@
 import * as THREE from "three";
 import { merge, paint, placed, roughen, varyColor } from "./geometry";
 import { instantiate, type ModelLibrary, type ModelName } from "./models";
+import { chance, randomInt } from "../utils/rng";
 
 export type ResourceNodeKind = "tree" | "rock" | "berry_bush" | "clay_pit" | "iron_vein";
 
 export interface ResourceNodeConfig {
   kind: ResourceNodeKind;
   yieldItemId: string;
-  yieldQtyPerHit: number;
+  /**
+   * How much one swing yields, as a range. It used to be a flat 1 for every
+   * node in the game, which made every swing on every resource identical and
+   * left the field parameterised but never parameterised.
+   */
+  yield: { min: number; max: number };
+  /**
+   * Extra thrown in for finishing the node off, on top of the last swing's
+   * normal roll. Chopping a tree all the way down should beat tapping four
+   * different trees once each.
+   */
+  finalHitBonus: number;
+  /** An occasional something-else, rolled per swing. */
+  bonus?: { itemId: string; chance: number; qty: number };
   hitsToDeplete: number;
   respawnMs: number;
 }
 
+/** What one swing produced: the staple, plus a bonus item when one rolled. */
+export interface NodeYield {
+  itemId: string;
+  qty: number;
+  bonus?: { itemId: string; qty: number };
+  /** True when this swing was the one that finished the node off. */
+  finalHit: boolean;
+}
+
 export const RESOURCE_NODE_CONFIGS: Record<ResourceNodeKind, ResourceNodeConfig> = {
-  tree: { kind: "tree", yieldItemId: "wood", yieldQtyPerHit: 1, hitsToDeplete: 4, respawnMs: 20_000 },
-  rock: { kind: "rock", yieldItemId: "stone", yieldQtyPerHit: 1, hitsToDeplete: 4, respawnMs: 25_000 },
+  tree: {
+    kind: "tree",
+    yieldItemId: "wood",
+    yield: { min: 1, max: 3 },
+    finalHitBonus: 3,
+    // Seeds off the canopy, so a wood run also quietly restocks the farm.
+    bonus: { itemId: "wheat_seed", chance: 0.08, qty: 1 },
+    hitsToDeplete: 4,
+    respawnMs: 20_000,
+  },
+  rock: {
+    kind: "rock",
+    yieldItemId: "stone",
+    yield: { min: 1, max: 3 },
+    finalHitBonus: 3,
+    bonus: { itemId: "clay", chance: 0.1, qty: 1 },
+    hitsToDeplete: 4,
+    respawnMs: 25_000,
+  },
   berry_bush: {
     kind: "berry_bush",
     yieldItemId: "berry",
-    yieldQtyPerHit: 1,
+    yield: { min: 1, max: 2 },
+    finalHitBonus: 2,
     hitsToDeplete: 3,
     respawnMs: 18_000,
   },
   clay_pit: {
     kind: "clay_pit",
     yieldItemId: "clay",
-    yieldQtyPerHit: 1,
+    yield: { min: 1, max: 3 },
+    finalHitBonus: 2,
     hitsToDeplete: 3,
     respawnMs: 22_000,
   },
   iron_vein: {
     kind: "iron_vein",
     yieldItemId: "iron_ore",
-    yieldQtyPerHit: 1,
+    yield: { min: 1, max: 2 },
+    finalHitBonus: 2,
+    // The rare one worth walking to the rocky zone for.
+    bonus: { itemId: "iron_ingot", chance: 0.05, qty: 1 },
     hitsToDeplete: 5,
     respawnMs: 35_000,
   },
@@ -300,15 +345,31 @@ export class ResourceNode {
     this.hitsRemaining = this.config.hitsToDeplete;
   }
 
-  // Returns the item/qty yielded by this hit, or null if already depleted.
-  hit(nowMs: number): { itemId: string; qty: number } | null {
+  /**
+   * Works the node once. `rand` is passed in rather than taken from a module
+   * global so the caller owns which stream the roll comes from, and
+   * `yieldBonusChance` lets a better tool pay out more rather than only
+   * faster — a tier that is merely quicker stops mattering once you have
+   * plenty of time.
+   */
+  hit(nowMs: number, rand: () => number, yieldBonusChance = 0): NodeYield | null {
     if (this.depleted) return null;
     this.hitAnimStartMs = nowMs;
     this.hitsRemaining -= 1;
-    const result = { itemId: this.config.yieldItemId, qty: this.config.yieldQtyPerHit };
-    if (this.hitsRemaining <= 0) {
-      this.deplete(nowMs);
+    const finalHit = this.hitsRemaining <= 0;
+
+    let qty = randomInt(rand, this.config.yield.min, this.config.yield.max);
+    if (chance(rand, yieldBonusChance)) qty += 1;
+    if (finalHit) qty += this.config.finalHitBonus;
+
+    const result: NodeYield = { itemId: this.config.yieldItemId, qty, finalHit };
+
+    const bonus = this.config.bonus;
+    if (bonus && chance(rand, bonus.chance)) {
+      result.bonus = { itemId: bonus.itemId, qty: bonus.qty };
     }
+
+    if (finalHit) this.deplete(nowMs);
     return result;
   }
 

@@ -5,7 +5,21 @@ import { colorToCss, el } from "./dom";
 import { keyLabel, type Action, type Bindings } from "../state/keybindings";
 import { icon, iconSvg, type IconName } from "./icons";
 
-const TRACKED_ITEMS = ["wood", "stone", "berry", "clay", "iron_ore", "plank", "wheat_seed", "wheat"];
+// The staples, plus the two things only the dead drop — a bar that never
+// showed loot would leave the player checking the inventory panel to find out
+// whether a fight paid.
+const TRACKED_ITEMS = [
+  "wood",
+  "stone",
+  "berry",
+  "clay",
+  "iron_ore",
+  "plank",
+  "wheat_seed",
+  "wheat",
+  "bone",
+  "hide",
+];
 // Each tracked resource gets a glyph as well as a colour: the icon says what
 // it is, the tint only reinforces it.
 const ITEM_ICONS: Record<string, IconName> = {
@@ -17,6 +31,8 @@ const ITEM_ICONS: Record<string, IconName> = {
   plank: "squareStack",
   wheat_seed: "sprout",
   wheat: "wheat",
+  bone: "sword",
+  hide: "layers",
 };
 const ITEM_COLORS: Record<string, number> = {
   wood: 0x8b5a2b,
@@ -27,6 +43,8 @@ const ITEM_COLORS: Record<string, number> = {
   plank: 0xc19a6b,
   wheat_seed: 0xd4c26a,
   wheat: 0xe8c840,
+  bone: 0xe6e0cc,
+  hide: 0x7a5238,
 };
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -42,6 +60,8 @@ export class Hud {
   private readonly crosshairRing: SVGSVGElement;
   private readonly crosshairProgress: SVGCircleElement;
   private crosshairState: CrosshairState = "none";
+  /** Last rendered count per tracked item, to spot a rise. */
+  private readonly lastCounts = new Map<string, number>();
   private readonly healthFill: HTMLDivElement;
   private readonly staminaFill: HTMLDivElement;
   private readonly resourceRow: HTMLDivElement;
@@ -180,8 +200,18 @@ export class Hud {
         const chip = el("div", "hud-resource-chip");
         const glyph = icon(ITEM_ICONS[itemId]);
         glyph.style.color = colorToCss(ITEM_COLORS[itemId]);
-        const count = el("span", undefined, String(getQty(state, itemId)));
+        const qty = getQty(state, itemId);
+        const count = el("span", undefined, String(qty));
         chip.append(glyph, count);
+
+        // A count that just rose gets a brief lift. Gathering yields vary now,
+        // so "how much did that swing give me" is a real question — and the
+        // toast is a single self-overwriting element, so announcing every
+        // pickup there would bury crafting and recipe messages under a stream
+        // of resource spam. The number says it where the number already is.
+        const before = this.lastCounts.get(itemId);
+        if (before !== undefined && qty > before) chip.classList.add("gained");
+        this.lastCounts.set(itemId, qty);
         return chip;
       }),
     );

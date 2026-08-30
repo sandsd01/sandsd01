@@ -37,10 +37,12 @@ export interface GameEvents {
   "player-respawned": Record<string, never>;
   "enemy-spawned": { id: string };
   "enemy-hit": { id: string; damage: number };
-  "enemy-killed": { id: string };
+  "enemy-killed": { id: string; enemyId: string; x: number; z: number };
   "item-crafted": { itemId: string; qty: number };
-  "resource-gathered": { itemId: string; qty: number; kind: string };
+  "item-picked-up": { itemId: string; qty: number };
+  "resource-gathered": { itemId: string; qty: number; kind: string; finalHit: boolean };
   "player-attack": Record<string, never>;
+  "building-removed": { id: string; buildingId: string };
   "building-placed": { id: string; buildingId: string };
   "building-selection-changed": { buildingId: string | null };
   "crop-planted": { plotId: string; cropId: string };
