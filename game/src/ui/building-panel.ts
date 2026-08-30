@@ -24,12 +24,17 @@ export class BuildingPanel {
       el(
         "p",
         "panel-hint",
-        "Select a piece, aim in front of you, left-click to place. Q cancels. Press B to close.",
+        "Select a piece, aim where you want it, right-click to place. Q cancels. Press B to close.",
       ),
     );
     root.appendChild(this.panel);
 
     events.on("inventory-changed", () => {
+      if (this.visible) this.render();
+    });
+    // Q cancels placement from outside this panel; without this the row would
+    // go on claiming to be "Selected".
+    events.on("building-selection-changed", () => {
       if (this.visible) this.render();
     });
   }

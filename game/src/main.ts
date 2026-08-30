@@ -20,10 +20,13 @@ import { PlayerController } from "./player/player-controller";
 import { damagePlayer, isPlayerDead, respawnPlayer } from "./player/player-state";
 
 import { Terrain } from "./world/terrain";
+import { getZone } from "./world/zones";
 import { scatterResourceNodes, addNodesToScene } from "./world/world-objects";
 import { createGrass } from "./world/grass";
 import { Water, WATER_LEVEL } from "./world/water";
 import { loadModels } from "./world/models";
+import { createLandmarks } from "./world/landmarks";
+import { createPointsOfInterest } from "./world/pois";
 import { createComposer } from "./core/postprocessing";
 
 import {
@@ -36,7 +39,17 @@ import {
 } from "./systems/gathering";
 import { Targeting, type Target } from "./systems/targeting";
 import { TargetOutline } from "./world/target-outline";
-import { addItem } from "./systems/inventory";
+import { addItem, consumeItem } from "./systems/inventory";
+import { getItem } from "./data/items";
+import {
+  assignFromInventory,
+  assignToSlot,
+  autoAssign,
+  cycleSlot,
+  equippedItemId,
+  pruneHotbar,
+  selectSlot,
+} from "./systems/equipment";
 import {
   canCraft,
   craftMany,
@@ -50,6 +63,8 @@ import { EnemyManager } from "./systems/enemy-ai";
 import { PlayerCombat } from "./systems/combat";
 import { DayNightSystem, DAY_LENGTH_MS } from "./systems/day-night";
 import { saveGame, loadGame } from "./systems/save-load";
+import { deposit, withdraw } from "./systems/containers";
+import { heldDamage } from "./data/tools";
 
 import { createInitialState, type GameState } from "./state/game-state";
 import { loadSettings } from "./state/settings";
@@ -59,7 +74,8 @@ import { Hud, type CrosshairState } from "./ui/hud";
 import { InventoryPanel } from "./ui/inventory-panel";
 import { CraftingPanel } from "./ui/crafting-panel";
 import { BuildingPanel } from "./ui/building-panel";
-import { BuildHotbar, HOTBAR_ACTIONS } from "./ui/build-hotbar";
+import { ContainerPanel } from "./ui/container-panel";
+import { ItemHotbar, HOTBAR_ACTIONS } from "./ui/item-hotbar";
 import { SettingsPanel } from "./ui/settings-panel";
 import { Minimap } from "./ui/minimap";
 import { AudioHooks } from "./systems/audio-hooks";
@@ -75,6 +91,9 @@ const state = loadGame() ?? createInitialState();
 // else is learned by picking the ingredient up. A loaded save has already had
 // its known set backfilled by save-load.
 discoverFromInventory(state);
+// A fresh world fills its bar from the starting kit; a loaded save already had
+// this done by save-load's backfill.
+assignFromInventory(state);
 // Input preferences live outside the save, so they survive a new world.
 const settings = loadSettings();
 const bindings = loadBindings();
@@ -108,6 +127,10 @@ scene.add(water.mesh);
 
 const composer = createComposer(renderer, scene, camera.camera);
 
+// Landmarks first: the caches below are placed relative to them.
+const landmarks = createLandmarks(scene, terrain, state.seed, models);
+createPointsOfInterest(state, landmarks, state.seed);
+
 const buildingSystem = new BuildingSystem(scene, terrain, state, models);
 const farmingSystem = new FarmingSystem(scene, terrain, state);
 const enemyManager = new EnemyManager(scene, terrain, state.seed);
@@ -129,6 +152,11 @@ new AudioHooks();
 // leave only the last one readable — the exact complaint players have about
 // how Valheim does this. The panel's NEW badge is the durable half.
 events.on("inventory-changed", ({ itemId }) => {
+  // A newly acquired kind of item takes the first free quick slot, so the bag
+  // never has to be arranged before anything can be used.
+  autoAssign(state, itemId);
+  pruneHotbar(state);
+
   const learned = discoverFrom(state, itemId);
   if (learned.length === 0) return;
   events.emit("notification", {
@@ -154,17 +182,28 @@ const stationCheck = (buildingId: string) =>
   buildingSystem.hasNearby(buildingId, state.player.x, state.player.z, STATION_RANGE);
 const craftingPanel = new CraftingPanel(uiRoot, state, stationCheck);
 const buildingPanel = new BuildingPanel(uiRoot, buildingSystem, canvas, state);
-const buildHotbar = new BuildHotbar(uiRoot, buildingSystem, canvas, state, bindings);
+const itemHotbar = new ItemHotbar(uiRoot, state, canvas, bindings);
 const settingsPanel = new SettingsPanel(uiRoot, settings, bindings, input, () => {
   // One place fans a rebind out to everything that displays or consumes keys,
   // so nothing is left advertising a binding that no longer exists.
   saveBindings(bindings);
   input.setBindings(bindings);
-  buildHotbar.setBindings(bindings);
+  itemHotbar.setBindings(bindings);
   hud.setKeybinds(bindings);
 });
 hud.setKeybinds(bindings);
+const containerPanel = new ContainerPanel(uiRoot, state);
 const minimap = new Minimap(uiRoot);
+
+// One place keeps the character's hand in step with the quick bar. Driven by
+// the event rather than polled per frame, so swapping slots is what changes
+// the mesh and nothing else has to remember to.
+function syncHeldItem(): void {
+  player.setHeldItem(equippedItemId(state));
+}
+events.on("equipped-changed", syncHeldItem);
+events.on("inventory-changed", syncHeldItem);
+syncHeldItem();
 
 // Menus are mutually exclusive and Escape closes whatever is open — the
 // convention every game in this genre follows. Opening one also releases
@@ -174,7 +213,13 @@ interface TogglablePanel {
   close(): void;
   isVisible(): boolean;
 }
-const panels: TogglablePanel[] = [craftingPanel, buildingPanel, inventoryPanel, settingsPanel];
+const panels: TogglablePanel[] = [
+  craftingPanel,
+  buildingPanel,
+  inventoryPanel,
+  settingsPanel,
+  containerPanel,
+];
 
 function anyPanelOpen(): boolean {
   return panels.some((panel) => panel.isVisible());
@@ -256,6 +301,21 @@ function performSecondaryAction(): void {
     buildingSystem.tryPlace(targeting.aimPoint(feet, camera.getForward()), currentNowMs);
     return;
   }
+  // A barrel outranks eating: if you are looking into one, that is what you
+  // meant, whatever happens to be in your hand.
+  if (target.kind === "container" && target.containerId) {
+    document.exitPointerLock();
+    for (const panel of panels) panel.close();
+    containerPanel.open(target.containerId);
+    return;
+  }
+  // Holding food and right-clicking eats it, the way this genre has taught
+  // everyone to expect. The Eat button in the bag still works too.
+  const held = equippedItemId(state);
+  if (held !== null && getItem(held).heals !== undefined) {
+    consumeItem(state, held);
+    return;
+  }
   if (target.kind === "plot" && target.plot) {
     farmingSystem.tryInteract(target.plot, selectedSeedItemId, currentNowMs);
   }
@@ -272,6 +332,8 @@ function crosshairStateFor(current: Target): CrosshairState {
   if (current.kind === "node" || current.kind === "enemy" || current.kind === "plot") {
     return current.kind;
   }
+  // A barrel reads as somewhere to reach into, so it borrows the plot bracket.
+  if (current.kind === "container") return "plot";
   return "none";
 }
 
@@ -345,12 +407,12 @@ const loop = new GameLoop((dt) => {
     gatherNodeId ? gatherProgressMs / gatherTimeFor(state, aimedNode(target)) : 0,
   );
 
-  // The wheel cycles build pieces as it does in Minecraft; zoom moved behind
-  // Ctrl so the bare scroll can mean the thing players reach for it to mean.
+  // The wheel changes what is in hand, as it does in Minecraft; zoom stayed
+  // behind Ctrl so the bare scroll means the thing players reach for.
   const wheel = input.takeWheel();
   if (wheel.delta !== 0) {
     if (wheel.withCtrl) camera.zoomBy(wheel.delta);
-    else if (canAct) buildHotbar.cycle(wheel.delta > 0 ? 1 : -1);
+    else if (canAct) cycleSlot(state, wheel.delta > 0 ? 1 : -1);
   }
 
   if (input.wasActionPressed("toggleView")) {
@@ -385,9 +447,9 @@ const loop = new GameLoop((dt) => {
     }
   }
   if (input.wasActionPressed("cancelBuild") && canAct) buildingSystem.selectBuilding(null);
-  // Hotbar keys pick a build piece without opening anything.
+  // Hotbar keys put an item in hand.
   const hotbarSlot = HOTBAR_ACTIONS.findIndex((action) => input.wasActionPressed(action));
-  if (hotbarSlot >= 0 && canAct) buildHotbar.selectSlot(hotbarSlot);
+  if (hotbarSlot >= 0 && canAct) selectSlot(state, hotbarSlot);
 
   const gatherPrompt = getInteractionPrompt(state, keyNode);
   const farmPrompt = farmingSystem.getPrompt(keyPlot, selectedSeedItemId, currentNowMs);
@@ -400,8 +462,13 @@ const loop = new GameLoop((dt) => {
   else targetOutline.hide();
   hud.setCrosshairState(crosshairStateFor(target));
 
-  minimap.update(currentNowMs, state, resourceNodes, enemyManager.getEnemies(), (id) =>
-    buildingSystem.getMesh(id),
+  minimap.update(
+    currentNowMs,
+    state,
+    resourceNodes,
+    enemyManager.getEnemies(),
+    (id) => buildingSystem.getMesh(id),
+    landmarks,
   );
 
   water.update(currentNowMs);
@@ -466,6 +533,32 @@ declare global {
       getCrosshairState: () => string;
       getOutline: () => { visible: boolean; size: [number, number, number] };
       getSelectedBuilding: () => string | null;
+      getHotbar: () => (string | null)[];
+      getContainer: (buildingId: string) => { itemId: string; qty: number }[];
+      getContainerPanelOpen: () => boolean;
+      getEquippedSlot: () => number;
+      getEquippedItem: () => string | null;
+      selectHotbarSlot: (index: number) => void;
+      holdItem: (itemId: string) => void;
+      getHeldDamage: () => number;
+      depositToContainer: (buildingId: string, itemId: string, qty: number) => number;
+      withdrawFromContainer: (buildingId: string, itemId: string, qty: number) => number;
+      saveNow: () => void;
+      setFistOffset: (x: number, y: number, z: number) => void;
+      isHeldItemVisible: () => {
+        visible: boolean;
+        onScreen: boolean;
+        ndc: [number, number];
+        firstHit: string;
+      };
+      getHeldItemMesh: () => {
+        itemId: string | null;
+        attached: boolean;
+        hasMesh: boolean;
+        world: [number, number, number];
+        aboveFeet: number;
+        axis: [number, number, number];
+      };
       getActionProgress: () => number;
       getGatherTime: () => number;
       getHealth: () => { current: number; max: number };
@@ -477,6 +570,15 @@ declare global {
       getRenderStats: () => Record<string, unknown>;
       terrainHeightAt: (x: number, z: number) => number;
       getWaterLevel: () => number;
+      getLandmarks: () => {
+        id: string;
+        name: string;
+        zone: string;
+        x: number;
+        z: number;
+        height: number;
+      }[];
+      getZoneAt: (x: number, z: number) => string;
     };
   }
 }
@@ -542,7 +644,12 @@ window.__gameDebug = {
   // the game does something else.
   getTarget: () => ({
     kind: target.kind,
-    id: target.node?.id ?? target.enemy?.id ?? target.plot?.buildingId ?? null,
+    id:
+      target.node?.id ??
+      target.enemy?.id ??
+      target.plot?.buildingId ??
+      target.containerId ??
+      null,
     distance: Number.isFinite(target.distance) ? Number(target.distance.toFixed(2)) : -1,
     x: Number(target.point.x.toFixed(2)),
     z: Number(target.point.z.toFixed(2)),
@@ -557,6 +664,61 @@ window.__gameDebug = {
     ],
   }),
   getSelectedBuilding: () => buildingSystem.getSelectedBuildingId(),
+  getHotbar: () => [...state.hotbar],
+  getContainer: (buildingId) => (state.containers[buildingId] ?? []).map((s) => ({ ...s })),
+  getContainerPanelOpen: () => containerPanel.isVisible(),
+  getEquippedSlot: () => state.equippedSlot,
+  getEquippedItem: () => equippedItemId(state),
+  selectHotbarSlot: (index) => selectSlot(state, index),
+  // What the inventory panel's Hold button does: put this item in the slot
+  // currently in hand.
+  holdItem: (itemId) => assignToSlot(state, state.equippedSlot, itemId),
+  getHeldDamage: () => heldDamage(state),
+  depositToContainer: (buildingId, itemId, qty) => deposit(state, buildingId, itemId, qty),
+  withdrawFromContainer: (buildingId, itemId, qty) => withdraw(state, buildingId, itemId, qty),
+  saveNow: () => saveGame(state),
+  // Read off the rendered hand rather than off state, so a test can tell
+  // "the game thinks you hold an axe" from "an axe is actually on the arm".
+  getHeldItemMesh: () => player.getHeldItem(),
+  setFistOffset: (x, y, z) => player.setFistOffset(x, y, z),
+  // Whether the thing in the hand is actually *visible* rather than buried in
+  // the torso: raycast from the camera at it and see what comes back first.
+  // Eyeballing a chibi model against its own quiver strap proved unreliable.
+  isHeldItemVisible: () => {
+    const grip = player.getGripObject();
+    const miss = { onScreen: false, ndc: [0, 0] as [number, number] };
+    if (!grip) return { ...miss, visible: false, firstHit: "no-grip" };
+    // three only refreshes matrices at render time, so both the camera and the
+    // grip have to be brought up to date before projecting — the same stale
+    // matrix trap targeting.ts documents. Without this the projected point can
+    // land on the head, or off screen entirely, and the answer is noise.
+    camera.camera.updateMatrixWorld(true);
+    player.object.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(grip);
+    if (box.isEmpty()) return { ...miss, visible: false, firstHit: "empty-hand" };
+    const centre = box.getCenter(new THREE.Vector3());
+    const ndc = centre.clone().project(camera.camera);
+    // Is the item inside the frame at all, and in front of the camera? This
+    // part is reliable, so it is what a test should lean on.
+    const onScreen =
+      ndc.z > -1 && ndc.z < 1 && Math.abs(ndc.x) <= 1 && Math.abs(ndc.y) <= 1;
+
+    // The occlusion answer below is best-effort only. Raycasting a SkinnedMesh
+    // uses its bind-pose bounds, so the ray can slip past an animated limb and
+    // report "nothing" for an item that is plainly on screen — treat a miss as
+    // "could not tell", never as proof the item is hidden.
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(new THREE.Vector2(ndc.x, ndc.y), camera.camera);
+    const hits = ray.intersectObject(player.object, true);
+    const out = { onScreen, ndc: [ndc.x, ndc.y] as [number, number] };
+    if (hits.length === 0) return { ...out, visible: onScreen, firstHit: "no-ray-hit" };
+    let node: THREE.Object3D | null = hits[0].object;
+    while (node) {
+      if (node === grip) return { ...out, visible: true, firstHit: "held-item" };
+      node = node.parent;
+    }
+    return { ...out, visible: false, firstHit: hits[0].object.name || hits[0].object.type };
+  },
   getActionProgress: () =>
     gatherNodeId ? gatherProgressMs / gatherTimeFor(state, aimedNode(target)) : 0,
   // The swing length for whatever is aimed at, so a test can prove an iron
@@ -575,6 +737,16 @@ window.__gameDebug = {
   craftRecipe: (recipeId, count = 1) => craftMany(state, recipeId, count, stationCheck),
   terrainHeightAt: (x, z) => terrain.heightAt(x, z),
   getWaterLevel: () => WATER_LEVEL,
+  getLandmarks: () =>
+    landmarks.map((l) => ({
+      id: l.id,
+      name: l.name,
+      zone: l.zone,
+      x: Number(l.x.toFixed(1)),
+      z: Number(l.z.toFixed(1)),
+      height: Number(l.height.toFixed(2)),
+    })),
+  getZoneAt: (x, z) => getZone(x, z),
   // Lighting/shadow state, for checking that a visual change actually took
   // effect rather than inferring it from a screenshot.
   getRenderStats: () => {

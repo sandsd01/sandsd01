@@ -9,6 +9,8 @@ export interface BuildingDef {
   height: number;
   color: number;
   isPlot: boolean; // true for farmable plots (see systems/farming.ts)
+  /** true for anything that stores items (see systems/containers.ts) */
+  isContainer?: boolean;
 }
 
 export const BUILDINGS: Record<string, BuildingDef> = {
@@ -88,6 +90,7 @@ export const BUILDINGS: Record<string, BuildingDef> = {
   barrel: {
     id: "barrel",
     name: "Barrel",
+    isContainer: true,
     footprintCells: [{ x: 0, z: 0 }],
     cost: [{ itemId: "plank", qty: 3 }],
     height: 0.95,

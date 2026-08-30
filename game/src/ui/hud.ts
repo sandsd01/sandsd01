@@ -159,7 +159,8 @@ export class Hud {
       `<div>Mouse look (click to lock) · ${cap("toggleView")} view</div>` +
       "<div><kbd>LMB</kbd> gather/attack · <kbd>RMB</kbd> place/use</div>" +
       `<div>${cap("gather")} gather · ${cap("farm")} plant/harvest</div>` +
-      `<div>${cap("hotbar1")}–${cap("hotbar8")} or scroll to pick a piece · ${cap("cancelBuild")} cancel</div>` +
+      `<div>${cap("hotbar1")}–${cap("hotbar8")} or scroll to pick what you hold</div>` +
+      `<div>${cap("building")} build menu · ${cap("cancelBuild")} cancel placement</div>` +
       `<div>${cap("crafting")} craft · ${cap("building")} build · ` +
       `${cap("inventory")} inventory · ${cap("options")} options</div>`;
   }

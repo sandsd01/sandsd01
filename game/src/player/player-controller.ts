@@ -6,6 +6,7 @@ import type { Terrain } from "../world/terrain";
 import { resolveCollisions, type Collidable } from "../utils/collision";
 import { events } from "../utils/events";
 import { buildFigureGeometry, createFigureMaterial } from "../world/figures";
+import { HeldItem } from "../world/held-item";
 import { merge, paint, placed } from "../world/geometry";
 import { instantiate, type ModelLibrary } from "../world/models";
 
@@ -63,6 +64,7 @@ export class PlayerController {
   private sprintLocked = false;
   private lastStepIndex = -1;
   private lastKnownNowMs = 0;
+  private readonly heldItem = new HeldItem();
 
   constructor(
     private readonly state: GameState,
@@ -70,14 +72,18 @@ export class PlayerController {
     models: ModelLibrary = {},
   ) {
     this.object = new THREE.Group();
+    // The held item rides the character root, not a bone: the pack's rig has
+    // no hand. See world/held-item.ts for why that turned out to matter.
+    this.heldItem.attachTo(this.object);
 
     const character = models["character-archer"];
     if (character) {
       const rig = instantiate(character);
       this.object.add(rig);
-      // The mixer drives the model's own rig, so the head-bob and the hand-made
-      // weapon prop below are not created at all — the animations already carry
-      // the gait and the swing, and layering ours on top would fight them.
+
+      // The mixer drives the model's own rig, so the head-bob below is not
+      // applied — the animations already carry the gait, and layering ours on
+      // top would fight them.
       this.mixer = new THREE.AnimationMixer(rig);
       for (const clip of character.animations) {
         this.actions.set(clip.name, this.mixer.clipAction(clip));
@@ -99,8 +105,9 @@ export class PlayerController {
     this.body.receiveShadow = true;
     this.object.add(this.body);
 
-    // A simple held-item indicator that swings on attack/place — purely
-    // cosmetic feedback, independent of the range-based hit logic.
+    // The un-rigged fallback body has no arm bone to hang anything from, so it
+    // keeps the old generic prop: better a stand-in that swings than an empty
+    // fist, on a path that only runs when the model failed to load at all.
     this.weapon = new THREE.Mesh(
       merge([
         placed(paint(new THREE.BoxGeometry(0.05, 0.05, 0.62), 0x6b4a32), 0, 0, 0.05),
@@ -113,6 +120,42 @@ export class PlayerController {
     this.object.add(this.weapon);
 
     this.syncObjectFromState();
+  }
+
+  /** Puts an item in the character's hand, or empties it for null. */
+  setHeldItem(itemId: string | null): void {
+    this.heldItem.show(itemId);
+  }
+
+  /** Retunes where the fist sits; the offset is re-solved next frame. */
+  setFistOffset(x: number, y: number, z: number): void {
+    this.heldItem.setFist(x, y, z);
+  }
+
+  /** The grip node, for testing whether the body occludes what it holds. */
+  getGripObject(): THREE.Object3D | null {
+    return this.heldItem.gripObject();
+  }
+
+  /** What the hand is actually showing — for headless verification. */
+  getHeldItem(): {
+    itemId: string | null;
+    attached: boolean;
+    hasMesh: boolean;
+    world: [number, number, number];
+    aboveFeet: number;
+    axis: [number, number, number];
+  } {
+    const world = this.heldItem.worldPosition(new THREE.Vector3());
+    const axis = this.heldItem.worldAxis(new THREE.Vector3());
+    return {
+      itemId: this.heldItem.heldId(),
+      attached: this.heldItem.isAttached(),
+      hasMesh: this.heldItem.hasMesh(),
+      world: [world.x, world.y, world.z],
+      aboveFeet: world.y - this.state.player.y,
+      axis: [axis.x, axis.y, axis.z],
+    };
   }
 
   // Kicks off the cosmetic swing animation; called by main.ts whenever the
@@ -364,7 +407,11 @@ export class PlayerController {
     this.body.position.y = bob;
   }
 
+  // Swings whatever is in hand. This was dead for as long as the rigged model
+  // loaded — it only ever drove the fallback prop — and now carries the real
+  // held item, which the rig cannot swing for us.
   private updateSwing(nowMs: number): void {
+    this.heldItem.update(nowMs, this.swingStartMs);
     if (!this.weapon) return;
     const elapsed = nowMs - this.swingStartMs;
     if (elapsed < 0 || elapsed >= SWING_DURATION_MS) {

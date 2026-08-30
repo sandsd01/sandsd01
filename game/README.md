@@ -102,12 +102,13 @@ there is no deploy-time configuration to keep in sync.
 
 - `WASD` — move, `Shift` — sprint, `Space` — jump, mouse — look
 - **Left mouse (hold)** — chop/mine whatever the crosshair is on, or swing at it
-- **Right mouse** — place the selected build piece, or plant/harvest the aimed plot
-- Scroll — cycle the build hotbar, `Ctrl`+scroll — zoom the camera
+- **Right mouse** — place the selected build piece, open the aimed barrel, eat what
+  you're holding, or plant/harvest the aimed plot
+- Scroll — change which item you're holding, `Ctrl`+scroll — zoom the camera
 - `F5` or `V` — switch between third and first person
 - `E` — gather what you're aiming at, falling back to the nearest node in range
 - `F` — plant a selected seed into a farm plot / harvest a ready crop
-- `1`–`8` — pick a build piece straight from the hotbar (press again to cancel)
+- `1`–`8` — take that hotbar item in hand
 - `Q` — cancel building placement
 - `C` — crafting, `B` — building menu, `Tab` or `I` — inventory (select seeds here)
 - `Esc` — close the open menu, or open Options when nothing is open
@@ -227,9 +228,63 @@ pressing it is visible before you press it.
 A **mini-map** in the bottom-right corner shows the biomes, nearby resources,
 your buildings and any enemies, north-up with a marker for your heading.
 
-The build hotbar is always on screen and greys out pieces you can't yet
-afford, so building normally needs no menu at all — the `B` panel is only
-there when you want the full costs written out.
+## Holding things
+
+You hold **one item at a time**, and what's in your hand is what decides the
+outcome — the Minecraft convention. This used to be untrue in both directions:
+combat read `hasQty(state, "iron_sword", 1)` and gathering scanned the whole bag
+for the best tool, so *owning* a thing was the same as *using* it and a crafted
+sword changed nothing at all on screen.
+
+Now an axe in your bag chops nothing while you're holding a sword. The prompt
+says **"Hold an axe to chop this"** rather than "Need an axe", because the
+difference matters: you have one, you just aren't holding it.
+
+- `1`–`8` or the scroll wheel pick the slot. A new kind of item drops into the
+  first free slot on its own, so the bag never has to be arranged before
+  anything can be used.
+- Once the bar fills up, the **Hold** button on any inventory row puts that item
+  into the slot you have selected. Without it a sword crafted late — when every
+  slot is already taken by wood and stone — could never reach your hand.
+- Axes, pickaxes and swords are drawn in the character's hand and swing when you
+  do. The rig has no hand bone (`arm-right` is a leaf whose origin sits at the
+  shoulder), so the item hangs off the character root at a fist offset and is
+  pitched by hand during a swing. Attaching to the bone was tried first and
+  abandoned: any offset far enough out to clear the torso rides an arc as the
+  arm animates and swings back inside the body.
+
+## Barrels
+
+A barrel is real storage, not scenery. Aim at one and right-click to open a
+two-column panel — your bag on one side, its contents on the other, click to
+move things across. Contents are keyed by the barrel's placed-building id and
+live in the save, so they survive a reload.
+
+## Getting your bearings
+
+The world used to be divided by straight lines through the origin
+(`z < 0 ? wetland : x >= 0 ? forest : rocky`) and contained no landmarks at
+all — nothing to steer by and nowhere to aim for.
+
+- **Borders wander.** Zone edges are domain-warped with the existing value
+  noise before the zone test, so a biome boundary is a meandering coast rather
+  than a ruled line. The spawn clearing stays a true circle, because building
+  rules depend on it.
+- **Three landmarks, one per biome** — the Bleached Giant, the Spire and the
+  Standing Stones — stand 65–75 units out and well above the treeline, each
+  differing from its surroundings in *shape and value*, not only in size. The
+  existing fog (`Fog(0x9fd0e8, 95, 250)`) gives them atmospheric perspective
+  for free. They are checked by looking at renders from spawn, not by reading
+  the diff: the Giant was widened after a render showed it reading as just
+  another trunk.
+- **Each has a stocked cache at its foot**, so arriving pays for the walk and
+  the barrel system has a purpose from the first minute. Loot one and it stays
+  empty — the caches never refill.
+
+Building moved off the number keys into the `B` panel when the hotbar became
+items. That does make laying several pieces slower than it was; if it grates,
+the fix is one bar holding both items and build pieces, the way Minecraft
+treats blocks as items.
 
 ## Scope (MVP)
 
@@ -279,3 +334,21 @@ checks — `getPlayerPosition()`, `getInventory()`, `getEnemyPositions()`,
 `teleportPlayer(x, z)`, `isPointerLocked()`, `getTimeOfDay()`, and
 `setTimeOfDayFraction(fraction)` (jump the clock to any point in the day/night
 cycle without waiting out the full ~6 minute loop).
+
+For the held item and the world there are also `getHotbar()`,
+`getEquippedSlot()`, `getEquippedItem()`, `selectHotbarSlot(i)`,
+`holdItem(itemId)`, `getHeldDamage()`, `getHeldItemMesh()`,
+`getContainer(id)`, `depositToContainer(...)`, `withdrawFromContainer(...)`,
+`saveNow()`, `getLandmarks()` and `getZoneAt(x, z)`.
+
+Two cautions learned the hard way, both about trusting an instrument:
+
+- `isHeldItemVisible()` reports `onScreen` **and** a best-effort `firstHit`.
+  Only `onScreen` is reliable — raycasting a `SkinnedMesh` uses its bind-pose
+  bounds, so the ray slips past animated limbs and returns `no-ray-hit` for an
+  item plainly on screen. An occlusion sweep built on it once "proved" the same
+  3-of-12 result for every fist offset, including offsets a metre outside the
+  body. Whether something reads correctly is settled by looking at a render.
+- `getPlacedBuildings()` now includes the world's own POI barrels, so a bare
+  `.length > 0` no longer proves *your* click placed anything. Filter by
+  `buildingId`.

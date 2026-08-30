@@ -14,13 +14,15 @@ import { getBuilding } from "../data/buildings";
 // crosshair is what this genre does, and it is what makes the mouse mean
 // something.
 
-export type TargetKind = "node" | "enemy" | "plot" | "ground" | "none";
+export type TargetKind = "node" | "enemy" | "plot" | "container" | "ground" | "none";
 
 export interface Target {
   kind: TargetKind;
   node?: ResourceNode;
   enemy?: Enemy;
   plot?: PlotState;
+  /** Placed building id of an aimed container. */
+  containerId?: string;
   /** Where the ray met the world. Meaningless when kind is "none". */
   point: THREE.Vector3;
   /** Distance from the *player*, not the camera — see REACH below. */
@@ -128,14 +130,25 @@ export class Targeting {
     for (const enemy of c.enemies) {
       this.register(enemy.object, { kind: "enemy", enemy, point: new THREE.Vector3(), distance: 0 });
     }
-    // Only plots are worth targeting among placed buildings; a wall has nothing
-    // to do when you look at it.
+    // Plots and containers are the placed buildings worth aiming at; a wall
+    // has nothing to do when you look at it.
     for (const placed of c.state.placedBuildings) {
-      if (!getBuilding(placed.buildingId).isPlot) continue;
+      const def = getBuilding(placed.buildingId);
       const mesh = c.buildings.getMesh(placed.id);
-      const plot = c.state.plots.find((p) => p.buildingId === placed.id);
-      if (!mesh || !plot) continue;
-      this.register(mesh, { kind: "plot", plot, point: new THREE.Vector3(), distance: 0 });
+      if (!mesh) continue;
+      if (def.isPlot) {
+        const plot = c.state.plots.find((p) => p.buildingId === placed.id);
+        if (plot) {
+          this.register(mesh, { kind: "plot", plot, point: new THREE.Vector3(), distance: 0 });
+        }
+      } else if (def.isContainer) {
+        this.register(mesh, {
+          kind: "container",
+          containerId: placed.id,
+          point: new THREE.Vector3(),
+          distance: 0,
+        });
+      }
     }
     // Terrain last: it is the fallback everything else sits on top of.
     this.register(c.terrain, { kind: "ground", point: new THREE.Vector3(), distance: 0 });

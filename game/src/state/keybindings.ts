@@ -67,14 +67,14 @@ export const ACTION_LABELS: Record<Action, string> = {
   building: "Build menu",
   inventory: "Inventory",
   options: "Options",
-  hotbar1: "Build slot 1",
-  hotbar2: "Build slot 2",
-  hotbar3: "Build slot 3",
-  hotbar4: "Build slot 4",
-  hotbar5: "Build slot 5",
-  hotbar6: "Build slot 6",
-  hotbar7: "Build slot 7",
-  hotbar8: "Build slot 8",
+  hotbar1: "Hotbar slot 1",
+  hotbar2: "Hotbar slot 2",
+  hotbar3: "Hotbar slot 3",
+  hotbar4: "Hotbar slot 4",
+  hotbar5: "Hotbar slot 5",
+  hotbar6: "Hotbar slot 6",
+  hotbar7: "Hotbar slot 7",
+  hotbar8: "Hotbar slot 8",
 };
 
 // Two slots per action, as most games in the genre offer: it keeps both
