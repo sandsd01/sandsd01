@@ -1,5 +1,5 @@
 import { hashStringToSeed } from "../utils/rng";
-import { DAY_LENGTH_MS } from "../systems/day-night";
+import { DAY_LENGTH_MS, raidStartAfter } from "../systems/day-night";
 
 export interface InventorySlot {
   itemId: string;
@@ -18,6 +18,33 @@ export interface PlacedBuilding {
    * placed.
    */
   rotation?: number;
+  /**
+   * Damage taken, counted up toward the piece's `BuildingDef.maxHealth`.
+   * Optional for the same reason `rotation` is: every piece placed before
+   * raiders could hit anything was, in fact, undamaged.
+   */
+  damage?: number;
+}
+
+/**
+ * When the next raid falls and whether one is running.
+ *
+ * Times are absolute positions on the `elapsedMs` clock rather than a day
+ * index, deliberately. `main.ts`'s `setTimeOfDayFraction` debug hook rewinds
+ * that clock, and a counter derived as `floor(elapsedMs / DAY_LENGTH_MS)`
+ * would walk backwards with it — re-running a raid that had already happened.
+ * An appointment in the future simply stays in the future. `NodeSaveState`
+ * already stores `depletedAtMs` the same way.
+ */
+export interface RaidState {
+  /** When the next raid begins. */
+  nextRaidAtMs: number;
+  /** Saved, because reloading mid-raid has to drop the player back into it. */
+  active: boolean;
+  /** Waves released so far tonight. */
+  wave: number;
+  /** Dawn: when tonight's raid ends whatever is still standing. */
+  endsAtMs: number;
 }
 
 export interface PlotState {
@@ -82,6 +109,8 @@ export interface GameState {
    * out its 20-35 second respawn.
    */
   nodes: Record<string, NodeSaveState>;
+  /** The raid schedule. See `RaidState`. */
+  raid: RaidState;
 }
 
 /** Persisted per-node progress. `depletedAtMs` is on the `elapsedMs` clock. */
@@ -93,11 +122,12 @@ export interface NodeSaveState {
 
 export function createInitialState(seedInput: string | number = "romestead"): GameState {
   const seed = typeof seedInput === "string" ? hashStringToSeed(seedInput) : seedInput;
+  // Start mid-morning rather than at midnight (t=0) so a fresh game opens
+  // in daylight instead of darkness.
+  const elapsedMs = DAY_LENGTH_MS * 0.4;
   return {
     seed,
-    // Start mid-morning rather than at midnight (t=0) so a fresh game opens
-    // in daylight instead of darkness.
-    elapsedMs: DAY_LENGTH_MS * 0.4,
+    elapsedMs,
     player: { x: 0, y: 0, z: 8, yaw: 0, health: 100, maxHealth: 100, stamina: 100, maxStamina: 100 },
     inventory: [
       { itemId: "axe", qty: 1 },
@@ -119,5 +149,6 @@ export function createInitialState(seedInput: string | number = "romestead"): Ga
     equippedSlot: 0,
     containers: {},
     nodes: {},
+    raid: { nextRaidAtMs: raidStartAfter(elapsedMs), active: false, wave: 0, endsAtMs: 0 },
   };
 }

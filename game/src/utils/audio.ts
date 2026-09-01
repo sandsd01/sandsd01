@@ -211,6 +211,26 @@ class SoundSystem {
   harvest(): void {
     this.tone(520, 100, "triangle", 0.28, 760);
   }
+
+  // Two long, low notes falling away — the closest thing to a horn this synth
+  // can manage, and the only sustained cue in the game. Nothing else here
+  // lasts a second, so it carries "something is coming" on length alone.
+  raidHorn(): void {
+    this.tone(150, 900, "sawtooth", 0.22, 96);
+    window.setTimeout(() => this.tone(112, 1200, "sawtooth", 0.2, 72), 620);
+  }
+
+  // Dull and wooden, distinct from `hit` (flesh) and `chop` (a tool working
+  // properly): this is a wall being taken apart.
+  wallHit(): void {
+    this.noiseBurst(90, 0.22);
+    this.tone(96, 160, "square", 0.16, 62);
+  }
+
+  raidOver(): void {
+    this.tone(330, 220, "sine", 0.22, 494);
+    window.setTimeout(() => this.tone(494, 420, "sine", 0.2, 660), 180);
+  }
 }
 
 export const sound = new SoundSystem();

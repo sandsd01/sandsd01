@@ -43,6 +43,13 @@ export interface GameEvents {
   "resource-gathered": { itemId: string; qty: number; kind: string; finalHit: boolean };
   "player-attack": Record<string, never>;
   "building-removed": { id: string; buildingId: string };
+  "building-damaged": { id: string; buildingId: string; damage: number; maxHealth: number };
+  "building-destroyed": { id: string; buildingId: string };
+  "building-repaired": { id: string; buildingId: string };
+  "raid-warning": { secondsAway: number };
+  "raid-started": Record<string, never>;
+  "raid-wave": { wave: number; count: number };
+  "raid-ended": { survived: boolean };
   "building-placed": { id: string; buildingId: string };
   "building-selection-changed": { buildingId: string | null };
   "crop-planted": { plotId: string; cropId: string };

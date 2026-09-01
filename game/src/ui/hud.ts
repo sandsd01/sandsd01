@@ -69,6 +69,8 @@ export class Hud {
   private readonly toast: HTMLDivElement;
   private readonly deathOverlay: HTMLDivElement;
   private readonly damageFlash: HTMLDivElement;
+  private readonly raidBanner: HTMLDivElement;
+  private readonly raidLabel: HTMLSpanElement;
   private readonly timeIcon: HTMLSpanElement;
   private readonly timeLabel: HTMLSpanElement;
   private readonly keybinds: HTMLDivElement;
@@ -98,6 +100,21 @@ export class Hud {
     timeWrap.append(this.timeIcon, this.timeLabel);
 
     this.resourceRow = el("div", "hud-resources");
+
+    // Top centre, directly under the clock — the one part of the HUD that was
+    // empty. It is emphatically NOT part of `.hud-time`: `.hud-resources` sizes
+    // itself with `calc(50vw - 80px)` against the clock's width, and widening
+    // that pill drops the resource row onto the clock below 1280px.
+    //
+    // Icon and words, never colour alone: a red bar says nothing to a player
+    // who cannot see red, and this is the one state where being wrong about
+    // what is happening costs the base.
+    this.raidBanner = el("div", "hud-raid");
+    const raidIcon = el("span", "hud-raid-icon icon");
+    raidIcon.innerHTML = iconSvg("swords");
+    this.raidLabel = el("span", "hud-raid-label", "Raid");
+    this.raidBanner.append(raidIcon, this.raidLabel);
+    this.raidBanner.hidden = true;
 
     this.prompt = el("div", "hud-prompt");
     this.prompt.style.display = "none";
@@ -141,6 +158,7 @@ export class Hud {
     root.append(
       healthWrap,
       timeWrap,
+      this.raidBanner,
       this.resourceRow,
       this.prompt,
       crosshair,
@@ -178,7 +196,8 @@ export class Hud {
       `${cap("sprint")} sprint · ${cap("jump")} jump</div>` +
       `<div>Mouse look (click to lock) · ${cap("toggleView")} view</div>` +
       "<div><kbd>LMB</kbd> gather/attack · <kbd>RMB</kbd> place/use</div>" +
-      `<div>${cap("gather")} gather · ${cap("farm")} plant/harvest</div>` +
+      `<div>${cap("gather")} gather · ${cap("farm")} plant/harvest · ` +
+      `${cap("repair")} repair</div>` +
       `<div>${cap("hotbar1")}–${cap("hotbar8")} or scroll to pick what you hold</div>` +
       `<div>${cap("building")} build menu · ${cap("cancelBuild")} cancel placement</div>` +
       `<div>${cap("crafting")} craft · ${cap("building")} build · ` +
@@ -215,6 +234,27 @@ export class Hud {
         return chip;
       }),
     );
+  }
+
+  /**
+   * The raid banner. Called every frame with the live figures, and kept
+   * idempotent so it isn't rewriting the DOM sixty times a second while
+   * nothing changes.
+   *
+   * `null` hides it — which is most of the time, and is why this is a banner
+   * that appears rather than a permanent gauge reading "no raid".
+   */
+  setRaid(status: { wave: number; totalWaves: number; remaining: number } | null): void {
+    if (!status) {
+      if (!this.raidBanner.hidden) {
+        this.raidBanner.hidden = true;
+        this.raidLabel.textContent = "";
+      }
+      return;
+    }
+    const text = `Raid — wave ${status.wave}/${status.totalWaves} · ${status.remaining} left`;
+    this.raidBanner.hidden = false;
+    if (this.raidLabel.textContent !== text) this.raidLabel.textContent = text;
   }
 
   // t is the day-night fraction in [0,1) from DayNightSystem.getTimeOfDay —

@@ -15,6 +15,7 @@ import { instantiate, type ModelLibrary, type ModelName } from "../world/models"
 const VALID_COLOR = 0x4caf50;
 const INVALID_COLOR = 0xe53935;
 const POP_IN_MS = 220;
+const SHAKE_MS = 260;
 /**
  * Anything declared this low is a floor, not an obstacle — step over it.
  *
@@ -144,6 +145,18 @@ export class BuildingSystem {
   private readonly meshes = new Map<string, THREE.Object3D>();
   private readonly occupancy = new Map<string, string>(); // cell key -> placedBuilding.id
   private readonly popIns: { mesh: THREE.Object3D; startMs: number }[] = [];
+  /**
+   * Where each mesh stands when it is whole. The damage lean and the hit shake
+   * both push the mesh off this, and each has to start from the untouched
+   * transform rather than from wherever the other left it — reading the pose
+   * back off the mesh would let a hundred small nudges accumulate into a wall
+   * lying flat in the dirt.
+   */
+  private readonly baseTransforms = new Map<
+    string,
+    { x: number; y: number; z: number; yaw: number }
+  >();
+  private readonly shakes: { id: string; startMs: number }[] = [];
   // Seeded from the loaded save rather than starting at zero. This used to be a
   // module-level counter, which restarts at 0 on every page load while the save
   // still holds building-0..N — so the first piece placed after a reload reused
@@ -158,10 +171,13 @@ export class BuildingSystem {
     private readonly state: GameState,
     private readonly models: ModelLibrary = {},
   ) {
-    // Rehydrate any buildings restored from a save.
+    // Rehydrate any buildings restored from a save, damage and all — a wall
+    // that was half beaten down when the tab closed should not come back
+    // standing straight.
     for (const placed of state.placedBuildings) {
       this.occupyCells(placed);
       this.spawnMesh(placed);
+      this.applyDamageLook(placed);
     }
     // Start issuing ids past whatever the save already used. Only this class's
     // own `building-N` ids matter here — the world's POI barrels carry a `poi-`
@@ -295,6 +311,7 @@ export class BuildingSystem {
 
   update(aim: { x: number; z: number }, nowMs: number, canPlace = true): void {
     this.updatePopIns(nowMs);
+    this.updateShakes(nowMs);
 
     if (this.ghost) this.ghost.visible = canPlace;
     if (!this.selectedBuildingId || !this.ghost || !canPlace) return;
@@ -393,6 +410,35 @@ export class BuildingSystem {
   }
 
   /**
+   * A struck piece jolts for a moment. The flash the enemies use is off the
+   * table here (shared materials — see `applyDamageLook`), and a shake carries
+   * further anyway: you can see which wall is being worked on from across the
+   * yard without having to read its colour.
+   */
+  private updateShakes(nowMs: number): void {
+    for (let i = this.shakes.length - 1; i >= 0; i--) {
+      const shake = this.shakes[i];
+      const mesh = this.meshes.get(shake.id);
+      const base = this.baseTransforms.get(shake.id);
+      if (!mesh || !base) {
+        this.shakes.splice(i, 1);
+        continue;
+      }
+      const elapsed = nowMs - shake.startMs;
+      if (elapsed >= SHAKE_MS) {
+        mesh.position.x = base.x;
+        mesh.position.z = base.z;
+        this.shakes.splice(i, 1);
+        continue;
+      }
+      const decay = 1 - elapsed / SHAKE_MS;
+      const offset = Math.sin(elapsed * 0.06) * 0.07 * decay;
+      mesh.position.x = base.x + offset;
+      mesh.position.z = base.z + offset * 0.6;
+    }
+  }
+
+  /**
    * Takes a placed piece back down and refunds what it cost, in full.
    *
    * Nothing could be removed before this: `occupancy` and `meshes` were only
@@ -405,6 +451,27 @@ export class BuildingSystem {
    * Returns what was refunded, or null when there is nothing there.
    */
   demolish(placedId: string): { buildingId: string; refunded: ItemStack[] } | null {
+    return this.removePlaced(placedId, true);
+  }
+
+  /**
+   * Beaten down rather than taken down: same teardown, no refund. Raiders
+   * destroying a wall must not post the planks back through the letterbox.
+   *
+   * This goes through `removePlaced` rather than being a second teardown path
+   * of its own. Five separate places key off a building's id, and the last
+   * time one of them was missed a new barrel opened holding an old barrel's
+   * contents.
+   */
+  destroy(placedId: string): { buildingId: string } | null {
+    const result = this.removePlaced(placedId, false);
+    return result && { buildingId: result.buildingId };
+  }
+
+  private removePlaced(
+    placedId: string,
+    refund: boolean,
+  ): { buildingId: string; refunded: ItemStack[] } | null {
     const index = this.state.placedBuildings.findIndex((p) => p.id === placedId);
     if (index === -1) return null;
     const placed = this.state.placedBuildings[index];
@@ -428,12 +495,123 @@ export class BuildingSystem {
       const popIn = this.popIns.findIndex((p) => p.mesh === mesh);
       if (popIn !== -1) this.popIns.splice(popIn, 1);
     }
+    this.baseTransforms.delete(placedId);
+    for (let i = this.shakes.length - 1; i >= 0; i--) {
+      if (this.shakes[i].id === placedId) this.shakes.splice(i, 1);
+    }
 
-    const refunded = def.cost.map((stack) => ({ ...stack }));
+    const refunded = refund ? def.cost.map((stack) => ({ ...stack })) : [];
     for (const stack of refunded) addItem(this.state, stack.itemId, stack.qty);
 
     events.emit("building-removed", { id: placedId, buildingId: placed.buildingId });
+    if (!refund) events.emit("building-destroyed", { id: placedId, buildingId: placed.buildingId });
     return { buildingId: placed.buildingId, refunded };
+  }
+
+  /** The piece holding the grid cell under a world position, if any. */
+  buildingIdAt(worldX: number, worldZ: number): string | null {
+    return this.occupancy.get(cellKey(worldToCell(worldX, worldZ))) ?? null;
+  }
+
+  /** Damage taken and the total it can take, or null if there is no such piece. */
+  healthOf(placedId: string): { damage: number; maxHealth: number } | null {
+    const placed = this.state.placedBuildings.find((p) => p.id === placedId);
+    if (!placed) return null;
+    return { damage: placed.damage ?? 0, maxHealth: getBuilding(placed.buildingId).maxHealth };
+  }
+
+  /**
+   * Lands a hit on a piece. Returns whether that hit destroyed it — the caller
+   * needs to know, because a destroyed barrel has to spill what was inside it
+   * and only `main.ts` owns the drop system.
+   */
+  damageBuilding(placedId: string, amount: number, nowMs: number): { destroyed: boolean } | null {
+    const placed = this.state.placedBuildings.find((p) => p.id === placedId);
+    if (!placed) return null;
+    const def = getBuilding(placed.buildingId);
+    placed.damage = Math.min(def.maxHealth, (placed.damage ?? 0) + amount);
+    events.emit("building-damaged", {
+      id: placedId,
+      buildingId: placed.buildingId,
+      damage: placed.damage,
+      maxHealth: def.maxHealth,
+    });
+    if (placed.damage >= def.maxHealth) return { destroyed: true };
+    this.shakes.push({ id: placedId, startMs: nowMs });
+    this.applyDamageLook(placed);
+    return { destroyed: false };
+  }
+
+  /**
+   * What putting a piece back in one piece costs: its build cost scaled by how
+   * much of it is broken, so half a wall is half the planks. Rounded up, and
+   * never free while any damage remains — a repair that cost nothing would
+   * make walls immortal for the price of holding a key.
+   *
+   * Empty when the piece is whole; null when there is no such piece.
+   */
+  repairCost(placedId: string): ItemStack[] | null {
+    const placed = this.state.placedBuildings.find((p) => p.id === placedId);
+    if (!placed) return null;
+    const def = getBuilding(placed.buildingId);
+    const damage = placed.damage ?? 0;
+    if (damage <= 0) return [];
+    const fraction = Math.min(1, damage / def.maxHealth);
+    return def.cost.map((stack) => ({
+      itemId: stack.itemId,
+      qty: Math.max(1, Math.ceil(stack.qty * fraction)),
+    }));
+  }
+
+  /** Spends the repair cost and makes the piece whole. False if it can't be paid. */
+  repair(placedId: string): boolean {
+    const cost = this.repairCost(placedId);
+    if (!cost || cost.length === 0) return false;
+    for (const stack of cost) {
+      if (!hasQty(this.state, stack.itemId, stack.qty)) {
+        events.emit("notification", {
+          message: `Not enough ${getItem(stack.itemId).name} to repair`,
+        });
+        return false;
+      }
+    }
+    for (const stack of cost) removeItem(this.state, stack.itemId, stack.qty);
+
+    const placed = this.state.placedBuildings.find((p) => p.id === placedId)!;
+    placed.damage = 0;
+    this.applyDamageLook(placed);
+    events.emit("building-repaired", { id: placedId, buildingId: placed.buildingId });
+    return true;
+  }
+
+  /**
+   * Leans and sinks a damaged piece in proportion to what it has taken.
+   *
+   * Deliberately transform-only. `instantiate` uses `Object3D.clone(true)`,
+   * which *shares* materials between instances, so tinting one battered wall
+   * red would redden every wall in the world built from the same model.
+   */
+  private applyDamageLook(placed: PlacedBuilding): void {
+    const mesh = this.meshes.get(placed.id);
+    const base = this.baseTransforms.get(placed.id);
+    if (!mesh || !base) return;
+    const def = getBuilding(placed.buildingId);
+    const fraction = Math.min(1, (placed.damage ?? 0) / def.maxHealth);
+    // Small numbers, and they have to stay small. A first pass sank a battered
+    // piece by 0.18 of its height and leaned it 0.17rad; that reads well but
+    // swings the top of the silhouette out of the crosshair's line, and a
+    // nearly-destroyed brick wall became impossible to aim at from any
+    // distance — so the one piece most in need of repair was the one piece
+    // that could not be repaired. Measured, not guessed: see the note in
+    // README on driving the real screens.
+    // Neighbouring cells lean opposite ways. A whole run tipping the same way
+    // by the same amount reads as "the fence was built like that"; the same
+    // small angle alternating cell by cell reads as a line that has been
+    // knocked about — which is the point, and costs no extra displacement.
+    const lean = (placed.cellX + placed.cellZ) % 2 === 0 ? 1 : -1;
+    mesh.position.y = base.y - fraction * 0.05 * def.height;
+    mesh.rotation.y = base.yaw + fraction * 0.1 * lean;
+    mesh.rotation.z = fraction * 0.07 * lean;
   }
 
   /** Whether a cell holds something that blocks movement. */
@@ -490,9 +668,11 @@ export class BuildingSystem {
     offsetX = (offsetX / cells.length) * GRID_CELL_SIZE;
     offsetZ = (offsetZ / cells.length) * GRID_CELL_SIZE;
 
+    const yaw = ((placed.rotation ?? 0) * Math.PI) / 180;
     mesh.position.set(worldX + offsetX, y, worldZ + offsetZ);
-    mesh.rotation.y = ((placed.rotation ?? 0) * Math.PI) / 180;
+    mesh.rotation.y = yaw;
     mesh.name = placed.id;
+    this.baseTransforms.set(placed.id, { x: worldX + offsetX, y, z: worldZ + offsetZ, yaw });
     if (nowMs !== undefined) {
       mesh.scale.setScalar(0.05);
       this.popIns.push({ mesh, startMs: nowMs });

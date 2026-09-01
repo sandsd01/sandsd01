@@ -111,6 +111,7 @@ there is no deploy-time configuration to keep in sync.
 - `F` — plant a selected seed into a farm plot / harvest a ready crop
 - `1`–`8` — take that hotbar item in hand
 - `R` — rotate the build piece you are placing
+- `G` (hold) — repair the damaged building you are aiming at
 - `Q` — cancel building placement
 - `C` — crafting, `B` — building menu, `Tab` or `I` — inventory (select seeds here)
 - `Esc` — close the open menu, or open Options when nothing is open
@@ -344,12 +345,78 @@ cannot yet afford is still selectable so its cost can be read — matching what
 the crafting panel already did, instead of hiding the price behind a dead
 button.
 
+## Raid night
+
+Every third night, something comes for you. Before this the day/night cycle was
+lighting and nothing else — the comment at the top of `systems/day-night.ts`
+said so — enemies trickled in at the same rate around the clock, and there was
+never a reason to be home by dark or to have built anything.
+
+- **You are told first.** A horn and a message a minute out, then a banner in
+  the HUD naming the wave and how many are left. A night that kills you without
+  warning reads as the game cheating, not as tension.
+- **Three waves, escalating in composition.** Four zombies, then six with a
+  brute, then eight with three. More zombies is a longer night; more brutes is
+  a harder one — and brutes drop the better loot, so the night pays.
+- **Waves land on a ring around you**, not around the world origin the ambient
+  spawner uses. A homestead built out past the ridge would otherwise be raided
+  by enemies who spawn back at spawn and never arrive.
+- **Dawn ends it** whichever way it is going. Without that backstop one raider
+  wedged behind a boulder on the far side of the map would hold you in a raid
+  that never finished.
+- **A reload does not skip it.** The raid is in the save; enemies never were.
+  Coming back mid-raid puts you back in it and releases a fresh wave, because
+  otherwise reloading would be the cheapest escape in the game.
+
+Timing lives on absolute positions on the `elapsedMs` clock (`RaidState`),
+never on a day index. The `setTimeOfDayFraction` debug hook winds that clock
+*backwards*, and a counter derived as `floor(elapsedMs / DAY_LENGTH_MS)` would
+walk back with it and re-run a raid that had already happened. An appointment in
+the future just stays in the future.
+
+## Enemies meet walls now
+
+`systems/enemy-ai.ts` never imported `collision.ts`. Enemies wrote straight to
+`object.position`, so **every wall in the game stopped the player and no one
+else** and a base was scenery you could admire while being eaten inside it.
+
+They are now resolved against the same collidable list the player is, and a
+blocked enemy takes a swing at whatever stopped it. They still chase the player
+and only the player — nothing picks out a base to besiege; they hit what is in
+the way, which is the version you can read at a glance from inside the walls.
+Only things you built can be broken: a boulder or a tree answers "nothing
+breakable here" and the enemy goes on sliding along it as before.
+
+- Every piece has `maxHealth` (Wall 120, Brick Wall 300, Long Wall 200), stated
+  per piece rather than derived from cost — what a thing costs and how well it
+  holds a line are different questions.
+- A piece beaten to zero is **destroyed with no refund**, unlike one you take
+  down yourself. Both go through the same teardown (`removePlaced`), because
+  five separate structures key off a building's id and the last time one was
+  missed, a new barrel opened holding an old barrel's contents. A smashed
+  barrel spills its contents on the ground exactly as demolishing one does.
+- **Repair costs materials in proportion to the damage** — half a wall is half
+  the planks, rounded up, never free. Hold `G` on it; the prompt reads the
+  remaining health and the price before you commit.
+
+Damage shows as a lean and a slight sink, with **neighbouring cells leaning
+opposite ways** so a battered run reads as ragged rather than as a fence that
+was built crooked. The numbers there are small and have to stay small: a first
+pass leaned pieces 0.17rad and sank them 0.18 of their height, which looked
+right and swung the top of the silhouette clean out of the crosshair's line —
+a nearly-destroyed brick wall could not be aimed at from any distance, so the
+one piece most in need of repair was the one piece that could not be repaired.
+It is also transform-only, never a material tint: `instantiate` uses
+`Object3D.clone(true)`, which shares materials, so reddening one wall reddens
+every wall built from the same model.
+
 ## What the save holds
 
 Everything gameplay-relevant goes into one `localStorage` key
 (`romestead-save-v1`), written every 10 seconds and on unload: the world seed
-and clock, the player, inventory, hotbar, placed buildings, crops, known
-recipes, container contents, and **how far each resource node has been worked**.
+and clock, the player, inventory, hotbar, placed buildings (with how battered
+each one is), crops, known recipes, container contents, the raid schedule, and
+**how far each resource node has been worked**.
 
 That last one is newer than the rest, and its absence used to be exploitable:
 nodes were re-scattered from the seed on every boot, so reloading the page
@@ -444,6 +511,15 @@ average over hundreds of rolls), `killNearestEnemy()`, `getAllRecipes()`,
 `getOccupiedCells()`, `getBuildRotation()`, `placeBuildingAt(...)`,
 `demolishBuilding(id)` and `probeMoveTo(x, z, steps?)`.
 
+For raids: `getRaidState()`, `startRaid()` and `endRaid()` drive a raid without
+waiting eighteen minutes for one; `spawnEnemyAt(enemyId, x, z)` puts one enemy
+where you need it rather than wherever the spawn ring chose; and
+`getBuildingHealth(id)`, `getRepairCost(id)`, `repairBuilding(id)` and
+`enemyAttackAt(x, z, damage)` cover damage and repair. `enemyAttackAt` is the
+real handler an enemy calls when something blocks it — destruction, spilled
+barrels and all — not `BuildingSystem.damageBuilding` on its own, which knows
+nothing about what was inside.
+
 A third caution, and the one that invalidated the most: **a test cannot edit
 the save by evaluating a change and then reloading.** The game persists on
 `beforeunload`, so navigating away writes the live state straight back over the
@@ -464,3 +540,16 @@ Two cautions learned the hard way, both about trusting an instrument:
 - `getPlacedBuildings()` now includes the world's own POI barrels, so a bare
   `.length > 0` no longer proves *your* click placed anything. Filter by
   `buildingId`.
+- `setCameraYaw(y)` takes effect on the *next* frame. Setting it and reading
+  `getAimPoint()` in the same `evaluate` hands back the previous yaw's answer,
+  which silently shifts a sweep by one entry and picks the wrong direction
+  while looking entirely reasonable.
+- An element's `hidden` property is not the last word on whether it is on
+  screen: `.hud-raid` sets `display: flex`, which beats the browser's own
+  `[hidden] { display: none }`. The raid banner sat on screen reading "Raid"
+  from page load with nothing wrong in the JS, and it took a screenshot to
+  notice. Ask `getComputedStyle(el).display` and the bounding box.
+- Two whole features here — a wall's collision and a damaged wall's silhouette
+  — are things a diff reads as correct and a render does not. The damage lean
+  had to be measured against whether the crosshair could still find the piece,
+  not judged by how good it looked in the code.

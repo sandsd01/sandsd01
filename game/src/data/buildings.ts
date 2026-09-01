@@ -25,6 +25,13 @@ export interface BuildingDef {
   footprintCells: Cell[]; // relative to the placement anchor cell
   cost: ItemStack[];
   height: number;
+  /**
+   * How much damage the piece absorbs before it is destroyed. Stated per piece
+   * rather than derived from `cost`, because how much a thing costs and how
+   * well it holds a line are different questions — brick costs a little more
+   * than timber and should stop rather more than a little more.
+   */
+  maxHealth: number;
   color: number;
   isPlot: boolean; // true for farmable plots (see systems/farming.ts)
   /** true for anything that stores items (see systems/containers.ts) */
@@ -39,6 +46,7 @@ export const BUILDINGS: Record<string, BuildingDef> = {
     footprintCells: [{ x: 0, z: 0 }],
     cost: [{ itemId: "plank", qty: 4 }],
     height: 2,
+    maxHealth: 120,
     color: 0xc19a6b,
     isPlot: false,
   },
@@ -49,6 +57,7 @@ export const BUILDINGS: Record<string, BuildingDef> = {
     footprintCells: [{ x: 0, z: 0 }],
     cost: [{ itemId: "stone", qty: 6 }],
     height: 0.2,
+    maxHealth: 80,
     color: 0x9a9a9a,
     isPlot: false,
   },
@@ -59,6 +68,7 @@ export const BUILDINGS: Record<string, BuildingDef> = {
     footprintCells: [{ x: 0, z: 0 }],
     cost: [{ itemId: "wood", qty: 3 }],
     height: 0.15,
+    maxHealth: 40,
     color: 0x6b4a2b,
     isPlot: true,
   },
@@ -69,6 +79,7 @@ export const BUILDINGS: Record<string, BuildingDef> = {
     footprintCells: [{ x: 0, z: 0 }],
     cost: [{ itemId: "brick", qty: 3 }],
     height: 2.4,
+    maxHealth: 300,
     color: 0xa85c3a,
     isPlot: false,
   },
@@ -84,6 +95,7 @@ export const BUILDINGS: Record<string, BuildingDef> = {
       { itemId: "clay", qty: 4 },
     ],
     height: 1.7,
+    maxHealth: 60,
     color: 0x6a4030,
     isPlot: false,
   },
@@ -99,6 +111,7 @@ export const BUILDINGS: Record<string, BuildingDef> = {
       { itemId: "iron_ore", qty: 2 },
     ],
     height: 0.85,
+    maxHealth: 60,
     color: 0x3a3a42,
     isPlot: false,
   },
@@ -109,6 +122,7 @@ export const BUILDINGS: Record<string, BuildingDef> = {
     footprintCells: [{ x: 0, z: 0 }],
     cost: [{ itemId: "plank", qty: 4 }],
     height: 0.9,
+    maxHealth: 60,
     color: 0xa8794a,
     isPlot: false,
   },
@@ -125,6 +139,7 @@ export const BUILDINGS: Record<string, BuildingDef> = {
     ],
     cost: [{ itemId: "plank", qty: 7 }],
     height: 2,
+    maxHealth: 200,
     color: 0xc19a6b,
     isPlot: false,
   },
@@ -136,6 +151,7 @@ export const BUILDINGS: Record<string, BuildingDef> = {
     footprintCells: [{ x: 0, z: 0 }],
     cost: [{ itemId: "plank", qty: 3 }],
     height: 0.95,
+    maxHealth: 60,
     color: 0x7a4a2c,
     isPlot: false,
   },
