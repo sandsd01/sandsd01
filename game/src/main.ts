@@ -62,6 +62,7 @@ import {
 import { BuildingSystem } from "./systems/building";
 import { FarmingSystem } from "./systems/farming";
 import { EnemyManager } from "./systems/enemy-ai";
+import { RaidSystem } from "./systems/raid";
 import { PlayerCombat } from "./systems/combat";
 import { DayNightSystem, DAY_LENGTH_MS } from "./systems/day-night";
 import { saveGame, loadGame } from "./systems/save-load";
@@ -73,7 +74,7 @@ import { mulberry32 } from "./utils/rng";
 import { DroppedItems } from "./world/dropped-item";
 import { rollLoot } from "./data/loot";
 import { loadSettings } from "./state/settings";
-import { loadBindings, saveBindings } from "./state/keybindings";
+import { keyLabel, loadBindings, saveBindings } from "./state/keybindings";
 
 import { Hud, type CrosshairState } from "./ui/hud";
 import { InventoryPanel } from "./ui/inventory-panel";
@@ -187,6 +188,7 @@ events.on("item-picked-up", ({ itemId, qty }) => {
   events.emit("notification", { message: `Picked up ${qty}x ${getItem(itemId).name}` });
 });
 const enemyManager = new EnemyManager(scene, terrain, state.seed);
+const raid = new RaidSystem(state, enemyManager);
 const playerCombat = new PlayerCombat();
 
 // What the crosshair is on, resolved once a frame and shared by every system
@@ -323,12 +325,50 @@ function resetDemolish(): void {
   demolishProgressMs = 0;
 }
 
+// Patching a wall up is its own held action on its own key, tracked the same
+// way. It could not share the left mouse button with demolishing: the pieces
+// worth repairing are exactly the pieces you would be furious to accidentally
+// pull down, and a raid is no time to be reading a modifier hint.
+const REPAIR_MS = 1100;
+let repairBuildingId: string | null = null;
+let repairProgressMs = 0;
+
+function resetRepair(): void {
+  repairBuildingId = null;
+  repairProgressMs = 0;
+}
+
+/** Hold the repair key on a damaged piece to put it back together. */
+function updateRepairAction(dtSeconds: number, aimedBuildingId: string | null): void {
+  const cost = aimedBuildingId ? buildingSystem.repairCost(aimedBuildingId) : null;
+  if (!aimedBuildingId || !cost || cost.length === 0) {
+    resetRepair();
+    return;
+  }
+  if (repairBuildingId !== aimedBuildingId) {
+    repairBuildingId = aimedBuildingId;
+    repairProgressMs = 0;
+    player.triggerSwing(currentNowMs);
+  }
+  repairProgressMs += dtSeconds * 1000;
+  if (repairProgressMs < REPAIR_MS) return;
+
+  if (buildingSystem.repair(aimedBuildingId)) {
+    const parts = cost.map((c) => `${c.qty}x ${getItem(c.itemId).name}`).join(", ");
+    events.emit("notification", { message: `Repaired (-${parts})` });
+  }
+  // Reset either way. A failed repair that kept its progress would re-fire
+  // its "not enough planks" toast every frame the key stayed down.
+  resetRepair();
+}
+
 /**
  * How full the crosshair ring is, 0..1. One definition for both the HUD and
  * the debug surface, so a test can never be told a different story from the
  * one the player is being shown.
  */
 function actionProgress(): number {
+  if (repairBuildingId) return Math.min(1, repairProgressMs / REPAIR_MS);
   if (demolishBuildingId) return Math.min(1, demolishProgressMs / DEMOLISH_MS);
   if (gatherNodeId) return gatherProgressMs / gatherTimeFor(state, aimedNode(target));
   return 0;
@@ -340,22 +380,35 @@ function actionProgress(): number {
  * player — the drop system already exists for exactly this, and it means
  * demolishing a full barrel can never quietly destroy what was in it.
  */
-function demolishAimed(placedId: string): void {
-  const stored = (state.containers[placedId] ?? []).map((slot) => ({ ...slot }));
-  // Where the piece stood, captured before it is removed — dropping at the
-  // player's feet instead would put the contents straight back in the bag,
-  // which is the same as handing them over with extra steps.
-  const site = state.placedBuildings.find((p) => p.id === placedId);
-  const dropX = site ? site.cellX : 0;
-  const dropZ = site ? site.cellZ : 0;
+/**
+ * Tips a container's contents onto the ground where it stood and forgets them.
+ *
+ * Shared by taking a barrel down and by having one smashed: whichever way it
+ * goes, what was inside has to end up somewhere the player can pick it back
+ * up. Dropping at the player's feet instead would put it straight back in the
+ * bag, which is the same as handing it over with extra steps — and on a raid
+ * night that would make a broken barrel a *reward*.
+ */
+function spillContainer(placedId: string, x: number, z: number): void {
+  const stored = state.containers[placedId];
+  delete state.containers[placedId];
+  if (!stored) return;
+  for (const slot of stored) {
+    droppedItems.spawn(slot.itemId, slot.qty, x, z, currentNowMs, 0.6);
+  }
+}
 
+/** Where a placed piece stands. Must be read before it is removed. */
+function siteOf(placedId: string): { x: number; z: number } {
+  const site = state.placedBuildings.find((p) => p.id === placedId);
+  return { x: site ? site.cellX : 0, z: site ? site.cellZ : 0 };
+}
+
+function demolishAimed(placedId: string): void {
+  const site = siteOf(placedId);
   const result = buildingSystem.demolish(placedId);
   if (!result) return;
-
-  for (const slot of stored) {
-    droppedItems.spawn(slot.itemId, slot.qty, dropX, dropZ, currentNowMs, 0.6);
-  }
-  delete state.containers[placedId];
+  spillContainer(placedId, site.x, site.z);
 
   const def = getBuilding(result.buildingId);
   const parts = result.refunded.map((c) => `${c.qty}x ${getItem(c.itemId).name}`).join(", ");
@@ -467,6 +520,50 @@ function crosshairStateFor(current: Target): CrosshairState {
   return "none";
 }
 
+/**
+ * A blocked enemy takes a swing at whatever is in its way.
+ *
+ * Returns whether there was in fact something breakable there. A boulder or a
+ * tree answers false and the enemy keeps sliding along it as it always did —
+ * only things the player built can be broken down, and only because they are
+ * standing between the raider and the player. Nothing here targets a base.
+ */
+function attackBuildingAt(x: number, z: number, damage: number): boolean {
+  const placedId = buildingSystem.buildingIdAt(x, z);
+  if (!placedId) return false;
+  const site = siteOf(placedId);
+  const result = buildingSystem.damageBuilding(placedId, damage, currentNowMs);
+  if (!result) return false;
+  if (result.destroyed) {
+    const removed = buildingSystem.destroy(placedId);
+    spillContainer(placedId, site.x, site.z);
+    if (removed) {
+      events.emit("notification", {
+        message: `${getBuilding(removed.buildingId).name} destroyed!`,
+      });
+    }
+  }
+  return true;
+}
+
+/**
+ * "Wall 64/120 — hold G to repair (2x Plank)". Only for a piece that has
+ * actually been hit: an undamaged wall says nothing, so the prompt appearing
+ * is itself the news that something is chewing on the base.
+ */
+function damagePrompt(placedId: string | null): string | null {
+  if (!placedId) return null;
+  const health = buildingSystem.healthOf(placedId);
+  const cost = buildingSystem.repairCost(placedId);
+  if (!health || health.damage <= 0 || !cost || cost.length === 0) return null;
+  const site = state.placedBuildings.find((p) => p.id === placedId);
+  const name = site ? getBuilding(site.buildingId).name : "Building";
+  const parts = cost.map((c) => `${c.qty}x ${getItem(c.itemId).name}`).join(", ");
+  const remaining = health.maxHealth - health.damage;
+  const key = keyLabel(bindings.repair[0] ?? "");
+  return `${name} ${remaining}/${health.maxHealth} — hold ${key} to repair (${parts})`;
+}
+
 function getCollidables(): Collidable[] {
   const nodeCollidables: Collidable[] = resourceNodes
     .filter((n) => !n.depleted)
@@ -501,11 +598,33 @@ const loop = new GameLoop((dt) => {
   farmingSystem.update(currentNowMs);
   droppedItems.update(currentNowMs, state, feet.x, feet.z);
 
+  // The raid runs whether or not the player is on their feet: it is a stretch
+  // of the night, not a fight that pauses while they are down.
+  raid.update(currentNowMs, feet.x, feet.z);
+  hud.setRaid(
+    raid.isActive()
+      ? {
+          wave: raid.getWave(),
+          totalWaves: raid.getTotalWaves(),
+          remaining: raid.raidersAlive(),
+        }
+      : null,
+  );
+
   if (!isPlayerDead(state)) {
-    enemyManager.update(dt, currentNowMs, feet, (damage) => {
-      damagePlayer(state, damage);
-      scheduleRespawnIfDead();
-    });
+    enemyManager.update(
+      dt,
+      currentNowMs,
+      feet,
+      (damage) => {
+        damagePlayer(state, damage);
+        scheduleRespawnIfDead();
+      },
+      // The same list the player was resolved against a few lines up, so
+      // neither side gets a world the other cannot see.
+      getCollidables(),
+      attackBuildingAt,
+    );
   }
 
   // Also checked here, every frame, and deliberately outside the guard above.
@@ -545,6 +664,14 @@ const loop = new GameLoop((dt) => {
     resetDemolish();
   }
   if (canAct && input.wasMousePressed(2)) performSecondaryAction();
+
+  const aimedBuildingId =
+    (target.kind === "building" || target.kind === "container") && target.buildingId !== undefined
+      ? target.buildingId
+      : null;
+  if (canAct && input.isActionDown("repair")) updateRepairAction(dt, aimedBuildingId);
+  else resetRepair();
+
   hud.setActionProgress(actionProgress());
 
   // The wheel changes what is in hand, as it does in Minecraft; zoom stayed
@@ -595,7 +722,7 @@ const loop = new GameLoop((dt) => {
   const gatherPrompt = getInteractionPrompt(state, keyNode);
   const farmPrompt = farmingSystem.getPrompt(keyPlot, selectedSeedItemId, currentNowMs);
   const placementPrompt = buildingSystem.getPlacementPrompt();
-  hud.setPrompt(placementPrompt ?? gatherPrompt ?? farmPrompt);
+  hud.setPrompt(placementPrompt ?? damagePrompt(aimedBuildingId) ?? gatherPrompt ?? farmPrompt);
 
   // The outline says which object an action would hit; the crosshair shape
   // says what kind of thing it is. Neither relies on colour to be read.
@@ -621,6 +748,11 @@ const loop = new GameLoop((dt) => {
   input.endFrame();
 });
 
+// A raid interrupted by a reload picks up where it left off, with a fresh wave
+// — enemies are never saved, so without this the field would come back empty
+// and reloading would be the cheapest way in the game to skip a raid.
+raid.resume(clock.now(), state.player.x, state.player.z);
+
 loop.start();
 
 // Fade the splash out only once a frame has actually been drawn, so the world
@@ -641,7 +773,13 @@ declare global {
     __gameDebug?: {
       getPlayerPosition: () => { x: number; y: number; z: number };
       getInventory: () => { itemId: string; qty: number }[];
-      getEnemyPositions: () => { id: string; x: number; z: number; health: number }[];
+      getEnemyPositions: () => {
+        id: string;
+        enemyId: string;
+        x: number;
+        z: number;
+        health: number;
+      }[];
       getPlots: () => GameState["plots"];
       getPlacedBuildings: () => GameState["placedBuildings"];
       teleportPlayer: (x: number, z: number) => void;
@@ -687,6 +825,22 @@ declare global {
       getBuildRotation: () => number;
       getOccupiedCells: () => Record<string, string>;
       demolishBuilding: (placedId: string) => boolean;
+      getBuildingHealth: (placedId: string) => { damage: number; maxHealth: number } | null;
+      getRepairCost: (placedId: string) => { itemId: string; qty: number }[] | null;
+      repairBuilding: (placedId: string) => boolean;
+      enemyAttackAt: (x: number, z: number, damage: number) => boolean;
+      spawnEnemyAt: (enemyId: string, x: number, z: number) => string;
+      getRaidState: () => {
+        active: boolean;
+        wave: number;
+        totalWaves: number;
+        raidersAlive: number;
+        nextRaidAtMs: number;
+        endsAtMs: number;
+        msUntilRaid: number;
+      };
+      startRaid: () => void;
+      endRaid: () => void;
       placeBuildingAt: (
         buildingId: string,
         cellX: number,
@@ -750,7 +904,15 @@ window.__gameDebug = {
   getEnemyPositions: () =>
     enemyManager
       .getEnemies()
-      .map((e) => ({ id: e.id, x: e.object.position.x, z: e.object.position.z, health: e.health })),
+      .map((e) => ({
+        id: e.id,
+        // Which kind, not only which instance: a wave's difficulty is in its
+        // mix of zombies and brutes, and there was no way to read that.
+        enemyId: e.def.id,
+        x: e.object.position.x,
+        z: e.object.position.z,
+        health: e.health,
+      })),
   getPlots: () => state.plots.map((p) => ({ ...p })),
   getPlacedBuildings: () => state.placedBuildings.map((b) => ({ ...b })),
   teleportPlayer: (x, z) => player.teleport(x, z),
@@ -919,6 +1081,25 @@ window.__gameDebug = {
     if (existed) demolishAimed(placedId);
     return existed;
   },
+  getBuildingHealth: (placedId) => buildingSystem.healthOf(placedId),
+  getRepairCost: (placedId) => buildingSystem.repairCost(placedId),
+  repairBuilding: (placedId) => buildingSystem.repair(placedId),
+  // The real handler an enemy calls when something blocks it, destruction and
+  // spilled barrels and all — not `BuildingSystem.damageBuilding` on its own,
+  // which knows nothing about what was inside.
+  enemyAttackAt: (x, z, damage) => attackBuildingAt(x, z, damage),
+  spawnEnemyAt: (enemyId, x, z) => enemyManager.spawnEnemyAt(enemyId, x, z),
+  getRaidState: () => ({
+    active: raid.isActive(),
+    wave: raid.getWave(),
+    totalWaves: raid.getTotalWaves(),
+    raidersAlive: raid.raidersAlive(),
+    nextRaidAtMs: state.raid.nextRaidAtMs,
+    endsAtMs: state.raid.endsAtMs,
+    msUntilRaid: raid.msUntilRaid(clock.now()),
+  }),
+  startRaid: () => raid.start(clock.now(), state.player.x, state.player.z),
+  endRaid: () => raid.finish(clock.now()),
   getHotbar: () => [...state.hotbar],
   getContainer: (buildingId) => (state.containers[buildingId] ?? []).map((s) => ({ ...s })),
   getContainerPanelOpen: () => containerPanel.isVisible(),

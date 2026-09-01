@@ -11,6 +11,23 @@ export const DAY_LENGTH_MS = 6 * 60 * 1000;
 // readable all day instead of collapsing under the player at midday.
 const MAX_ELEVATION = 58;
 
+/** Raids begin a little after sunset (t = 0.75) and run until first light. */
+const RAID_START_T = 0.78;
+/** 0.48 of a cycle: sundown through to t = 0.26 of the following morning. */
+export const RAID_DURATION_MS = DAY_LENGTH_MS * 0.48;
+/** Nights between raids. Three gives a fresh world time to put up a wall. */
+const RAID_INTERVAL_DAYS = 3;
+
+/**
+ * When the raid after `nowMs` falls: the raid hour of the night
+ * `RAID_INTERVAL_DAYS` days out. Absolute, on the `elapsedMs` clock — see the
+ * note on `RaidState` for why this is not counted in days.
+ */
+export function raidStartAfter(nowMs: number): number {
+  const target = nowMs + RAID_INTERVAL_DAYS * DAY_LENGTH_MS;
+  return Math.floor(target / DAY_LENGTH_MS) * DAY_LENGTH_MS + RAID_START_T * DAY_LENGTH_MS;
+}
+
 const SUN_WARM = new THREE.Color(0xffb066);
 const SUN_NOON = new THREE.Color(0xfff4dc);
 

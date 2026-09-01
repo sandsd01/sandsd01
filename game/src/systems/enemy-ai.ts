@@ -4,12 +4,18 @@ import type { Terrain } from "../world/terrain";
 import { getZone } from "../world/zones";
 import { mulberry32 } from "../utils/rng";
 import { events } from "../utils/events";
+import { resolveCollisions, type Collidable } from "../utils/collision";
 import { buildFigureGeometry, createFigureMaterial, type FigurePalette } from "../world/figures";
 
 type EnemyAiState = "idle" | "chase" | "attack";
 
 const FLASH_MS = 120;
 const DEATH_ANIM_MS = 300;
+/** Body radius used against the world. A little under the player's, so a gap
+ * the player can squeeze through is never one the enemy cannot follow into. */
+const ENEMY_RADIUS = 0.42;
+/** How far a step has to be shortened before it counts as having been stopped. */
+const BLOCKED_EPSILON = 0.02;
 
 let nextEnemyId = 0;
 
@@ -48,6 +54,12 @@ export class Enemy {
   readonly object: THREE.Mesh;
   health: number;
   dying = false;
+  /**
+   * Per-enemy rather than read from the def, because a raider is dropped well
+   * outside the def's 14-16 units and has to come looking. Left at the def's
+   * value it would stand where it landed all night.
+   */
+  aggroRadius: number;
   private aiState: EnemyAiState = "idle";
   private lastAttackMs = -Infinity;
   private flashUntilMs = -Infinity;
@@ -59,6 +71,7 @@ export class Enemy {
     this.object = buildEnemyMesh(def.id);
     this.object.position.set(x, y, z);
     this.health = def.maxHealth;
+    this.aggroRadius = def.aggroRadius;
   }
 
   private get material(): THREE.MeshStandardMaterial {
@@ -83,12 +96,26 @@ export class Enemy {
     return this.dying && nowMs - this.deathStartMs >= DEATH_ANIM_MS;
   }
 
+  /**
+   * @param collidables the same list the player is resolved against, so both
+   *   move through one world. Enemies used to be resolved against nothing at
+   *   all — they wrote straight to `object.position` — which meant every wall
+   *   in the game stopped the player and no one else, and a base was scenery.
+   * @param onAttackBuilding called with a point just ahead of a blocked enemy.
+   *   Returns whether something breakable was actually there: true and the
+   *   enemy stays put and works on it, false and it goes on sliding along
+   *   whatever it is (a boulder, a tree) as before. Enemies still chase the
+   *   player and only the player — they hit what is in the way, they do not
+   *   pick out a base to besiege.
+   */
   update(
     dt: number,
     nowMs: number,
     playerPos: THREE.Vector3,
     terrain: Terrain,
     onAttackPlayer: (damage: number) => void,
+    collidables: Collidable[] = [],
+    onAttackBuilding: (x: number, z: number, damage: number) => boolean = () => false,
   ): void {
     if (this.dying) {
       const t = Math.min(1, (nowMs - this.deathStartMs) / DEATH_ANIM_MS);
@@ -101,20 +128,40 @@ export class Enemy {
     const dz = playerPos.z - this.object.position.z;
     const dist = Math.hypot(dx, dz);
 
-    if (this.aiState === "idle" && dist < this.def.aggroRadius) {
+    if (this.aiState === "idle" && dist < this.aggroRadius) {
       this.aiState = "chase";
     }
 
     if (this.aiState === "chase") {
       if (dist <= this.def.attackRange) {
         this.aiState = "attack";
-      } else if (dist > this.def.aggroRadius * 1.5) {
+      } else if (dist > this.aggroRadius * 1.5) {
         this.aiState = "idle";
       } else if (dist > 0) {
         const step = this.def.moveSpeed * dt;
-        this.object.position.x += (dx / dist) * step;
-        this.object.position.z += (dz / dist) * step;
+        const wantX = this.object.position.x + (dx / dist) * step;
+        const wantZ = this.object.position.z + (dz / dist) * step;
+        const solved = resolveCollisions(wantX, wantZ, ENEMY_RADIUS, collidables);
+        this.object.position.x = solved.x;
+        this.object.position.z = solved.z;
+        // Face the player, not the corrected step: an enemy shoved sideways
+        // along a wall is still coming for you and should look like it.
         this.object.rotation.y = Math.atan2(dx, dz);
+
+        const stopped =
+          Math.hypot(solved.x - wantX, solved.z - wantZ) > BLOCKED_EPSILON &&
+          nowMs - this.lastAttackMs >= this.def.attackCooldownMs;
+        if (stopped) {
+          // Sample past our own radius, in the direction we were trying to go —
+          // the cell we are standing in is our own, not the thing in the way.
+          const reach = ENEMY_RADIUS + this.def.attackRange * 0.5;
+          const hit = onAttackBuilding(
+            this.object.position.x + (dx / dist) * reach,
+            this.object.position.z + (dz / dist) * reach,
+            this.def.damage,
+          );
+          if (hit) this.lastAttackMs = nowMs;
+        }
       }
     }
 
@@ -137,15 +184,27 @@ export class Enemy {
   }
 }
 
+// The ambient trickle, and the ceiling a raid is allowed to fill instead.
+// These have to be separate numbers: a wave of six that ran into a cap of
+// eight (which counts the dying, too) would arrive as two.
 const MAX_ENEMIES = 8;
+const RAID_MAX_ENEMIES = 18;
 const SPAWN_INTERVAL_MS = 9000;
 const SPAWN_RADIUS_MIN = 30;
 const SPAWN_RADIUS_MAX = 90;
+// A wave lands close enough to reach the player before the night is over, and
+// far enough out that nothing materialises in the middle of the yard.
+const WAVE_RADIUS_MIN = 26;
+const WAVE_RADIUS_MAX = 38;
 
 export class EnemyManager {
   private readonly enemies: Enemy[] = [];
   private lastSpawnMs = -Infinity;
   private readonly rand: () => number;
+  /** While a raid runs the ambient trickle stops and the ceiling lifts. */
+  private raiding = false;
+  /** Ids spawned as part of the current raid, so "the wave is dead" is answerable. */
+  private readonly raidIds = new Set<string>();
 
   constructor(
     private readonly scene: THREE.Scene,
@@ -169,13 +228,65 @@ export class EnemyManager {
     // Rocky/wetland biomes are tougher terrain to fight through, so they
     // spawn the stronger Brute instead of a regular Zombie.
     const zone = getZone(x, z);
-    const def = getEnemy(zone === "rocky" || zone === "wetland" ? "brute" : "zombie");
-    const y = this.terrain.heightAt(x, z);
+    this.spawnAt(getEnemy(zone === "rocky" || zone === "wetland" ? "brute" : "zombie"), x, z);
+  }
 
-    const enemy = new Enemy(def, x, y, z);
+  private spawnAt(def: EnemyDef, x: number, z: number): Enemy {
+    const enemy = new Enemy(def, x, this.terrain.heightAt(x, z), z);
     this.enemies.push(enemy);
     this.scene.add(enemy.object);
     events.emit("enemy-spawned", { id: enemy.id });
+    return enemy;
+  }
+
+  /**
+   * Places one enemy at an exact spot. For tests that need a known layout —
+   * the ambient spawner picks its own ring position and the question under
+   * test is usually what happens between an enemy and a wall, not where it
+   * came from.
+   */
+  spawnEnemyAt(enemyId: string, x: number, z: number): string {
+    return this.spawnAt(getEnemy(enemyId), x, z).id;
+  }
+
+  setRaiding(raiding: boolean): void {
+    this.raiding = raiding;
+    if (!raiding) this.raidIds.clear();
+  }
+
+  /** How many of the current raid's enemies are still on their feet. */
+  raidersAlive(): number {
+    return this.enemies.filter((e) => !e.dying && this.raidIds.has(e.id)).length;
+  }
+
+  /**
+   * Drops a wave on a ring around the player.
+   *
+   * Around the *player*, not the world origin the ambient spawner uses: a
+   * homestead built out past the ridge would otherwise be raided by enemies
+   * that spawn back at spawn and never arrive.
+   */
+  spawnWave(count: number, brutes: number, aroundX: number, aroundZ: number): number {
+    let spawned = 0;
+    for (let i = 0; i < count; i++) {
+      if (this.enemies.length >= RAID_MAX_ENEMIES) break;
+      // Spread around the full circle rather than clustering, so a wave
+      // arrives from every side and a one-sided wall is not a whole answer.
+      const angle = ((i + this.rand()) / count) * Math.PI * 2;
+      const radius = WAVE_RADIUS_MIN + this.rand() * (WAVE_RADIUS_MAX - WAVE_RADIUS_MIN);
+      const def = getEnemy(i < brutes ? "brute" : "zombie");
+      const enemy = this.spawnAt(
+        def,
+        aroundX + Math.cos(angle) * radius,
+        aroundZ + Math.sin(angle) * radius,
+      );
+      // Reaches all the way back to the player from the spawn ring, so a wave
+      // closes in rather than milling about where it landed.
+      enemy.aggroRadius = WAVE_RADIUS_MAX * 1.6;
+      this.raidIds.add(enemy.id);
+      spawned++;
+    }
+    return spawned;
   }
 
   // Starts the death animation immediately and emits enemy-killed right away
@@ -201,19 +312,28 @@ export class EnemyManager {
     nowMs: number,
     playerPos: THREE.Vector3,
     onAttackPlayer: (damage: number) => void,
+    collidables: Collidable[] = [],
+    onAttackBuilding: (x: number, z: number, damage: number) => boolean = () => false,
   ): void {
-    if (nowMs - this.lastSpawnMs > SPAWN_INTERVAL_MS && this.enemies.length < MAX_ENEMIES) {
+    // The trickle is suspended for the night: left running it would spend the
+    // raid ceiling on wanderers and thin out the waves themselves.
+    if (
+      !this.raiding &&
+      nowMs - this.lastSpawnMs > SPAWN_INTERVAL_MS &&
+      this.enemies.length < MAX_ENEMIES
+    ) {
       this.lastSpawnMs = nowMs;
       this.spawnOne();
     }
 
     for (const enemy of this.enemies) {
-      enemy.update(dt, nowMs, playerPos, this.terrain, onAttackPlayer);
+      enemy.update(dt, nowMs, playerPos, this.terrain, onAttackPlayer, collidables, onAttackBuilding);
     }
 
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       if (this.enemies[i].isDeathAnimDone(nowMs)) {
         this.scene.remove(this.enemies[i].object);
+        this.raidIds.delete(this.enemies[i].id);
         this.enemies.splice(i, 1);
       }
     }

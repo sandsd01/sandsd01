@@ -28,5 +28,11 @@ export class AudioHooks {
     events.on("crop-planted", () => sound.plant());
     events.on("crop-harvested", () => sound.harvest());
     events.on("item-picked-up", () => sound.gatherSoft());
+    events.on("building-damaged", () => sound.wallHit());
+    events.on("building-destroyed", () => sound.place());
+    events.on("building-repaired", () => sound.craft());
+    events.on("raid-warning", () => sound.raidHorn());
+    events.on("raid-started", () => sound.raidHorn());
+    events.on("raid-ended", () => sound.raidOver());
   }
 }

@@ -2,6 +2,7 @@ import { createInitialState, type GameState } from "../state/game-state";
 import { learnAllRecipes } from "./crafting";
 import { assignFromInventory, normaliseHotbar } from "./equipment";
 import { events } from "../utils/events";
+import { raidStartAfter } from "./day-night";
 
 const STORAGE_KEY = "romestead-save-v1";
 
@@ -53,9 +54,24 @@ function backfillDefaults(state: GameState): void {
   // which is exactly what it had before — no node was ever recorded as worked,
   // so there is nothing to restore and an empty record is the honest default.
   if (!state.nodes || typeof state.nodes !== "object") state.nodes = {};
-  // Pieces placed before rotation existed were all placed unrotated.
+  // Pieces placed before rotation existed were all placed unrotated, and
+  // pieces placed before anything could hit them are undamaged.
   for (const placed of state.placedBuildings) {
     if (typeof placed.rotation !== "number") placed.rotation = 0;
+    if (typeof placed.damage !== "number") placed.damage = 0;
+  }
+
+  // A save from before raids existed has to be given a schedule, and it has to
+  // be counted from where that save's own clock stands. Filling the field with
+  // a zeroed record instead would put `nextRaidAtMs` in the distant past and
+  // raid a returning player the instant their world finished loading.
+  if (!state.raid || typeof state.raid !== "object") {
+    state.raid = {
+      nextRaidAtMs: raidStartAfter(state.elapsedMs ?? 0),
+      active: false,
+      wave: 0,
+      endsAtMs: 0,
+    };
   }
 
   // A save written before the hotbar existed comes back with none. Fill it

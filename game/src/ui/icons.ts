@@ -20,6 +20,7 @@ import squareStack from "lucide-static/icons/square-stack.svg?raw";
 import sun from "lucide-static/icons/sun.svg?raw";
 import sunrise from "lucide-static/icons/sunrise.svg?raw";
 import sword from "lucide-static/icons/sword.svg?raw";
+import swords from "lucide-static/icons/swords.svg?raw";
 import trees from "lucide-static/icons/trees.svg?raw";
 import wheat from "lucide-static/icons/wheat.svg?raw";
 
@@ -42,6 +43,7 @@ const SOURCES = {
   sun,
   sunrise,
   sword,
+  swords,
   trees,
   wheat,
 } as const;

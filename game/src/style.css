@@ -164,6 +164,69 @@ body {
   height: 15px;
 }
 
+/* --- Raid banner ---
+   Sits in the gap under the clock, which is the only empty region of the HUD.
+   Its own element on purpose: folding it into `.hud-time` would widen that
+   pill, and the clock's width is what the whole top row is laid out around.
+   Together the clock and this form the centre column that `.hud-resources`
+   keeps clear of — so its width and that rule's margin move together. */
+
+.hud-raid {
+  position: absolute;
+  top: 58px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* Capped, and the cap is load-bearing: `.hud-resources` reserves exactly
+     this much space beside the centre line. */
+  max-width: min(260px, 70vw);
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: var(--slate-solid);
+  border: 1px solid var(--danger);
+  box-shadow: var(--shadow);
+  color: var(--ink);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  /* Breathes, so it reads as live rather than as a label that was left on.
+     The words carry the meaning either way — this only adds emphasis. */
+  animation: raid-pulse 1.6s ease-in-out infinite;
+}
+
+/* `display: flex` above beats the browser's own `[hidden] { display: none }`,
+   so without this the banner sits on screen reading "Raid" from the moment the
+   page loads — every night a raid night. Nothing in the JS was wrong, which is
+   exactly why it took a screenshot to see. */
+.hud-raid[hidden] {
+  display: none;
+}
+
+.hud-raid-icon.icon {
+  width: 16px;
+  height: 16px;
+  color: var(--danger);
+}
+
+@keyframes raid-pulse {
+  0%,
+  100% {
+    border-color: var(--danger);
+  }
+  50% {
+    border-color: var(--edge-strong);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hud-raid {
+    animation: none;
+  }
+}
+
 /* --- Status: carried resources --- */
 
 .hud-resources {
@@ -177,11 +240,18 @@ body {
      There is nothing but sky below, so a second line is free. */
   flex-wrap: wrap;
   justify-content: flex-end;
-  /* Stop short of the centred clock rather than merely inside the viewport:
+  /* Stop short of the centred column rather than merely inside the viewport:
      the row is anchored right, so without this its first line still reaches
      left across the clock however much it wraps. Half the viewport, less the
-     clock's half-width and a gap. */
-  max-width: calc(50vw - 80px);
+     half-width of the widest thing in that column and a gap.
+
+     That widest thing is now the raid banner (max 260px), not the clock. At
+     80px this cleared the clock and then wrapped its second line straight
+     across "4 left" on the banner at 1000px wide — visible in a screenshot,
+     invisible in the diff, and invisible to a check that only measured at
+     1280. 130 + 20 keeps the two columns apart at every width, since both
+     are measured from the same centre line. */
+  max-width: calc(50vw - 150px);
   gap: 4px;
   background: var(--slate);
   border: 1px solid var(--edge);
