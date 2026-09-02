@@ -133,6 +133,19 @@ body {
   opacity: 0.35;
 }
 
+/* What is being worn, under the two bars it affects. Text and a number, so it
+   reads without relying on the colour. */
+.hud-armour {
+  margin-top: 7px;
+  font-size: 12px;
+  letter-spacing: 0.03em;
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* `display` is not set on this one, so the browser's own `[hidden]` rule does
+   apply — unlike `.hud-raid`, which sets `display: flex` and needed its own. */
+
 /* --- Status: clock --- */
 
 .hud-time {

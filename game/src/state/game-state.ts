@@ -51,6 +51,12 @@ export interface RaidState {
   wave: number;
   /** Dawn: when tonight's raid ends whatever is still standing. */
   endsAtMs: number;
+  /**
+   * Raids seen through to the end. This is the difficulty dial *and* the
+   * score: every raid is built from it, and the number is shown to the
+   * player rather than kept in the save where only the code can see it.
+   */
+  count: number;
 }
 
 export interface PlotState {
@@ -117,6 +123,16 @@ export interface GameState {
   nodes: Record<string, NodeSaveState>;
   /** The raid schedule. See `RaidState`. */
   raid: RaidState;
+  /**
+   * What is being worn, by item id, or null for nothing. One slot rather than
+   * head/chest/legs: three slots is three times the UI, the save and the
+   * balancing for depth the player cannot read off the screen anyway.
+   *
+   * Worn armour is **out of `inventory`** — taking it off puts it back. A
+   * piece that was both worn and in the bag could be spent while protecting
+   * you.
+   */
+  armour: string | null;
 }
 
 /** Persisted per-node progress. `depletedAtMs` is on the `elapsedMs` clock. */
@@ -155,6 +171,7 @@ export function createInitialState(seedInput: string | number = "romestead"): Ga
     equippedSlot: 0,
     containers: {},
     nodes: {},
-    raid: { nextRaidAtMs: raidStartAfter(elapsedMs), active: false, wave: 0, endsAtMs: 0 },
+    armour: null,
+    raid: { nextRaidAtMs: raidStartAfter(elapsedMs), active: false, wave: 0, endsAtMs: 0, count: 0 },
   };
 }

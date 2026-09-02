@@ -72,8 +72,16 @@ function backfillDefaults(state: GameState): void {
       active: false,
       wave: 0,
       endsAtMs: 0,
+      count: 0,
     };
   }
+  // And a save from between the two — it has a `raid` record but predates the
+  // counter, so the whole-object guard above skips it. Filling only the
+  // missing-record case is the easy half of this to get right and the easy
+  // half to stop at.
+  if (typeof state.raid.count !== "number") state.raid.count = 0;
+  // Nothing was worn before there was anything to wear.
+  if (typeof state.armour !== "string") state.armour = null;
 
   // A save written before the hotbar existed comes back with none. Fill it
   // from what they are already carrying rather than handing them an empty bar

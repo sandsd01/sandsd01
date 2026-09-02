@@ -392,6 +392,47 @@ you. **It never hurts the player**: at night, backing through your own gate, you
 cannot see which tile is which, and the raiders never had to choose where to
 walk.
 
+## Somewhere to get to
+
+The game had every verb it needed and no direction. `PlayerState` held health
+and stamina and nothing else, so the ceiling of a whole character was an iron
+sword; the raid schedule was a fixed three-wave array, so raid 3 and raid 30
+were the same night; and nothing on screen said how far you had got.
+
+**Raids escalate, and never stop.** `planFor` builds every raid from the number
+of raids already survived: more waves, bigger waves, and a rising share of
+brutes. Escalation is in **numbers and composition only** — an enemy that looks
+identical but quietly carries more health on raid ten is the game lying about
+what it is showing you.
+
+Two things fall out of a fixed-length night:
+
+- **The gap between waves shrinks as raids grow.** A raid runs for a fixed
+  `RAID_DURATION_MS` and ends at dawn whatever is standing. Left at a flat forty
+  seconds, the later waves of raid twelve would never be released before sunrise
+  and raid twelve would come out *easier* than raid six, with nobody having
+  decided that.
+- **Raiders a wave cannot fit are carried forward.** `RAID_MAX_ENEMIES` caps how
+  many can be on the field at once and stays — it is what keeps the frame rate
+  honest. Without a backlog the surplus would evaporate, and past the point
+  where the field saturates every raid would be identical however far the
+  schedule had climbed. Queued instead, the pressure keeps rising as a field
+  that never empties.
+
+**Armour** is the one thing that scales on the player's side: hide (-20%) then
+iron (-40%), applied in `damagePlayer` — the single place health is ever lost,
+so anything that hurts you later gets the reduction for free. Floored at 1 a
+hit: armour that could take a blow down to nothing would end the game rather
+than deepen it. It is worn in one slot, not head/chest/legs, and worn armour is
+**out of the bag** — a piece that was both worn and carried could be spent by a
+recipe while it was keeping you alive.
+
+Gear tops out at two tiers and the raids do not, which means the player loses
+eventually. That is deliberate: what keeps scaling is the *base* — thicker
+walls, more traps, more arrows — so the number that matters is how many raids
+you saw through. It is on the raid banner ("Raid 9 — wave 1/6") and the day is
+on the clock, rather than sitting in the save where only the code can read it.
+
 ## Raid night
 
 Every third night, something comes for you. Before this the day/night cycle was
@@ -463,8 +504,8 @@ Everything gameplay-relevant goes into one `localStorage` key
 (`romestead-save-v1`), written every 10 seconds and on unload: the world seed
 and clock, the player, inventory, hotbar, placed buildings (with how battered
 each one is and whether a gate is standing open), crops, known recipes,
-container contents, the raid schedule, and **how far each resource node has
-been worked**.
+container contents, the raid schedule and how many raids have been survived,
+what is being worn, and **how far each resource node has been worked**.
 
 That last one is newer than the rest, and its absence used to be exploitable:
 nodes were re-scattered from the seed on every boot, so reloading the page
@@ -559,6 +600,12 @@ average over hundreds of rolls), `killNearestEnemy()`, `getAllRecipes()`,
 `getOccupiedCells()`, `getBuildRotation()`, `placeBuildingAt(...)`,
 `demolishBuilding(id)` and `probeMoveTo(x, z, steps?)`.
 
+For progression: `getRaidState()` now carries the raid number and the count
+survived, `setRaidCount(n)` jumps the difficulty dial (playing ten raids to see
+what raid ten looks like is twenty minutes of waiting per assertion),
+`getArmour()` / `wearArmour(id)` / `takeOffArmour()`, and `hurtPlayer(n)` runs
+the real damage path so a reduction under test is the one the game applies.
+
 For gates, bows and traps: `toggleDoor(id)` / `getDoorState(id)`,
 `shootArrow()` (the real firing path, draw cooldown and quiver check included)
 and `getArrowsInFlight()`.
@@ -615,6 +662,10 @@ Two cautions learned the hard way, both about trusting an instrument:
   is built from**, which is the resource nodes *and* the placed buildings —
   including the world's own POI barrels. Scanning only the nodes chose a lane
   with a barrel in it and then blamed the spike trap for stopping the player.
+- **A backfill guard on a whole object misses the field added to it later.**
+  `state.raid` was filled in when the record was missing entirely, which is not
+  the same as a save that has the record but predates `raid.count` — the easy
+  half of that to get right is also the easy half to stop at.
 - A piece's own geometry has to span the same axis the model it stands among
   does. The gate was built across x while the fence the walls use spans z, so
   it stood edge-on inside its own wall run and read as a single thin post —
