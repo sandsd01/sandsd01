@@ -51,6 +51,8 @@ import {
   equippedItemId,
   pruneHotbar,
   selectSlot,
+  takeOffArmour,
+  wearArmour,
 } from "./systems/equipment";
 import {
   canCraft,
@@ -641,7 +643,14 @@ const loop = new GameLoop((dt) => {
   currentNowMs = clock.now();
   state.elapsedMs = currentNowMs;
   dayNight.update(currentNowMs);
-  hud.setTimeOfDay(dayNight.getTimeOfDay(currentNowMs));
+  // Day 1 is the first day, not day 0. Derived from the world clock rather
+  // than counted, so it needs no state of its own — and unlike the raid
+  // schedule it decides nothing, so the debug clock winding back only rewinds
+  // a label.
+  hud.setTimeOfDay(
+    dayNight.getTimeOfDay(currentNowMs),
+    Math.floor(currentNowMs / DAY_LENGTH_MS) + 1,
+  );
   sound.updateAmbient(dayNight.getDaylight());
 
   const menuOpen = anyPanelOpen();
@@ -690,6 +699,7 @@ const loop = new GameLoop((dt) => {
   hud.setRaid(
     raid.isActive()
       ? {
+          raid: raid.getRaidNumber(),
           wave: raid.getWave(),
           totalWaves: raid.getTotalWaves(),
           remaining: raid.raidersAlive(),
@@ -916,8 +926,15 @@ declare global {
       repairBuilding: (placedId: string) => boolean;
       enemyAttackAt: (x: number, z: number, damage: number) => boolean;
       spawnEnemyAt: (enemyId: string, x: number, z: number) => string;
+      getArmour: () => string | null;
+      wearArmour: (itemId: string) => boolean;
+      takeOffArmour: () => string | null;
+      hurtPlayer: (amount: number) => void;
+      setRaidCount: (count: number) => void;
       getRaidState: () => {
         active: boolean;
+        raid: number;
+        count: number;
         wave: number;
         totalWaves: number;
         raidersAlive: number;
@@ -1179,8 +1196,21 @@ window.__gameDebug = {
   // which knows nothing about what was inside.
   enemyAttackAt: (x, z, damage) => attackBuildingAt(x, z, damage),
   spawnEnemyAt: (enemyId, x, z) => enemyManager.spawnEnemyAt(enemyId, x, z),
+  getArmour: () => state.armour,
+  wearArmour: (itemId) => wearArmour(state, itemId),
+  takeOffArmour: () => takeOffArmour(state),
+  // The real damage path, so the armour reduction under test is the one the
+  // game applies — not a second copy of the arithmetic living in the suite.
+  hurtPlayer: (amount) => damagePlayer(state, amount),
+  // Jumps the difficulty dial. Playing ten raids to see what raid ten looks
+  // like is twenty minutes of waiting per assertion.
+  setRaidCount: (count) => {
+    state.raid.count = Math.max(0, Math.floor(count));
+  },
   getRaidState: () => ({
     active: raid.isActive(),
+    raid: raid.getRaidNumber(),
+    count: raid.getRaidsSurvived(),
     wave: raid.getWave(),
     totalWaves: raid.getTotalWaves(),
     raidersAlive: raid.raidersAlive(),

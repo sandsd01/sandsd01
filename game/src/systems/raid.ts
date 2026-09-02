@@ -11,24 +11,64 @@ import { RAID_DURATION_MS, raidStartAfter } from "./day-night";
  * point of a raid is that it is the night you prepared for.
  */
 const WARNING_LEAD_MS = 60_000;
-const WAVE_INTERVAL_MS = 40_000;
+
+export interface WavePlan {
+  count: number;
+  brutes: number;
+}
 
 /**
- * Waves escalate in *composition*, not only in headcount: the last wave is
- * mostly the same size as the second but carries three brutes, which hit
- * harder, take longer to put down, and drop the better loot. More zombies is
- * a longer night; more brutes is a harder one.
+ * How long between waves on raid `n` (1-based).
+ *
+ * Shrinks as the raids get longer, because the *night* does not: a raid runs
+ * for a fixed `RAID_DURATION_MS` and ends at dawn whatever is still standing.
+ * Left at a flat forty seconds, the later waves of raid twelve would simply
+ * never be released before sunrise — and raid twelve would come out *easier*
+ * than raid six with nobody having decided that.
  */
-const WAVES: { count: number; brutes: number }[] = [
-  { count: 4, brutes: 0 },
-  { count: 6, brutes: 1 },
-  { count: 8, brutes: 3 },
-];
+function intervalOn(n: number): number {
+  return Math.max(10_000, 40_000 - 1_500 * (n - 1));
+}
+
+/** How many waves raid `n` sends, and every one of them fits before dawn. */
+export function wavesOn(n: number): number {
+  return Math.min(3 + Math.floor((n - 1) / 2), Math.floor(RAID_DURATION_MS / intervalOn(n)));
+}
+
+/**
+ * The `w`-th wave (1-based) of raid `n`.
+ *
+ * Escalation is in **numbers and composition only**. An enemy that looks
+ * identical but quietly carries more health on raid ten is the game lying to
+ * the player about what it is showing them: a brute is a brute, and a harder
+ * night is more of them.
+ */
+export function waveOn(n: number, w: number): WavePlan {
+  // Later waves within a raid are bigger, and later raids open bigger.
+  const count = 3 + w + Math.floor((n - 1) / 3);
+  // Brutes hit harder, take longer to put down, and drop the better loot.
+  // None at all in the first wave of the first raid; up to half a wave once
+  // the player is deep in.
+  const share = Math.min(0.5, 0.06 * (n - 1) + 0.12 * (w - 1));
+  return { count, brutes: Math.min(count, Math.round(count * share)) };
+}
 
 export class RaidSystem {
   /** Runtime only: a reload releases a fresh wave and re-times from there. */
   private nextWaveAtMs = Infinity;
   private warned = false;
+  /**
+   * Raiders a wave wanted to send but could not, because the field was
+   * already at `RAID_MAX_ENEMIES`.
+   *
+   * That cap exists to keep the frame rate honest and it stays. Without this
+   * queue the surplus would simply evaporate, and past the point where the
+   * field saturates every raid would be identical however far the schedule
+   * had escalated — the difficulty would silently stop climbing. Carried
+   * forward instead, the pressure keeps rising as a field that never empties.
+   * Runtime only: a reload releases a fresh wave anyway.
+   */
+  private backlog = 0;
 
   constructor(
     private readonly state: GameState,
@@ -44,9 +84,19 @@ export class RaidSystem {
     return this.state.raid.active ? this.state.raid.wave : 0;
   }
 
-  /** Total waves a raid runs, so the HUD can say "2 of 3". */
+  /** Which raid this is, 1-based — the one being fought, or the one next. */
+  getRaidNumber(): number {
+    return this.state.raid.count + 1;
+  }
+
+  /** Raids seen through to the end. The score. */
+  getRaidsSurvived(): number {
+    return this.state.raid.count;
+  }
+
+  /** Total waves this raid runs, so the HUD can say "2 of 5". */
   getTotalWaves(): number {
-    return WAVES.length;
+    return wavesOn(this.getRaidNumber());
   }
 
   raidersAlive(): number {
@@ -109,7 +159,7 @@ export class RaidSystem {
       this.finish(nowMs, true);
       return;
     }
-    if (raid.wave < WAVES.length) {
+    if (raid.wave < this.getTotalWaves()) {
       if (nowMs >= this.nextWaveAtMs) this.releaseWave(nowMs, playerX, playerZ);
     } else if (this.enemies.raidersAlive() === 0) {
       this.finish(nowMs, true);
@@ -122,32 +172,45 @@ export class RaidSystem {
     raid.active = true;
     raid.wave = 0;
     raid.endsAtMs = nowMs + RAID_DURATION_MS;
+    this.backlog = 0;
     this.warned = false;
     this.enemies.setRaiding(true);
     events.emit("raid-started", {});
     this.releaseWave(nowMs, playerX, playerZ);
   }
 
-  /** Ends a running raid and books the next one. */
+  /**
+   * Ends a running raid and books the next one.
+   *
+   * The count goes up either way, including on the quiet path taken when a
+   * raid's night passed while the tab was shut. The night did happen and the
+   * base was standing when the player came back; docking them for having
+   * closed the tab would be a stranger rule than crediting them.
+   */
   finish(nowMs: number, announce = true): void {
     const raid = this.state.raid;
+    raid.count++;
     raid.active = false;
     raid.wave = 0;
     raid.endsAtMs = 0;
     raid.nextRaidAtMs = raidStartAfter(nowMs);
     this.nextWaveAtMs = Infinity;
+    this.backlog = 0;
     this.warned = false;
     this.enemies.setRaiding(false);
-    if (announce) events.emit("raid-ended", { survived: true });
+    if (announce) events.emit("raid-ended", { survived: true, raidsSurvived: raid.count });
   }
 
   private releaseWave(nowMs: number, playerX: number, playerZ: number): void {
-    // A resumed raid can be past the last scripted wave; it still gets one,
-    // built to the toughest recipe rather than to none.
-    const plan = WAVES[Math.min(this.state.raid.wave, WAVES.length - 1)];
-    const spawned = this.enemies.spawnWave(plan.count, plan.brutes, playerX, playerZ);
+    const n = this.getRaidNumber();
+    // A resumed raid can be past its last scheduled wave; it still gets one,
+    // built to that raid's toughest recipe rather than to none.
+    const plan = waveOn(n, Math.min(this.state.raid.wave + 1, this.getTotalWaves()));
+    const wanted = plan.count + this.backlog;
+    const spawned = this.enemies.spawnWave(wanted, plan.brutes, playerX, playerZ);
+    this.backlog = Math.max(0, wanted - spawned);
     this.state.raid.wave++;
-    this.nextWaveAtMs = nowMs + WAVE_INTERVAL_MS;
+    this.nextWaveAtMs = nowMs + intervalOn(n);
     events.emit("raid-wave", { wave: this.state.raid.wave, count: spawned });
   }
 }

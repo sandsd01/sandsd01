@@ -49,10 +49,11 @@ export interface GameEvents {
   "door-toggled": { id: string; open: boolean };
   "arrow-fired": Record<string, never>;
   "trap-triggered": { id: string; enemyId: string };
+  "armour-changed": { itemId: string | null };
   "raid-warning": { secondsAway: number };
   "raid-started": Record<string, never>;
   "raid-wave": { wave: number; count: number };
-  "raid-ended": { survived: boolean };
+  "raid-ended": { survived: boolean; raidsSurvived: number };
   "building-placed": { id: string; buildingId: string };
   "building-selection-changed": { buildingId: string | null };
   "crop-planted": { plotId: string; cropId: string };

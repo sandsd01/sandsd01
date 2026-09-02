@@ -1,5 +1,7 @@
 import type { GameState } from "../state/game-state";
 import { getQty } from "../systems/inventory";
+import { getItem } from "../data/items";
+import { ARMOUR } from "../data/armour";
 import { events } from "../utils/events";
 import { colorToCss, el } from "./dom";
 import { keyLabel, type Action, type Bindings } from "../state/keybindings";
@@ -67,6 +69,7 @@ export class Hud {
   /** Last rendered count per tracked item, to spot a rise. */
   private readonly lastCounts = new Map<string, number>();
   private readonly healthFill: HTMLDivElement;
+  private readonly armourChip: HTMLDivElement;
   private readonly staminaFill: HTMLDivElement;
   private readonly resourceRow: HTMLDivElement;
   private readonly prompt: HTMLDivElement;
@@ -96,6 +99,12 @@ export class Hud {
     this.staminaFill = el("div", "hud-stamina-bar-fill");
     staminaBg.appendChild(this.staminaFill);
     healthWrap.appendChild(staminaBg);
+
+    // Under the two bars, because what it changes is how fast the top one
+    // empties. Words and a number, never a colour on its own.
+    this.armourChip = el("div", "hud-armour");
+    this.armourChip.hidden = true;
+    healthWrap.appendChild(this.armourChip);
 
     const timeWrap = el("div", "hud-time");
     this.timeIcon = el("span", "hud-time-icon icon");
@@ -176,6 +185,8 @@ export class Hud {
     this.renderStamina(state);
     this.renderResources(state);
 
+    this.renderArmour(state);
+    events.on("armour-changed", () => this.renderArmour(state));
     events.on("player-health-changed", () => this.renderHealth(state));
     events.on("player-stamina-changed", () => this.renderStamina(state));
     events.on("inventory-changed", () => this.renderResources(state));
@@ -183,6 +194,19 @@ export class Hud {
     events.on("player-damaged", () => this.flashDamage());
     events.on("player-died", () => this.deathOverlay.classList.add("visible"));
     events.on("player-respawned", () => this.deathOverlay.classList.remove("visible"));
+  }
+
+  /** What is being worn, if anything. Hidden entirely when nothing is. */
+  private renderArmour(state: GameState): void {
+    const worn = state.armour;
+    if (!worn) {
+      this.armourChip.hidden = true;
+      this.armourChip.textContent = "";
+      return;
+    }
+    const pct = Math.round((ARMOUR[worn]?.reduction ?? 0) * 100);
+    this.armourChip.hidden = false;
+    this.armourChip.textContent = `${getItem(worn).name} · -${pct}% damage`;
   }
 
   private renderHealth(state: GameState): void {
@@ -248,7 +272,9 @@ export class Hud {
    * `null` hides it — which is most of the time, and is why this is a banner
    * that appears rather than a permanent gauge reading "no raid".
    */
-  setRaid(status: { wave: number; totalWaves: number; remaining: number } | null): void {
+  setRaid(
+    status: { raid: number; wave: number; totalWaves: number; remaining: number } | null,
+  ): void {
     if (!status) {
       if (!this.raidBanner.hidden) {
         this.raidBanner.hidden = true;
@@ -256,20 +282,23 @@ export class Hud {
       }
       return;
     }
-    const text = `Raid — wave ${status.wave}/${status.totalWaves} · ${status.remaining} left`;
+    const text =
+      `Raid ${status.raid} — wave ${status.wave}/${status.totalWaves} · ${status.remaining} left`;
     this.raidBanner.hidden = false;
     if (this.raidLabel.textContent !== text) this.raidLabel.textContent = text;
   }
 
   // t is the day-night fraction in [0,1) from DayNightSystem.getTimeOfDay —
   // mapped to a 24h virtual clock purely for display.
-  setTimeOfDay(t: number): void {
+  setTimeOfDay(t: number, day: number): void {
     const totalMinutes = Math.floor(t * 24 * 60);
     const hours = Math.floor(totalMinutes / 60)
       .toString()
       .padStart(2, "0");
     const minutes = (totalMinutes % 60).toString().padStart(2, "0");
-    this.timeLabel.textContent = `${hours}:${minutes}`;
+    // "Day 12 · 09:41". The day is the one number that always moves, and
+    // without it nothing on screen says how long you have lasted.
+    this.timeLabel.textContent = `Day ${day} · ${hours}:${minutes}`;
     const phase: IconName = t < 0.22 || t > 0.78 ? "moon" : t < 0.3 || t > 0.7 ? "sunrise" : "sun";
     if (this.timePhase !== phase) {
       this.timePhase = phase;

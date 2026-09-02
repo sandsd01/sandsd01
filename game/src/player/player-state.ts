@@ -1,10 +1,22 @@
 import type { GameState } from "../state/game-state";
 import { events } from "../utils/events";
+import { reductionFor } from "../data/armour";
 
+/**
+ * The only way the player loses health, which is why armour is applied here
+ * and nowhere else: every future source of damage gets the reduction for free
+ * rather than each one having to remember it.
+ */
 export function damagePlayer(state: GameState, amount: number): void {
   if (state.player.health <= 0) return;
-  state.player.health = Math.max(0, state.player.health - amount);
-  events.emit("player-damaged", { amount });
+  // Floored at 1. Armour that could take a hit down to nothing would end the
+  // game rather than deepen it — there has to be a cost to being surrounded
+  // however good the kit is.
+  const taken = Math.max(1, Math.round(amount * (1 - reductionFor(state))));
+  state.player.health = Math.max(0, state.player.health - taken);
+  // The damage that actually landed, not what was swung: the red flash and
+  // anything else listening would otherwise report a hit the player never took.
+  events.emit("player-damaged", { amount: taken });
   events.emit("player-health-changed", {
     current: state.player.health,
     max: state.player.maxHealth,

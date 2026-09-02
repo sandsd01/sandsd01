@@ -160,6 +160,32 @@ export const RECIPES: RecipeDef[] = [
     category: "weapons",
   },
   {
+    // The first thing the player can put *on*. Hide's only uses were the club
+    // and the bow, so a brute's better drop fed two dead ends and nothing that
+    // made the next raid survivable.
+    id: "hide_armour",
+    name: "Hide Armour",
+    inputs: [
+      { itemId: "hide", qty: 6 },
+      { itemId: "plank", qty: 2 },
+    ],
+    output: { itemId: "hide_armour", qty: 1 },
+    category: "tools",
+    requiresStation: "workbench",
+  },
+  {
+    // And the first destination for iron that is not another tool.
+    id: "iron_armour",
+    name: "Iron Armour",
+    inputs: [
+      { itemId: "iron_ingot", qty: 5 },
+      { itemId: "hide", qty: 3 },
+    ],
+    output: { itemId: "iron_armour", qty: 1 },
+    category: "tools",
+    requiresStation: "anvil",
+  },
+  {
     // The answer to a wall you cannot fight from. Hide's only use until now was
     // the club, which meant a brute's better drop fed one dead-end item.
     id: "bow",

@@ -1,5 +1,6 @@
 import type { GameState } from "../state/game-state";
-import { getQty } from "./inventory";
+import { addItem, getQty, hasQty, removeItem } from "./inventory";
+import { isArmour } from "../data/armour";
 import { events } from "../utils/events";
 
 export const HOTBAR_SIZE = 8;
@@ -37,6 +38,9 @@ export function cycleSlot(state: GameState, direction: number): void {
  * which is busywork the genre has long since stopped asking for.
  */
 export function autoAssign(state: GameState, itemId: string): boolean {
+  // Armour is worn, never held: a quick slot holding it would do nothing at
+  // all when selected, while taking a slot from something that does.
+  if (isArmour(itemId)) return false;
   if (state.hotbar.includes(itemId)) return false;
   const free = state.hotbar.indexOf(null);
   if (free === -1) return false;
@@ -64,6 +68,35 @@ export function assignToSlot(state: GameState, index: number, itemId: string | n
   }
   state.hotbar[index] = itemId;
   events.emit("equipped-changed", { itemId: equippedItemId(state) });
+}
+
+/**
+ * Puts armour on, taking it out of the bag.
+ *
+ * Worn armour leaves `inventory` and comes back on `takeOffArmour`. Left in
+ * both places it could be worn and spent at the same time — and a crafting
+ * recipe would happily eat the thing keeping you alive.
+ *
+ * Returns false when the item is not armour or is not carried.
+ */
+export function wearArmour(state: GameState, itemId: string): boolean {
+  if (!isArmour(itemId) || !hasQty(state, itemId, 1)) return false;
+  takeOffArmour(state);
+  removeItem(state, itemId, 1);
+  state.armour = itemId;
+  pruneHotbar(state);
+  events.emit("armour-changed", { itemId });
+  return true;
+}
+
+/** Takes off whatever is worn and puts it back in the bag. */
+export function takeOffArmour(state: GameState): string | null {
+  const worn = state.armour;
+  if (!worn) return null;
+  state.armour = null;
+  addItem(state, worn, 1);
+  events.emit("armour-changed", { itemId: null });
+  return worn;
 }
 
 /** Clears slots whose item is all gone, so the bar reflects what you have. */

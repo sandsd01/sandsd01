@@ -59,6 +59,20 @@ export const ITEMS: Record<string, ItemDef> = {
   // worth picking, and both feed recipes rather than sitting in the bag.
   bone: { id: "bone", name: "Bone", category: "resource", stackSize: 99, color: 0xe6e0cc },
   hide: { id: "hide", name: "Hide", category: "resource", stackSize: 99, color: 0x7a5238 },
+  hide_armour: {
+    id: "hide_armour",
+    name: "Hide Armour",
+    category: "tool",
+    stackSize: 1,
+    color: 0x7a5238,
+  },
+  iron_armour: {
+    id: "iron_armour",
+    name: "Iron Armour",
+    category: "tool",
+    stackSize: 1,
+    color: 0x9aa3ad,
+  },
   bow: {
     id: "bow",
     name: "Bow",
