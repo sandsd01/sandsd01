@@ -19,6 +19,8 @@ const TRACKED_ITEMS = [
   "wheat",
   "bone",
   "hide",
+  // Ammunition you cannot see the count of is not ammunition.
+  "arrow",
 ];
 // Each tracked resource gets a glyph as well as a colour: the icon says what
 // it is, the tint only reinforces it.
@@ -31,8 +33,9 @@ const ITEM_ICONS: Record<string, IconName> = {
   plank: "squareStack",
   wheat_seed: "sprout",
   wheat: "wheat",
-  bone: "sword",
+  bone: "bone",
   hide: "layers",
+  arrow: "navigation",
 };
 const ITEM_COLORS: Record<string, number> = {
   wood: 0x8b5a2b,
@@ -45,6 +48,7 @@ const ITEM_COLORS: Record<string, number> = {
   wheat: 0xe8c840,
   bone: 0xe6e0cc,
   hide: 0x7a5238,
+  arrow: 0xcfc3a8,
 };
 
 const SVG_NS = "http://www.w3.org/2000/svg";

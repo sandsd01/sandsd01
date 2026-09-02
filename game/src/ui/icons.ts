@@ -3,7 +3,9 @@
 // whole set. Every lucide glyph draws with stroke="currentColor", which is why
 // a chip can tint its icon by setting `color` and nothing else.
 import axe from "lucide-static/icons/axe.svg?raw";
+import bone from "lucide-static/icons/bone.svg?raw";
 import brickWall from "lucide-static/icons/brick-wall.svg?raw";
+import crosshair from "lucide-static/icons/crosshair.svg?raw";
 import fence from "lucide-static/icons/fence.svg?raw";
 import flame from "lucide-static/icons/flame.svg?raw";
 import hammer from "lucide-static/icons/hammer.svg?raw";
@@ -13,6 +15,7 @@ import heart from "lucide-static/icons/heart.svg?raw";
 import layers from "lucide-static/icons/layers.svg?raw";
 import moon from "lucide-static/icons/moon.svg?raw";
 import mountain from "lucide-static/icons/mountain.svg?raw";
+import navigation from "lucide-static/icons/navigation.svg?raw";
 import pickaxe from "lucide-static/icons/pickaxe.svg?raw";
 import shovel from "lucide-static/icons/shovel.svg?raw";
 import sprout from "lucide-static/icons/sprout.svg?raw";
@@ -26,7 +29,9 @@ import wheat from "lucide-static/icons/wheat.svg?raw";
 
 const SOURCES = {
   axe,
+  bone,
   brickWall,
+  crosshair,
   fence,
   flame,
   gem,
@@ -36,6 +41,7 @@ const SOURCES = {
   layers,
   moon,
   mountain,
+  navigation,
   pickaxe,
   shovel,
   sprout,

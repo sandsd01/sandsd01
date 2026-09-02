@@ -59,6 +59,23 @@ export const ITEMS: Record<string, ItemDef> = {
   // worth picking, and both feed recipes rather than sitting in the bag.
   bone: { id: "bone", name: "Bone", category: "resource", stackSize: 99, color: 0xe6e0cc },
   hide: { id: "hide", name: "Hide", category: "resource", stackSize: 99, color: 0x7a5238 },
+  bow: {
+    id: "bow",
+    name: "Bow",
+    category: "tool",
+    stackSize: 1,
+    color: 0x8a6134,
+  },
+  // Ammunition, and the only consumable that comes back: a spent arrow lands
+  // on the ground as an ordinary drop, so shooting is a loop of spend and
+  // retrieve rather than a resource that only ever runs down.
+  arrow: {
+    id: "arrow",
+    name: "Arrow",
+    category: "resource",
+    stackSize: 99,
+    color: 0xcfc3a8,
+  },
   bone_club: { id: "bone_club", name: "Bone Club", category: "tool", stackSize: 1, color: 0xdcd3b8 },
   broth: { id: "broth", name: "Broth", category: "crop", stackSize: 99, color: 0xb5793c, heals: 25 },
 };

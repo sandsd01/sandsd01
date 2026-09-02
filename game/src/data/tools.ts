@@ -43,6 +43,17 @@ export const WEAPON_DAMAGE: Record<string, number> = {
 /** Bare hands. */
 export const UNARMED_DAMAGE = 6;
 
+/**
+ * The bow, and what one of its arrows does on impact.
+ *
+ * Deliberately absent from `WEAPON_DAMAGE` above: a bow swung as a club has to
+ * be worth no more than a fist. Left in that table it would be a sword that
+ * also shoots, and there would be no reason to carry anything else.
+ */
+export const BOW_ID = "bow";
+/** Under a sword's 25 — reach is what you are paying for, not raw damage. */
+export const ARROW_DAMAGE = 22;
+
 /** Damage for whatever is in hand — a weapon, a tool, or nothing. */
 export function heldDamage(state: GameState): number {
   const held = equippedItemId(state);

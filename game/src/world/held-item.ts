@@ -38,7 +38,7 @@ const REST_PITCH = Math.PI * 0.28;
 // The attack arc, reusing the shape the original prop swung through.
 const SWING_MS = 260;
 
-type Shape = "axe" | "pickaxe" | "sword";
+type Shape = "axe" | "pickaxe" | "sword" | "bow";
 
 const SHAPES: Record<string, Shape> = {
   axe: "axe",
@@ -47,6 +47,7 @@ const SHAPES: Record<string, Shape> = {
   iron_pickaxe: "pickaxe",
   sword: "sword",
   iron_sword: "sword",
+  bow: "bow",
 };
 
 const HAFT = 0x6b4a32;
@@ -71,6 +72,18 @@ function buildGeometry(shape: Shape, head: number): THREE.BufferGeometry {
         placed(paint(new THREE.BoxGeometry(0.17, 0.04, 0.045), head), 0, 0, 0.07),
         placed(paint(new THREE.BoxGeometry(0.07, 0.028, 0.46), head), 0, 0, 0.32),
       ]);
+    case "bow": {
+      // A stave stepped into a shallow arc plus a pale string across the ends.
+      // A curve is what tells a bow apart from a staff at this size, and three
+      // straight segments read as one from any distance the game is played at.
+      const string = 0xe8e0cc;
+      return merge([
+        placed(paint(new THREE.BoxGeometry(0.05, 0.05, 0.34), head), 0.05, 0, 0),
+        placed(paint(new THREE.BoxGeometry(0.045, 0.045, 0.2), head), 0.02, 0, 0.24),
+        placed(paint(new THREE.BoxGeometry(0.045, 0.045, 0.2), head), 0.02, 0, -0.24),
+        placed(paint(new THREE.BoxGeometry(0.012, 0.012, 0.66), string), -0.04, 0, 0),
+      ]);
+    }
   }
 }
 
