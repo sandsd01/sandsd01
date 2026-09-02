@@ -36,6 +36,12 @@ export interface BuildingDef {
   isPlot: boolean; // true for farmable plots (see systems/farming.ts)
   /** true for anything that stores items (see systems/containers.ts) */
   isContainer?: boolean;
+  /**
+   * true for a piece that can stand open. A shut door is a wall in every
+   * respect — it blocks, it can be hit, it can be repaired — and an open one
+   * is not there at all as far as movement is concerned.
+   */
+  isDoor?: boolean;
 }
 
 export const BUILDINGS: Record<string, BuildingDef> = {
@@ -141,6 +147,41 @@ export const BUILDINGS: Record<string, BuildingDef> = {
     height: 2,
     maxHealth: 200,
     color: 0xc19a6b,
+    isPlot: false,
+  },
+  // The piece the raid work left the game needing. Walls stop the player as
+  // well as the raiders, so before this a ring of wall around a homestead was
+  // a cell: seal it and you are inside for good, leave a gap and the gap is
+  // exactly where the raiders walk in. Timber rather than iron on purpose —
+  // a door you cannot build until you have smelted is a door nobody has on
+  // the night of the first raid.
+  gate: {
+    id: "gate",
+    category: "structure",
+    name: "Gate",
+    footprintCells: [{ x: 0, z: 0 }],
+    cost: [{ itemId: "plank", qty: 6 }],
+    height: 2,
+    maxHealth: 100,
+    color: 0xb08653,
+    isPlot: false,
+    isDoor: true,
+  },
+  // Low enough to be walked over rather than around — see WALKABLE_HEIGHT in
+  // systems/building.ts. That is the whole design: raiders come straight at
+  // the player and take whatever is underfoot on the way.
+  spike_trap: {
+    id: "spike_trap",
+    category: "structure",
+    name: "Spike Trap",
+    footprintCells: [{ x: 0, z: 0 }],
+    cost: [
+      { itemId: "wood", qty: 6 },
+      { itemId: "stone", qty: 3 },
+    ],
+    height: 0.2,
+    maxHealth: 60,
+    color: 0x7c7266,
     isPlot: false,
   },
   barrel: {

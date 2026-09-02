@@ -39,7 +39,7 @@ import {
 } from "./systems/gathering";
 import { Targeting, type Target } from "./systems/targeting";
 import { TargetOutline } from "./world/target-outline";
-import { addItem, consumeItem } from "./systems/inventory";
+import { addItem, consumeItem, hasQty, removeItem } from "./systems/inventory";
 import { getItem } from "./data/items";
 import { getBuilding } from "./data/buildings";
 import { RECIPES } from "./data/recipes";
@@ -63,15 +63,17 @@ import { BuildingSystem } from "./systems/building";
 import { FarmingSystem } from "./systems/farming";
 import { EnemyManager } from "./systems/enemy-ai";
 import { RaidSystem } from "./systems/raid";
+import { TrapSystem } from "./systems/traps";
 import { PlayerCombat } from "./systems/combat";
 import { DayNightSystem, DAY_LENGTH_MS } from "./systems/day-night";
 import { saveGame, loadGame } from "./systems/save-load";
 import { deposit, withdraw } from "./systems/containers";
-import { heldDamage } from "./data/tools";
+import { ARROW_DAMAGE, BOW_ID, heldDamage } from "./data/tools";
 
 import { createInitialState, type GameState } from "./state/game-state";
 import { mulberry32 } from "./utils/rng";
 import { DroppedItems } from "./world/dropped-item";
+import { Projectiles } from "./world/projectile";
 import { rollLoot } from "./data/loot";
 import { loadSettings } from "./state/settings";
 import { keyLabel, loadBindings, saveBindings } from "./state/keybindings";
@@ -179,6 +181,9 @@ const farmingSystem = new FarmingSystem(scene, terrain, state);
 // are not: it belongs to the fight that just happened, and a reload has
 // already thrown that fight away.
 const droppedItems = new DroppedItems(scene, terrain);
+// Arrows in flight. Not saved, same as the enemies they are aimed at and the
+// loot they turn into when they land.
+const projectiles = new Projectiles(scene, terrain);
 
 events.on("enemy-killed", ({ enemyId, x, z }) => {
   droppedItems.spawnAll(rollLoot(enemyId, runtimeRand), x, z, currentNowMs);
@@ -189,6 +194,11 @@ events.on("item-picked-up", ({ itemId, qty }) => {
 });
 const enemyManager = new EnemyManager(scene, terrain, state.seed);
 const raid = new RaidSystem(state, enemyManager);
+const traps = new TrapSystem(buildingSystem, enemyManager);
+// A trap taken down should not leave its cooldown behind under an id that a
+// later piece could be issued — the same class of leak as the barrel-contents
+// bug, just cheaper.
+events.on("building-removed", ({ id }) => traps.forget(id));
 const playerCombat = new PlayerCombat();
 
 // What the crosshair is on, resolved once a frame and shared by every system
@@ -417,6 +427,34 @@ function demolishAimed(placedId: string): void {
   });
 }
 
+// Drawing a bow is slower than a sword swing, which is the trade for reaching
+// past the end of one.
+const DRAW_MS = 700;
+let lastShotMs = -Infinity;
+
+/**
+ * Looses an arrow along the camera's line, spending one from the bag.
+ *
+ * Returns whether the bow was what the player was holding — the caller uses
+ * that to decide whether this replaced the melee swing, so a bow never both
+ * shoots and slashes.
+ */
+function tryShoot(): boolean {
+  if (equippedItemId(state) !== BOW_ID) return false;
+  if (currentNowMs - lastShotMs < DRAW_MS) return true;
+  if (!hasQty(state, "arrow", 1)) {
+    events.emit("notification", { message: `Out of ${getItem("arrow").name}s` });
+    lastShotMs = currentNowMs;
+    return true;
+  }
+  removeItem(state, "arrow", 1);
+  lastShotMs = currentNowMs;
+  player.triggerSwing(currentNowMs);
+  projectiles.fire(player.getFeetPosition(), camera.getForward(), currentNowMs);
+  events.emit("arrow-fired", {});
+  return true;
+}
+
 // Left mouse, held: work the aimed node, or swing at whatever is there. One
 // hit lands per full ring, matching the node's own hits-to-deplete model —
 // four rings on a tree, four wood.
@@ -443,6 +481,10 @@ function updatePrimaryAction(dtSeconds: number): void {
     return;
   }
   resetDemolish();
+
+  // After demolition so that aiming at your own wall still takes it down, and
+  // before gathering so that a bow is never quietly used as an axe.
+  if (tryShoot()) return;
 
   const node = aimedNode(target);
   if (node && canGather(state, node)) {
@@ -481,6 +523,12 @@ function performSecondaryAction(): void {
   if (buildingSystem.getSelectedBuildingId()) {
     buildingSystem.tryPlace(targeting.aimPoint(feet, camera.getForward()), currentNowMs);
     return;
+  }
+  // A gate outranks everything else you could be doing with the right button:
+  // if you are looking at one, you meant to go through it. Left-click still
+  // takes it down, so the two verbs stay where the game already put them.
+  if (target.kind === "building" && target.buildingId !== undefined) {
+    if (buildingSystem.toggleDoor(target.buildingId) !== null) return;
   }
   // A barrel outranks eating: if you are looking into one, that is what you
   // meant, whatever happens to be in your hand.
@@ -547,21 +595,38 @@ function attackBuildingAt(x: number, z: number, damage: number): boolean {
 }
 
 /**
- * "Wall 64/120 — hold G to repair (2x Plank)". Only for a piece that has
- * actually been hit: an undamaged wall says nothing, so the prompt appearing
- * is itself the news that something is chewing on the base.
+ * What the aimed building has to say: how to work its door, and what putting
+ * it back together would cost once something has been chewing on it.
+ *
+ * One prompt rather than two, because the HUD only has one line — and a gate
+ * that has been hit needs to say both things at once, which is exactly the
+ * moment the player most needs to be told.
  */
-function damagePrompt(placedId: string | null): string | null {
+function buildingPrompt(placedId: string | null): string | null {
   if (!placedId) return null;
+  const site = state.placedBuildings.find((p) => p.id === placedId);
+  if (!site) return null;
+  const name = getBuilding(site.buildingId).name;
+  const parts: string[] = [];
+
+  const door = buildingSystem.doorStateOf(placedId);
+  if (door) parts.push(`${name} (${door.open ? "open" : "shut"}) — right-click to ${door.open ? "close" : "open"}`);
+
   const health = buildingSystem.healthOf(placedId);
   const cost = buildingSystem.repairCost(placedId);
-  if (!health || health.damage <= 0 || !cost || cost.length === 0) return null;
-  const site = state.placedBuildings.find((p) => p.id === placedId);
-  const name = site ? getBuilding(site.buildingId).name : "Building";
-  const parts = cost.map((c) => `${c.qty}x ${getItem(c.itemId).name}`).join(", ");
-  const remaining = health.maxHealth - health.damage;
-  const key = keyLabel(bindings.repair[0] ?? "");
-  return `${name} ${remaining}/${health.maxHealth} — hold ${key} to repair (${parts})`;
+  // Undamaged says nothing, so the repair half appearing is itself the news
+  // that something is chewing on the base.
+  if (health && health.damage > 0 && cost && cost.length > 0) {
+    const price = cost.map((c) => `${c.qty}x ${getItem(c.itemId).name}`).join(", ");
+    const remaining = health.maxHealth - health.damage;
+    const key = keyLabel(bindings.repair[0] ?? "");
+    parts.push(
+      door
+        ? `hold ${key} to repair ${remaining}/${health.maxHealth} (${price})`
+        : `${name} ${remaining}/${health.maxHealth} — hold ${key} to repair (${price})`,
+    );
+  }
+  return parts.length > 0 ? parts.join(" · ") : null;
 }
 
 function getCollidables(): Collidable[] {
@@ -597,6 +662,27 @@ const loop = new GameLoop((dt) => {
   for (const node of resourceNodes) node.update(currentNowMs);
   farmingSystem.update(currentNowMs);
   droppedItems.update(currentNowMs, state, feet.x, feet.z);
+
+  // Arrows fly on regardless of panels and death: one already loosed is in the
+  // air, and freezing it mid-flight behind an open inventory would be stranger
+  // than letting it land.
+  for (const hit of projectiles.update(dt, currentNowMs, enemyManager.getEnemies(), getCollidables())) {
+    if (hit.enemy) {
+      // The same path a sword swing takes, rather than a second way to hurt
+      // something: one place decides what a killed enemy does.
+      const dead = hit.enemy.takeDamage(ARROW_DAMAGE, currentNowMs);
+      events.emit("enemy-hit", { id: hit.enemy.id, damage: ARROW_DAMAGE });
+      if (dead) enemyManager.removeEnemy(hit.enemy.id, currentNowMs);
+    } else {
+      // A spent arrow is just loot on the floor — the pickup, the despawn and
+      // the fade all come free from the drop system.
+      droppedItems.spawn("arrow", 1, hit.x, hit.z, currentNowMs, 0.2);
+    }
+  }
+
+  // Traps work whether or not the player is up: they are part of the ground,
+  // not something the player is doing.
+  traps.update(currentNowMs, enemyManager.getEnemies());
 
   // The raid runs whether or not the player is on their feet: it is a stretch
   // of the night, not a fight that pauses while they are down.
@@ -722,7 +808,7 @@ const loop = new GameLoop((dt) => {
   const gatherPrompt = getInteractionPrompt(state, keyNode);
   const farmPrompt = farmingSystem.getPrompt(keyPlot, selectedSeedItemId, currentNowMs);
   const placementPrompt = buildingSystem.getPlacementPrompt();
-  hud.setPrompt(placementPrompt ?? damagePrompt(aimedBuildingId) ?? gatherPrompt ?? farmPrompt);
+  hud.setPrompt(placementPrompt ?? buildingPrompt(aimedBuildingId) ?? gatherPrompt ?? farmPrompt);
 
   // The outline says which object an action would hit; the crosshair shape
   // says what kind of thing it is. Neither relies on colour to be read.
@@ -841,6 +927,10 @@ declare global {
       };
       startRaid: () => void;
       endRaid: () => void;
+      toggleDoor: (placedId: string) => boolean | null;
+      shootArrow: () => boolean;
+      getArrowsInFlight: () => number;
+      getDoorState: (placedId: string) => { open: boolean } | null;
       placeBuildingAt: (
         buildingId: string,
         cellX: number,
@@ -1098,6 +1188,13 @@ window.__gameDebug = {
     endsAtMs: state.raid.endsAtMs,
     msUntilRaid: raid.msUntilRaid(clock.now()),
   }),
+  toggleDoor: (placedId) => buildingSystem.toggleDoor(placedId),
+  // The real firing path, cooldown and ammunition check and all — driving the
+  // mouse through a pointer lock under software rendering is slow and flaky,
+  // and what is under test is the arrow, not the click.
+  shootArrow: () => tryShoot(),
+  getArrowsInFlight: () => projectiles.count(),
+  getDoorState: (placedId) => buildingSystem.doorStateOf(placedId),
   startRaid: () => raid.start(clock.now(), state.player.x, state.player.z),
   endRaid: () => raid.finish(clock.now()),
   getHotbar: () => [...state.hotbar],

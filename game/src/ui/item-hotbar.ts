@@ -38,6 +38,15 @@ const ITEM_ICONS: Record<string, IconName> = {
   wheat_seed: "sprout",
   berry: "grape",
   bread: "wheat",
+  // These four had no entry and fell through to the generic stack glyph, so a
+  // bow and a quiver of arrows sat side by side in the bar wearing the same
+  // icon — which is the same as having no icon at all.
+  bone: "bone",
+  hide: "layers",
+  bone_club: "hammer",
+  broth: "flame",
+  bow: "crosshair",
+  arrow: "navigation",
 };
 
 // The eight quick slots, holding what the player carries rather than what they

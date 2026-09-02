@@ -46,6 +46,9 @@ export interface GameEvents {
   "building-damaged": { id: string; buildingId: string; damage: number; maxHealth: number };
   "building-destroyed": { id: string; buildingId: string };
   "building-repaired": { id: string; buildingId: string };
+  "door-toggled": { id: string; open: boolean };
+  "arrow-fired": Record<string, never>;
+  "trap-triggered": { id: string; enemyId: string };
   "raid-warning": { secondsAway: number };
   "raid-started": Record<string, never>;
   "raid-wave": { wave: number; count: number };

@@ -160,6 +160,31 @@ export const RECIPES: RecipeDef[] = [
     category: "weapons",
   },
   {
+    // The answer to a wall you cannot fight from. Hide's only use until now was
+    // the club, which meant a brute's better drop fed one dead-end item.
+    id: "bow",
+    name: "Bow",
+    inputs: [
+      { itemId: "wood", qty: 3 },
+      { itemId: "hide", qty: 2 },
+    ],
+    output: { itemId: "bow", qty: 1 },
+    category: "weapons",
+  },
+  {
+    // Four at a time, from staples: ammunition you have to stop and make one
+    // at a time is ammunition nobody uses. Spent arrows can be picked back up,
+    // so this is the cost of *losing* them, not of firing them.
+    id: "arrow",
+    name: "Arrows",
+    inputs: [
+      { itemId: "plank", qty: 1 },
+      { itemId: "stone", qty: 1 },
+    ],
+    output: { itemId: "arrow", qty: 4 },
+    category: "weapons",
+  },
+  {
     // Food had exactly one recipe before this, which made a whole crafting
     // category a single row. Broth also gives bone a use for a player who
     // never gets round to a club.

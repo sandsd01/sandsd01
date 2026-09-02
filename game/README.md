@@ -103,8 +103,10 @@ there is no deploy-time configuration to keep in sync.
 - `WASD` — move, `Shift` — sprint, `Space` — jump, mouse — look
 - **Left mouse (hold)** — chop/mine whatever the crosshair is on, take down a
   building you are aiming at, or swing at whatever else is there
-- **Right mouse** — place the selected build piece, open the aimed barrel, eat what
-  you're holding, or plant/harvest the aimed plot
+- **Right mouse** — place the selected build piece, swing the aimed gate open or
+  shut, open the aimed barrel, eat what you're holding, or plant/harvest the
+  aimed plot
+- **Left mouse with a bow in hand** — loose an arrow, instead of swinging
 - Scroll — change which item you're holding, `Ctrl`+scroll — zoom the camera
 - `F5` or `V` — switch between third and first person
 - `E` — gather what you're aiming at, falling back to the nearest node in range
@@ -345,6 +347,51 @@ cannot yet afford is still selectable so its cost can be read — matching what
 the crafting panel already did, instead of hiding the price behind a dead
 button.
 
+## A base you can live in
+
+Making walls stop raiders left the game needing three things it did not have,
+and the first one was a hole the raid work dug itself.
+
+**A gate.** Walls stop the player too, so a ring of wall was a cell: seal it and
+you are inside for good, leave a gap and the gap is exactly where the raiders
+walk in. Right-click swings one. Shut, it is a wall in every respect — it
+blocks, it gets beaten on, it can be repaired. Open, it is not in the collidable
+list at all. **Nothing in the enemy code knows what a door is**, which is the
+point: they beat on a shut one because it is in the way and walk through an open
+one because it isn't, and they are still only ever chasing the player.
+
+`blocksAt` has to agree with `getCollidables` about this. That method is what
+decides a neighbour's `openFaces` — skip the door in one and not the other and
+the walls beside a propped-open gate get their diagonal seam back.
+
+**A bow.** Standing behind a wall used to mean not fighting; the only weapons
+were melee, and the character has been a `character-archer` model since the
+first commit. Arrows are real projectiles with travel time and a little drop,
+so you aim ahead of a moving raider and can lob one over a low wall.
+
+- Arrows are crafted (a plank and a stone make four) and **a spent one lands on
+  the ground as an ordinary drop**, so ammunition is a loop rather than a
+  countdown. That reuses the drop system whole — pickup, fade and the 60-second
+  despawn all come free, and the despawn is deliberate: the floor does not fill
+  up, and "fire everything and collect it later" is not free.
+- The bow is deliberately **absent from `WEAPON_DAMAGE`**: swung as a club it is
+  worth no more than a fist. Left in that table it would be a sword that also
+  shoots and there would be no reason to carry anything else.
+- Collision is tested along the **segment** flown this frame, not at the point
+  the arrow ended up. `GameLoop` clamps dt at 0.1s, so under software rendering
+  an arrow covers three units in a step — several times an enemy's width — and
+  a point test would let every shot pass cleanly through what it was aimed at.
+  The miss would look like bad aim rather than a bug.
+
+**Spike traps.** The first thing you build that does something to a raider
+rather than merely standing between them. Declared low enough to fall under
+`WALKABLE_HEIGHT`, so it is not a collidable and raiders walk over it — they
+were coming that way anyway. It never wears out and hits for very little, so a
+line of them in front of the gate wears a wave down without playing the raid for
+you. **It never hurts the player**: at night, backing through your own gate, you
+cannot see which tile is which, and the raiders never had to choose where to
+walk.
+
 ## Raid night
 
 Every third night, something comes for you. Before this the day/night cycle was
@@ -415,8 +462,9 @@ every wall built from the same model.
 Everything gameplay-relevant goes into one `localStorage` key
 (`romestead-save-v1`), written every 10 seconds and on unload: the world seed
 and clock, the player, inventory, hotbar, placed buildings (with how battered
-each one is), crops, known recipes, container contents, the raid schedule, and
-**how far each resource node has been worked**.
+each one is and whether a gate is standing open), crops, known recipes,
+container contents, the raid schedule, and **how far each resource node has
+been worked**.
 
 That last one is newer than the rest, and its absence used to be exploitable:
 nodes were re-scattered from the seed on every boot, so reloading the page
@@ -511,6 +559,10 @@ average over hundreds of rolls), `killNearestEnemy()`, `getAllRecipes()`,
 `getOccupiedCells()`, `getBuildRotation()`, `placeBuildingAt(...)`,
 `demolishBuilding(id)` and `probeMoveTo(x, z, steps?)`.
 
+For gates, bows and traps: `toggleDoor(id)` / `getDoorState(id)`,
+`shootArrow()` (the real firing path, draw cooldown and quiver check included)
+and `getArrowsInFlight()`.
+
 For raids: `getRaidState()`, `startRaid()` and `endRaid()` drive a raid without
 waiting eighteen minutes for one; `spawnEnemyAt(enemyId, x, z)` puts one enemy
 where you need it rather than wherever the spawn ring chose; and
@@ -553,3 +605,17 @@ Two cautions learned the hard way, both about trusting an instrument:
   — are things a diff reads as correct and a render does not. The damage lean
   had to be measured against whether the crosshair could still find the piece,
   not judged by how good it looked in the code.
+- **The game clock is not the wall clock.** Under swiftshader the loop runs at
+  a couple of frames a second and dt is clamped at 0.1s, so game time advances
+  roughly five times slower than real time. Anything measured on it — the bow's
+  700ms draw, an attack cooldown, a respawn — is not cleared by
+  `waitForTimeout`. `advanceClockMs` is the way to skip it; sleeping against it
+  silently swallowed a shot and made "arrows never fly" the reported result.
+- Picking an empty lane to walk means checking **everything `getCollidables`
+  is built from**, which is the resource nodes *and* the placed buildings —
+  including the world's own POI barrels. Scanning only the nodes chose a lane
+  with a barrel in it and then blamed the spike trap for stopping the player.
+- A piece's own geometry has to span the same axis the model it stands among
+  does. The gate was built across x while the fence the walls use spans z, so
+  it stood edge-on inside its own wall run and read as a single thin post —
+  correct in every number, invisible as a gate.

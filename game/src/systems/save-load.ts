@@ -59,6 +59,7 @@ function backfillDefaults(state: GameState): void {
   for (const placed of state.placedBuildings) {
     if (typeof placed.rotation !== "number") placed.rotation = 0;
     if (typeof placed.damage !== "number") placed.damage = 0;
+    if (typeof placed.open !== "boolean") placed.open = false;
   }
 
   // A save from before raids existed has to be given a schedule, and it has to

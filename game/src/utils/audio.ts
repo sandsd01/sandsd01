@@ -227,6 +227,25 @@ class SoundSystem {
     this.tone(96, 160, "square", 0.16, 62);
   }
 
+  // Short, sharp, metallic — a thing closing on something, not a thing hitting
+  // it. Distinct from `hit` so a trap firing across the yard is recognisable
+  // without looking at it.
+  trap(): void {
+    this.noiseBurst(45, 0.28);
+    this.tone(620, 70, "square", 0.14, 220);
+  }
+
+  // A string released — short, bright, gone. Nothing like the swing it stands
+  // in for, so the ear can tell a shot from a miss with a sword.
+  bowRelease(): void {
+    this.tone(760, 90, "triangle", 0.2, 320);
+  }
+
+  // A short low creak, glided down: heavy timber moving, not a latch clicking.
+  door(): void {
+    this.tone(190, 220, "sawtooth", 0.16, 130);
+  }
+
   raidOver(): void {
     this.tone(330, 220, "sine", 0.22, 494);
     window.setTimeout(() => this.tone(494, 420, "sine", 0.2, 660), 180);

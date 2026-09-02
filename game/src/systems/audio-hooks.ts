@@ -31,6 +31,9 @@ export class AudioHooks {
     events.on("building-damaged", () => sound.wallHit());
     events.on("building-destroyed", () => sound.place());
     events.on("building-repaired", () => sound.craft());
+    events.on("door-toggled", () => sound.door());
+    events.on("arrow-fired", () => sound.bowRelease());
+    events.on("trap-triggered", () => sound.trap());
     events.on("raid-warning", () => sound.raidHorn());
     events.on("raid-started", () => sound.raidHorn());
     events.on("raid-ended", () => sound.raidOver());

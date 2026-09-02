@@ -16,6 +16,10 @@ const VALID_COLOR = 0x4caf50;
 const INVALID_COLOR = 0xe53935;
 const POP_IN_MS = 220;
 const SHAKE_MS = 260;
+/** A quarter turn, so an open leaf stands side-on to the gap it was closing. */
+const DOOR_OPEN_TURN = Math.PI / 2;
+/** And hugs one side of the cell rather than pivoting about its middle. */
+const DOOR_OPEN_SHIFT = 0.34;
 /**
  * Anything declared this low is a floor, not an obstacle — step over it.
  *
@@ -65,6 +69,50 @@ function buildBuildingGeometry(def: BuildingDef): THREE.BufferGeometry {
       parts.push(
         placed(paint(new THREE.BoxGeometry(W * 0.82, h * 0.3, 0.06), 0x46311e), 0, h * 0.82, i * 0.24),
       );
+    }
+    return merge(parts);
+  }
+
+  if (def.isDoor) {
+    // Two posts and a braced leaf between them. It has to read as a *gate* at
+    // a glance and from the far side of the yard: sharing the wall's fence
+    // model made a sealed base a wall with no findable door in it, which is
+    // the exact problem this piece exists to solve.
+    const post = 0x6f4c2e;
+    const board = def.color;
+    const parts: THREE.BufferGeometry[] = [];
+    // Spans **z**, because that is the axis the fence model the walls use
+    // spans. Built across x instead it stood edge-on inside its own wall run
+    // and read as a single thin post — correct in the data, invisible as a
+    // gate, and only findable by taking a screenshot of it.
+    for (const dz of [-1, 1]) {
+      parts.push(placed(paint(new THREE.BoxGeometry(0.2, h, 0.16), post), 0, h / 2, (dz * W) / 2.1));
+    }
+    for (const y of [0.28, 0.62, 0.9]) {
+      parts.push(placed(paint(new THREE.BoxGeometry(0.12, 0.14, W * 0.82), board), 0, h * y, 0));
+    }
+    // The diagonal is what says "gate" rather than "three rails".
+    const brace = placed(paint(new THREE.BoxGeometry(0.1, 0.11, W * 0.95), board), 0, h * 0.59, 0);
+    brace.rotateX(0.62);
+    parts.push(brace);
+    return merge(parts);
+  }
+
+  if (def.id === "spike_trap") {
+    // A low bed with a grid of teeth. Sits under WALKABLE_HEIGHT so nothing
+    // walks around it, and the foundation's plain slab — which is what this
+    // would otherwise inherit — reads as a floor you are meant to stand on.
+    const frame = 0x5a5148;
+    const spike = 0xb8b0a2;
+    const parts: THREE.BufferGeometry[] = [
+      placed(paint(new THREE.BoxGeometry(W, h * 0.35, W), frame), 0, h * 0.17, 0),
+    ];
+    for (const dx of [-0.3, 0, 0.3]) {
+      for (const dz of [-0.3, 0, 0.3]) {
+        parts.push(
+          placed(paint(new THREE.ConeGeometry(0.07, 0.3, 4), spike), dx * W, h * 0.35 + 0.15, dz * W),
+        );
+      }
     }
     return merge(parts);
   }
@@ -177,7 +225,7 @@ export class BuildingSystem {
     for (const placed of state.placedBuildings) {
       this.occupyCells(placed);
       this.spawnMesh(placed);
-      this.applyDamageLook(placed);
+      this.applyPose(placed);
     }
     // Start issuing ids past whatever the save already used. Only this class's
     // own `building-N` ids matter here — the world's POI barrels carry a `poi-`
@@ -411,7 +459,7 @@ export class BuildingSystem {
 
   /**
    * A struck piece jolts for a moment. The flash the enemies use is off the
-   * table here (shared materials — see `applyDamageLook`), and a shake carries
+   * table here (shared materials — see `applyPose`), and a shake carries
    * further anyway: you can see which wall is being worked on from across the
    * yard without having to read its colour.
    */
@@ -420,21 +468,26 @@ export class BuildingSystem {
       const shake = this.shakes[i];
       const mesh = this.meshes.get(shake.id);
       const base = this.baseTransforms.get(shake.id);
+      const placed = this.state.placedBuildings.find((p) => p.id === shake.id);
       if (!mesh || !base) {
         this.shakes.splice(i, 1);
         continue;
       }
+      // Added to where the piece *rests*, not to its raw cell centre: an open
+      // gate rests off-centre, and shaking from the centre would snap it shut
+      // for a quarter of a second every time something hit it.
+      const rest = placed ? this.poseOffset(placed) : { x: 0, z: 0 };
       const elapsed = nowMs - shake.startMs;
       if (elapsed >= SHAKE_MS) {
-        mesh.position.x = base.x;
-        mesh.position.z = base.z;
+        mesh.position.x = base.x + rest.x;
+        mesh.position.z = base.z + rest.z;
         this.shakes.splice(i, 1);
         continue;
       }
       const decay = 1 - elapsed / SHAKE_MS;
-      const offset = Math.sin(elapsed * 0.06) * 0.07 * decay;
-      mesh.position.x = base.x + offset;
-      mesh.position.z = base.z + offset * 0.6;
+      const jolt = Math.sin(elapsed * 0.06) * 0.07 * decay;
+      mesh.position.x = base.x + rest.x + jolt;
+      mesh.position.z = base.z + rest.z + jolt * 0.6;
     }
   }
 
@@ -513,6 +566,13 @@ export class BuildingSystem {
     return this.occupancy.get(cellKey(worldToCell(worldX, worldZ))) ?? null;
   }
 
+  /** What *kind* of piece stands on the cell under a world position. */
+  buildingTypeAt(worldX: number, worldZ: number): string | null {
+    const placedId = this.buildingIdAt(worldX, worldZ);
+    if (!placedId) return null;
+    return this.state.placedBuildings.find((p) => p.id === placedId)?.buildingId ?? null;
+  }
+
   /** Damage taken and the total it can take, or null if there is no such piece. */
   healthOf(placedId: string): { damage: number; maxHealth: number } | null {
     const placed = this.state.placedBuildings.find((p) => p.id === placedId);
@@ -538,7 +598,7 @@ export class BuildingSystem {
     });
     if (placed.damage >= def.maxHealth) return { destroyed: true };
     this.shakes.push({ id: placedId, startMs: nowMs });
-    this.applyDamageLook(placed);
+    this.applyPose(placed);
     return { destroyed: false };
   }
 
@@ -579,19 +639,23 @@ export class BuildingSystem {
 
     const placed = this.state.placedBuildings.find((p) => p.id === placedId)!;
     placed.damage = 0;
-    this.applyDamageLook(placed);
+    this.applyPose(placed);
     events.emit("building-repaired", { id: placedId, buildingId: placed.buildingId });
     return true;
   }
 
   /**
-   * Leans and sinks a damaged piece in proportion to what it has taken.
+   * Where a piece stands once damage and, for a door, being open are both
+   * accounted for. **One place computes the pose**: damage leans and sinks a
+   * piece, an open gate turns and slides it, and both write the same
+   * `rotation.y` — computed separately they would cancel, and a battered gate
+   * would stand up straight the moment it was opened.
    *
    * Deliberately transform-only. `instantiate` uses `Object3D.clone(true)`,
    * which *shares* materials between instances, so tinting one battered wall
    * red would redden every wall in the world built from the same model.
    */
-  private applyDamageLook(placed: PlacedBuilding): void {
+  private applyPose(placed: PlacedBuilding): void {
     const mesh = this.meshes.get(placed.id);
     const base = this.baseTransforms.get(placed.id);
     if (!mesh || !base) return;
@@ -609,9 +673,48 @@ export class BuildingSystem {
     // small angle alternating cell by cell reads as a line that has been
     // knocked about — which is the point, and costs no extra displacement.
     const lean = (placed.cellX + placed.cellZ) % 2 === 0 ? 1 : -1;
+    const open = this.isOpenDoor(placed);
     mesh.position.y = base.y - fraction * 0.05 * def.height;
-    mesh.rotation.y = base.yaw + fraction * 0.1 * lean;
+    mesh.rotation.y = base.yaw + (open ? DOOR_OPEN_TURN : 0) + fraction * 0.1 * lean;
     mesh.rotation.z = fraction * 0.07 * lean;
+    const offset = this.poseOffset(placed);
+    mesh.position.x = base.x + offset.x;
+    mesh.position.z = base.z + offset.z;
+  }
+
+  /** How far a piece sits off its cell centre at rest. Only an open door does. */
+  private poseOffset(placed: PlacedBuilding): { x: number; z: number } {
+    if (!this.isOpenDoor(placed)) return { x: 0, z: 0 };
+    const yaw = this.baseTransforms.get(placed.id)?.yaw ?? 0;
+    return { x: Math.cos(yaw) * DOOR_OPEN_SHIFT, z: -Math.sin(yaw) * DOOR_OPEN_SHIFT };
+  }
+
+  private isOpenDoor(placed: PlacedBuilding): boolean {
+    return getBuilding(placed.buildingId).isDoor === true && placed.open === true;
+  }
+
+  /**
+   * Swings a door, and reports the state it landed in.
+   *
+   * Nothing in the enemy code knows what a door is, on purpose: shut, it is an
+   * obstacle and they beat on it exactly as they beat on a wall; open, it is
+   * not in the collidable list at all and they walk through the gap. They
+   * still chase the player and nothing else.
+   */
+  toggleDoor(placedId: string): boolean | null {
+    const placed = this.state.placedBuildings.find((p) => p.id === placedId);
+    if (!placed || !getBuilding(placed.buildingId).isDoor) return null;
+    placed.open = !placed.open;
+    this.applyPose(placed);
+    events.emit("door-toggled", { id: placedId, open: placed.open });
+    return placed.open;
+  }
+
+  /** Whether the aimed piece is a door, and whether it stands open. */
+  doorStateOf(placedId: string): { open: boolean } | null {
+    const placed = this.state.placedBuildings.find((p) => p.id === placedId);
+    if (!placed || !getBuilding(placed.buildingId).isDoor) return null;
+    return { open: placed.open === true };
   }
 
   /** Whether a cell holds something that blocks movement. */
@@ -621,6 +724,7 @@ export class BuildingSystem {
     const placed = this.state.placedBuildings.find((p) => p.id === id);
     if (!placed) return false;
     const def = getBuilding(placed.buildingId);
+    if (this.isOpenDoor(placed)) return false;
     return !def.isPlot && def.height > WALKABLE_HEIGHT;
   }
 
@@ -711,6 +815,11 @@ export class BuildingSystem {
     for (const placed of this.state.placedBuildings) {
       const def = getBuilding(placed.buildingId);
       if (def.isPlot || def.height <= WALKABLE_HEIGHT) continue;
+      // An open gate is a gap. This has to agree with `blocksAt` above, which
+      // is what decides a neighbour's `openFaces`: leave one of the two out
+      // and the walls beside a propped-open gate go back to having the
+      // diagonal seam #46 closed.
+      if (this.isOpenDoor(placed)) continue;
       for (const offset of rotateFootprint(def.footprintCells, placed.rotation ?? 0)) {
         const cx = placed.cellX + offset.x;
         const cz = placed.cellZ + offset.z;

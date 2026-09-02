@@ -24,6 +24,12 @@ export interface PlacedBuilding {
    * raiders could hit anything was, in fact, undamaged.
    */
   damage?: number;
+  /**
+   * Whether a door is standing open. Optional like the two above: a save
+   * written before gates existed holds no doors at all, so "missing" and
+   * "shut" are the same statement about it.
+   */
+  open?: boolean;
 }
 
 /**
