@@ -15,14 +15,21 @@ import { events } from "../utils/events";
  */
 
 /**
- * Low, on purpose. The trap never wears out, so anything that killed on its
- * own would play the raid for the player: this wears a wave down, it does not
- * stop one.
+ * What each kind of trap does per bite.
+ *
+ * The spike trap is low on purpose: it never wears out, so anything that
+ * killed on its own would play the raid for the player — it wears a wave down,
+ * it does not stop one. The heavy trap costs a trip to the frontier and hits
+ * hard enough to actually finish a zombie, which is what that trip is for; it
+ * does not wear out either, so its cost stays the journey rather than a
+ * restocking errand before every raid.
  */
-const TRAP_DAMAGE = 6;
+const TRAP_DAMAGE: Record<string, number> = {
+  spike_trap: 6,
+  heavy_trap: 22,
+};
 /** Per trap rather than per enemy — one bed of spikes stabs at its own rhythm. */
 const TRAP_INTERVAL_MS = 1200;
-const TRAP_BUILDING_ID = "spike_trap";
 
 export class TrapSystem {
   /** When each trap last went off, keyed by placed building id. */
@@ -45,7 +52,9 @@ export class TrapSystem {
     for (const enemy of enemies) {
       if (enemy.dying) continue;
       const { x, z } = enemy.object.position;
-      if (this.buildings.buildingTypeAt(x, z) !== TRAP_BUILDING_ID) continue;
+      const buildingId = this.buildings.buildingTypeAt(x, z);
+      const damage = buildingId ? TRAP_DAMAGE[buildingId] : undefined;
+      if (damage === undefined) continue;
       const placedId = this.buildings.buildingIdAt(x, z);
       if (!placedId) continue;
 
@@ -53,7 +62,7 @@ export class TrapSystem {
       if (nowMs - last < TRAP_INTERVAL_MS) continue;
       this.lastBite.set(placedId, nowMs);
 
-      const dead = enemy.takeDamage(TRAP_DAMAGE, nowMs);
+      const dead = enemy.takeDamage(damage, nowMs);
       events.emit("trap-triggered", { id: placedId, enemyId: enemy.id });
       // Death goes through the manager, exactly as a sword swing does: loot,
       // the fade-out and the kill event all belong to the one place that owns

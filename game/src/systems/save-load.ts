@@ -54,6 +54,15 @@ function backfillDefaults(state: GameState): void {
   // which is exactly what it had before — no node was ever recorded as worked,
   // so there is nothing to restore and an empty record is the honest default.
   if (!state.nodes || typeof state.nodes !== "object") state.nodes = {};
+  // Same story for the caches: a save from before they could refill has no
+  // timers, and no timer is exactly right — every cache in it was either full
+  // or emptied by a player who was told it would stay that way. They start
+  // counting from the first frame after the load instead of retroactively.
+  if (!state.pois || typeof state.pois !== "object") state.pois = {};
+  // And a save from before landmarks were remembered has found none of them,
+  // which is what an empty list says. `createPointsOfInterest` gives that save
+  // its outer-ring caches on load, so the far landmarks are there to find.
+  if (!Array.isArray(state.discovered)) state.discovered = [];
   // Pieces placed before rotation existed were all placed unrotated, and
   // pieces placed before anything could hit them are undamaged.
   for (const placed of state.placedBuildings) {

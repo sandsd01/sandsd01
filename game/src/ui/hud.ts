@@ -23,6 +23,9 @@ const TRACKED_ITEMS = [
   "hide",
   // Ammunition you cannot see the count of is not ammunition.
   "arrow",
+  // The frontier material, and the only one whose count tells the player
+  // whether the trip they are planning is worth making.
+  "ancient_stone",
 ];
 // Each tracked resource gets a glyph as well as a colour: the icon says what
 // it is, the tint only reinforces it.
@@ -38,6 +41,7 @@ const ITEM_ICONS: Record<string, IconName> = {
   bone: "bone",
   hide: "layers",
   arrow: "navigation",
+  ancient_stone: "gem",
 };
 const ITEM_COLORS: Record<string, number> = {
   wood: 0x8b5a2b,
@@ -51,6 +55,7 @@ const ITEM_COLORS: Record<string, number> = {
   bone: 0xe6e0cc,
   hide: 0x7a5238,
   arrow: 0xcfc3a8,
+  ancient_stone: 0x8d88a0,
 };
 
 const SVG_NS = "http://www.w3.org/2000/svg";

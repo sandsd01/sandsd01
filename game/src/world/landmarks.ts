@@ -30,16 +30,32 @@ export interface Landmark {
   object: THREE.Object3D;
   /** Height above the ground, for the "can you see it" check. */
   height: number;
+  /** True for the outer ring, past the frontier. */
+  far: boolean;
 }
 
-// Far enough out to be a journey, close enough to stay inside the fog's reach.
+// The near ring: far enough out to be a journey, close enough to stay inside
+// the fog's reach from home.
 const MIN_RADIUS = 58;
 const MAX_RADIUS = 96;
+/**
+ * The far ring, out past FRONTIER_RADIUS.
+ *
+ * These are **not** visible from the homestead — the fog closes at 250 and
+ * these stand at 130 to 175 with a world's worth of hills in between — and
+ * that is the point. The near ring is what you steer by; the far ring is what
+ * you find, and once found the minimap keeps a pin on it (see ui/minimap.ts)
+ * so the second trip is navigation rather than another search.
+ */
+const FAR_MIN_RADIUS = 130;
+const FAR_MAX_RADIUS = 175;
 
 interface Recipe {
   zone: Exclude<ZoneId, "open">;
   name: string;
   build: (models: ModelLibrary, rand: () => number) => THREE.Object3D;
+  /** Which ring this one belongs to. */
+  far?: boolean;
 }
 
 // A dead giant, bleached pale against the forest's green: the value contrast
@@ -113,10 +129,110 @@ function standingStones(models: ModelLibrary, rand: () => number): THREE.Object3
   return group;
 }
 
+// A tilted slab on a cairn: the one shape in the world that is not upright,
+// so it reads as *made and then abandoned* rather than as another rock. The
+// far ring has to be told apart from the near one at a glance, which a bigger
+// version of an existing landmark would not manage.
+function fallenObelisk(models: ModelLibrary, rand: () => number): THREE.Object3D {
+  const group = new THREE.Group();
+  const source = models["rocks-low"] ?? models["rocks-high"] ?? models.stones;
+  if (!source) return group;
+  // The cairn it fell off.
+  for (let i = 0; i < 5; i++) {
+    const chunk = instantiate(source);
+    const scale = 2.2 + rand() * 1.1;
+    chunk.scale.set(scale, scale * 0.7, scale);
+    const a = (i / 5) * Math.PI * 2;
+    chunk.position.set(Math.cos(a) * 2.2, rand() * 0.8, Math.sin(a) * 2.2);
+    chunk.rotation.y = rand() * Math.PI * 2;
+    chunk.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) child.castShadow = true;
+    });
+    group.add(chunk);
+  }
+  // And the slab across it, leaning. Pale, so the diagonal carries as a value
+  // break against the ground rather than as one more grey mass.
+  const slab = instantiate(source);
+  slab.scale.set(2.1, 15, 2.1);
+  slab.position.set(0, 4.4, 0);
+  slab.rotation.set(0, rand() * Math.PI, 0.62);
+  slab.traverse((child) => {
+    const mesh = child as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    mesh.castShadow = true;
+    const material = (mesh.material as THREE.MeshStandardMaterial).clone();
+    material.color.lerp(new THREE.Color(0xd9d2e4), 0.6);
+    mesh.material = material;
+  });
+  group.add(slab);
+  return group;
+}
+
+// A ring of dead trunks, close-packed. In the forest it reads as a clearing
+// something happened in — the near ring's Bleached Giant is one pale trunk, so
+// a grove of them says "further out" without inventing a new material.
+function ashenGrove(models: ModelLibrary, rand: () => number): THREE.Object3D {
+  const group = new THREE.Group();
+  const source = models["tree-high"] ?? models.tree;
+  if (!source) return group;
+  for (let i = 0; i < 7; i++) {
+    const trunk = instantiate(source);
+    const scale = 3.2 + rand() * 1.6;
+    trunk.scale.set(scale * 0.8, scale, scale * 0.8);
+    const a = (i / 7) * Math.PI * 2 + rand() * 0.3;
+    const d = 4.5 + rand() * 2.2;
+    trunk.position.set(Math.cos(a) * d, 0, Math.sin(a) * d);
+    trunk.rotation.set((rand() - 0.5) * 0.16, rand() * Math.PI * 2, (rand() - 0.5) * 0.16);
+    trunk.traverse((child) => {
+      const mesh = child as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      mesh.castShadow = true;
+      const material = (mesh.material as THREE.MeshStandardMaterial).clone();
+      material.color.lerp(new THREE.Color(0x4a4038), 0.75);
+      mesh.material = material;
+    });
+    group.add(trunk);
+  }
+  return group;
+}
+
+// A single stone, far taller than anything the near ring holds, standing alone
+// in the marsh.
+function drownedPillar(models: ModelLibrary, rand: () => number): THREE.Object3D {
+  const group = new THREE.Group();
+  const source = models.stones ?? models["rocks-high"] ?? models["rocks-low"];
+  if (!source) return group;
+  const pillar = instantiate(source);
+  pillar.scale.set(3.4, 22, 3.4);
+  pillar.rotation.set(0.05, rand() * Math.PI, 0.04);
+  pillar.traverse((child) => {
+    if ((child as THREE.Mesh).isMesh) child.castShadow = true;
+  });
+  group.add(pillar);
+  // A few fallen pieces at its foot, so the height has something to be read
+  // against — a lone column has no scale of its own at a distance.
+  for (let i = 0; i < 3; i++) {
+    const chunk = instantiate(source);
+    const scale = 1.6 + rand() * 0.9;
+    chunk.scale.set(scale, scale * 0.5, scale);
+    const a = rand() * Math.PI * 2;
+    chunk.position.set(Math.cos(a) * 3.2, 0.2, Math.sin(a) * 3.2);
+    chunk.rotation.set(rand() * 0.5, rand() * Math.PI, rand() * 0.5);
+    chunk.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) child.castShadow = true;
+    });
+    group.add(chunk);
+  }
+  return group;
+}
+
 const RECIPES: Recipe[] = [
   { zone: "forest", name: "The Bleached Giant", build: (m) => deadGiant(m) },
   { zone: "rocky", name: "The Spire", build: stoneSpire },
   { zone: "wetland", name: "The Standing Stones", build: standingStones },
+  { zone: "forest", name: "The Ashen Grove", build: ashenGrove, far: true },
+  { zone: "rocky", name: "The Fallen Obelisk", build: fallenObelisk, far: true },
+  { zone: "wetland", name: "The Drowned Pillar", build: drownedPillar, far: true },
 ];
 
 /**
@@ -134,10 +250,12 @@ export function createLandmarks(
   const landmarks: Landmark[] = [];
 
   for (const recipe of RECIPES) {
+    const min = recipe.far ? FAR_MIN_RADIUS : MIN_RADIUS;
+    const max = recipe.far ? FAR_MAX_RADIUS : MAX_RADIUS;
     let placed: { x: number; z: number } | null = null;
     for (let attempt = 0; attempt < 400 && !placed; attempt++) {
       const angle = rand() * Math.PI * 2;
-      const radius = MIN_RADIUS + rand() * (MAX_RADIUS - MIN_RADIUS);
+      const radius = min + rand() * (max - min);
       const x = Math.cos(angle) * radius;
       const z = Math.sin(angle) * radius;
       if (getZone(x, z) === recipe.zone) placed = { x, z };
@@ -150,11 +268,15 @@ export function createLandmarks(
 
     const box = new THREE.Box3().setFromObject(object);
     landmarks.push({
-      id: `landmark-${recipe.zone}`,
+      // Zone alone is no longer unique — each biome has a near and a far
+      // landmark, and two objects sharing an id would collide in the
+      // discovery record the minimap pins are drawn from.
+      id: `landmark-${recipe.far ? "far-" : ""}${recipe.zone}`,
       name: recipe.name,
       zone: recipe.zone,
       x: placed.x,
       z: placed.z,
+      far: recipe.far === true,
       object,
       height: box.isEmpty() ? 0 : box.max.y - box.min.y,
     });

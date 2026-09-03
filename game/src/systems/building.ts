@@ -98,19 +98,32 @@ function buildBuildingGeometry(def: BuildingDef): THREE.BufferGeometry {
     return merge(parts);
   }
 
-  if (def.id === "spike_trap") {
-    // A low bed with a grid of teeth. Sits under WALKABLE_HEIGHT so nothing
-    // walks around it, and the foundation's plain slab — which is what this
-    // would otherwise inherit — reads as a floor you are meant to stand on.
-    const frame = 0x5a5148;
-    const spike = 0xb8b0a2;
+  if (def.id === "spike_trap" || def.id === "heavy_trap") {
+    // A low bed with teeth. Sits under WALKABLE_HEIGHT so nothing walks around
+    // it, and the foundation's plain slab — which is what this would otherwise
+    // inherit — reads as a floor you are meant to stand on.
+    //
+    // The heavy one is told apart by its teeth, not by its tint: four long
+    // blades instead of nine short ones. Two traps that differed only in
+    // colour would leave a player unable to see which line they had laid.
+    const heavy = def.id === "heavy_trap";
+    const frame = heavy ? 0x413f4c : 0x5a5148;
+    const spike = heavy ? 0xd6d0e2 : 0xb8b0a2;
     const parts: THREE.BufferGeometry[] = [
       placed(paint(new THREE.BoxGeometry(W, h * 0.35, W), frame), 0, h * 0.17, 0),
     ];
-    for (const dx of [-0.3, 0, 0.3]) {
-      for (const dz of [-0.3, 0, 0.3]) {
+    const offsets = heavy ? [-0.22, 0.22] : [-0.3, 0, 0.3];
+    const radius = heavy ? 0.12 : 0.07;
+    const length = heavy ? 0.52 : 0.3;
+    for (const dx of offsets) {
+      for (const dz of offsets) {
         parts.push(
-          placed(paint(new THREE.ConeGeometry(0.07, 0.3, 4), spike), dx * W, h * 0.35 + 0.15, dz * W),
+          placed(
+            paint(new THREE.ConeGeometry(radius, length, 4), spike),
+            dx * W,
+            h * 0.35 + length / 2,
+            dz * W,
+          ),
         );
       }
     }
@@ -127,7 +140,14 @@ function buildBuildingGeometry(def: BuildingDef): THREE.BufferGeometry {
   }
 
   // Walls: corner posts plus an infill panel and a mid rail.
-  const post = def.id === "brick_wall" ? 0x8a4a30 : 0x6f4c2e;
+  const WALL_POSTS: Record<string, number> = {
+    brick_wall: 0x8a4a30,
+    // Ancient stone is not timber-framed. Its posts read a shade darker than
+    // its own panel, which is what keeps a wall of them from flattening into
+    // one grey block at the distance a raid is watched from.
+    reinforced_wall: 0x4c4a57,
+  };
+  const post = WALL_POSTS[def.id] ?? 0x6f4c2e;
   const panel = def.color;
   const parts: THREE.BufferGeometry[] = [
     placed(paint(new THREE.BoxGeometry(W * 0.78, h, W * 0.5), panel), 0, h / 2, 0),

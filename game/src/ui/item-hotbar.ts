@@ -47,6 +47,7 @@ const ITEM_ICONS: Record<string, IconName> = {
   broth: "flame",
   bow: "crosshair",
   arrow: "navigation",
+  ancient_stone: "gem",
 };
 
 // The eight quick slots, holding what the player carries rather than what they

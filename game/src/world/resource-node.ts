@@ -3,7 +3,13 @@ import { merge, paint, placed, roughen, varyColor } from "./geometry";
 import { instantiate, type ModelLibrary, type ModelName } from "./models";
 import { chance, randomInt } from "../utils/rng";
 
-export type ResourceNodeKind = "tree" | "rock" | "berry_bush" | "clay_pit" | "iron_vein";
+export type ResourceNodeKind =
+  | "tree"
+  | "rock"
+  | "berry_bush"
+  | "clay_pit"
+  | "iron_vein"
+  | "ancient_stone";
 
 export interface ResourceNodeConfig {
   kind: ResourceNodeKind;
@@ -80,6 +86,20 @@ export const RESOURCE_NODE_CONFIGS: Record<ResourceNodeKind, ResourceNodeConfig>
     bonus: { itemId: "iron_ingot", chance: 0.05, qty: 1 },
     hitsToDeplete: 5,
     respawnMs: 35_000,
+  },
+  // Only found past FRONTIER_RADIUS (see world-objects.ts), and the only thing
+  // in the game that is. Slow to work and thin per swing on purpose: the cost
+  // of ancient stone is meant to be the journey and the night you spend out
+  // there, not the swinging, so a richer yield would just mean fewer trips.
+  ancient_stone: {
+    kind: "ancient_stone",
+    yieldItemId: "ancient_stone",
+    yield: { min: 1, max: 2 },
+    finalHitBonus: 3,
+    hitsToDeplete: 6,
+    // Long, because a frontier node the player can camp and re-farm turns the
+    // far ring into a quarry with a walk attached rather than a place to go.
+    respawnMs: 90_000,
   },
 };
 
@@ -275,12 +295,52 @@ function buildIronVeinGeometry(rand: () => number): THREE.BufferGeometry {
   return merge(parts);
 }
 
+// A worked, upright slab rather than another boulder. The whole point of the
+// frontier is that you can tell you have arrived, and a rock that reads as a
+// rock from thirty paces would make the far ring look exactly like the near
+// one — so this one is cut flat, stands taller than it is wide, and carries a
+// pale seam nothing else in the world has.
+function buildAncientStoneGeometry(rand: () => number): THREE.BufferGeometry {
+  const stone = varyColor(0x6d6a78, rand, 0.05);
+  const seam = varyColor(0xb9b2c8, rand, 0.05);
+  const h = 1.6 + rand() * 0.7;
+  const w = 0.62 + rand() * 0.18;
+  const parts: THREE.BufferGeometry[] = [
+    placed(paint(new THREE.BoxGeometry(w, h, w * 0.44), stone), 0, h / 2, 0, {
+      rotZ: (rand() * 2 - 1) * 0.09,
+    }),
+    // A broken-off companion at the foot, so it reads as a ruin rather than a
+    // fence post someone planted.
+    placed(
+      roughen(paint(new THREE.IcosahedronGeometry(w * 0.42, 0), stone), w * 0.14, rand),
+      w * (0.7 + rand() * 0.4),
+      w * 0.3,
+      (rand() * 2 - 1) * 0.3,
+      { rotY: rand() * Math.PI, scaleY: 0.7 },
+    ),
+  ];
+  // Two inlaid bands: the pale-on-dark value contrast is what carries at
+  // distance, which colour alone would not.
+  for (let i = 0; i < 2; i++) {
+    parts.push(
+      placed(
+        paint(new THREE.BoxGeometry(w * 1.06, 0.09, w * 0.5), seam),
+        0,
+        h * (0.42 + i * 0.26),
+        0,
+      ),
+    );
+  }
+  return merge(parts);
+}
+
 const GEOMETRY_BUILDERS: Record<ResourceNodeKind, (rand: () => number) => THREE.BufferGeometry> = {
   tree: buildTreeGeometry,
   rock: buildRockGeometry,
   berry_bush: buildBerryBushGeometry,
   clay_pit: buildClayPitGeometry,
   iron_vein: buildIronVeinGeometry,
+  ancient_stone: buildAncientStoneGeometry,
 };
 
 // Which pack model stands in for each resource, where the pack has something
