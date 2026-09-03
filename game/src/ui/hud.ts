@@ -39,9 +39,16 @@ const ITEM_ICONS: Record<string, IconName> = {
   wheat_seed: "sprout",
   wheat: "wheat",
   bone: "bone",
-  hide: "layers",
+  // Not "layers" — clay already has it, and clay and hide are both brown, so
+  // the row was showing two chips a player could not tell apart at all. Found
+  // by a check that no two chips in the row share a glyph, added after the
+  // same mistake was made twice.
+  hide: "footprints",
   arrow: "navigation",
-  ancient_stone: "gem",
+  // NOT "gem" — that is iron ore's, and two materials sharing one glyph is
+  // the same as neither having one. The columned-ruin shape also says where
+  // this came from: the frontier, not a vein near the door.
+  ancient_stone: "landmark",
 };
 const ITEM_COLORS: Record<string, number> = {
   wood: 0x8b5a2b,

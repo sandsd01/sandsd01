@@ -42,12 +42,16 @@ const ITEM_ICONS: Record<string, IconName> = {
   // bow and a quiver of arrows sat side by side in the bar wearing the same
   // icon — which is the same as having no icon at all.
   bone: "bone",
-  hide: "layers",
+  hide: "footprints",
   bone_club: "hammer",
   broth: "flame",
   bow: "crosshair",
   arrow: "navigation",
-  ancient_stone: "gem",
+  // Iron ore and iron ingot already share "gem" between them, which is fair —
+  // they are the same metal at two stages. Ancient stone is a different
+  // material and gets a different glyph, or the bar shows two identical icons
+  // side by side and tells the player nothing.
+  ancient_stone: "landmark",
 };
 
 // The eight quick slots, holding what the player carries rather than what they
