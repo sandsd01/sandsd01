@@ -222,10 +222,14 @@ const BRUTE_SHARE_HOME = 0;
 const BRUTE_SHARE_FRONTIER = 0.85;
 /**
  * Rocky and wetland are harder ground to fight across wherever they are, so
- * they keep a floor under the distance term. Measured rather than guessed: a
- * ring around the homestead is mostly rough country, so this floor alone lands
- * about a third of the wanderers near home as brutes — roughly where the old
- * zone-decides-everything rule had it.
+ * they keep a floor under the distance term, and that floor is what stops this
+ * change from quietly making the early game easier: the old rule was "zone
+ * decides", which put brutes a short walk from the door, and softening that
+ * was not what widening the world set out to do.
+ *
+ * Measured over 140 seconds of game time at each end (explorecheck): a ring
+ * around the homestead is mostly rough country, so this floor alone lands
+ * about 43% of the wanderers near home as brutes, against 83% out past 150.
  */
 const BRUTE_SHARE_ROUGH_BIOME = 0.5;
 
