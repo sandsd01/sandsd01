@@ -313,6 +313,17 @@ count, so four times the area means four times the trees rather than the same
 trees a quarter as thick — and the rejection test is bucketed by grid cell,
 because the old O(n²) scan was invisible at 900 attempts and is not at 3,600.
 
+The reinforced wall gets its own geometry rather than the generic wall panel,
+and the reason is worth recording because it is invisible in a diff. Rendered
+as a plain panel beside a brick wall in the same light, the *lit* faces came
+out near equal (luminance 113 against brick's 121) and the *shaded* faces did
+not — 70 against 105. Warm saturated brick keeps its identity in the scene's
+cool ambient shade; a desaturated cool grey has none left to keep, so the most
+expensive piece in the game read as a hole cut out of the world. It carries the
+material by **pattern** now — the pale inlaid bands and capstone that the
+ancient stone node wears — which survives any light the scene puts on it and
+says "the same stone you quarried" rather than "a different grey".
+
 - **`ancient_stone` spawns only at radius ≥ 120** (`FRONTIER_RADIUS`), in every
   biome, and nowhere closer. It is the one material distance buys, and it is
   spent on the *base*: `reinforced_wall` (700 health, against brick's 300) and

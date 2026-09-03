@@ -98,6 +98,46 @@ function buildBuildingGeometry(def: BuildingDef): THREE.BufferGeometry {
     return merge(parts);
   }
 
+  if (def.id === "reinforced_wall") {
+    // Its own build rather than the generic wall, because the generic wall is
+    // a flat panel and a flat panel of *this* material disappears.
+    //
+    // Measured, not guessed: rendered as a plain panel beside a brick wall in
+    // the same light, the lit faces came out near equal (luminance 113 against
+    // brick's 121) and the shaded faces did not — 70 against 105. Warm
+    // saturated brick keeps its identity in the scene's cool ambient shade; a
+    // desaturated cool grey has none left to keep, and the most expensive piece
+    // in the game read as a hole cut out of the world.
+    //
+    // So the material is carried by *pattern* instead of tint: the pale inlaid
+    // bands the ancient stone node wears (see world/resource-node.ts). A band
+    // that is a large value step from its own panel survives any light the
+    // scene puts on it, and it says "this is the same stone you quarried"
+    // rather than merely "this is a different grey".
+    const panel = def.color;
+    const post = 0x6d6a78;
+    const seam = 0xcfc9dc;
+    const parts: THREE.BufferGeometry[] = [
+      placed(paint(new THREE.BoxGeometry(W * 0.86, h, W * 0.5), panel), 0, h / 2, 0),
+    ];
+    for (const dx of [-1, 1]) {
+      parts.push(
+        placed(paint(new THREE.BoxGeometry(0.17, h, 0.2), post), (dx * W) / 2.3, h / 2, 0),
+      );
+    }
+    for (const y of [0.36, 0.66]) {
+      parts.push(
+        placed(paint(new THREE.BoxGeometry(W * 0.94, 0.14, W * 0.56), seam), 0, h * y, 0),
+      );
+    }
+    // A capstone, so the top edge is a line rather than the place the slab
+    // stops — the silhouette is what reads first along a wall run.
+    parts.push(
+      placed(paint(new THREE.BoxGeometry(W * 0.98, 0.17, W * 0.62), seam), 0, h - 0.085, 0),
+    );
+    return merge(parts);
+  }
+
   if (def.id === "spike_trap" || def.id === "heavy_trap") {
     // A low bed with teeth. Sits under WALKABLE_HEIGHT so nothing walks around
     // it, and the foundation's plain slab — which is what this would otherwise
@@ -142,10 +182,6 @@ function buildBuildingGeometry(def: BuildingDef): THREE.BufferGeometry {
   // Walls: corner posts plus an infill panel and a mid rail.
   const WALL_POSTS: Record<string, number> = {
     brick_wall: 0x8a4a30,
-    // Ancient stone is not timber-framed. Its posts read a shade darker than
-    // its own panel, which is what keeps a wall of them from flattening into
-    // one grey block at the distance a raid is watched from.
-    reinforced_wall: 0x4c4a57,
   };
   const post = WALL_POSTS[def.id] ?? 0x6f4c2e;
   const panel = def.color;

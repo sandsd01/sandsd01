@@ -183,7 +183,13 @@ export const BUILDINGS: Record<string, BuildingDef> = {
     ],
     height: 2.6,
     maxHealth: 700,
-    color: 0x6d6a78,
+    // Lighter than the ancient stone node it is quarried from (0x6d6a78), not
+    // the same value: rendered at the node's own colour a wall of these came
+    // out as a flat near-black slab with none of its posts or rail visible —
+    // the most expensive piece in the game reading as a hole in the world.
+    // Its posts take the darker node colour instead, so the piece has internal
+    // contrast the way the brick wall does. Seen, not reasoned about.
+    color: 0x9a94ad,
     isPlot: false,
   },
   // Low enough to be walked over rather than around — see WALKABLE_HEIGHT in
