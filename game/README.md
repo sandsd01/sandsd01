@@ -337,6 +337,22 @@ says "the same stone you quarried" rather than "a different grey".
   The interval shortens from 9s near home to 3.5s out past 150 units, and the
   share of brutes climbs from none to about two thirds. The eight-wanderer
   ceiling holds everywhere.
+- **The world has an edge you cannot walk off.** `Terrain.heightAt` is a noise
+  function and answers for any coordinate, mesh or no mesh, so a body past
+  ±200 used to stand on ground that was never drawn — no fall, no death,
+  nothing in the game noticing. `clampToWorld` in `world/terrain.ts` is now the
+  single definition of where the world stops, clamping **per axis** so a body
+  slides along the boundary the way it slides along a wall rather than being
+  pinned where it first touched. Both writers of the player's position funnel
+  through one `setGroundPosition` so the rule sits on the path everything
+  takes, including the debug teleport — a hook that could put the player
+  somewhere the game cannot is a hook that tests something that will never
+  happen. Enemies are clamped in their per-frame step, beside the
+  ground-height line, for the same reason it is there: clamping only the walk
+  would leave one that is standing still off the map standing still off the
+  map. The player's 3-unit margin was picked by walking to the edge and
+  looking — at 1 unit the body stopped on the lip with no ground ahead of it.
+
 - **No enemy is quietly buffed for being far out.** A brute has the same health
   and damage at radius 10 as at radius 190. The frontier is harder because more
   of what walks out of it are brutes — which the player can read off the
