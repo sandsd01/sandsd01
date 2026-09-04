@@ -37,6 +37,12 @@ export interface BuildingDef {
   /** true for anything that stores items (see systems/containers.ts) */
   isContainer?: boolean;
   /**
+   * A piece that lights the ground around it, and the shape of that light.
+   * Stated as data because "does this thing glow" is content, not behaviour —
+   * see BuildingSystem#spawnMesh, which is the only place that reads it.
+   */
+  light?: { color: number; intensity: number; distance: number; height: number };
+  /**
    * true for a piece that can stand open. A shut door is a wall in every
    * respect — it blocks, it can be hit, it can be repaired — and an open one
    * is not there at all as far as movement is concerned.
@@ -225,6 +231,33 @@ export const BUILDINGS: Record<string, BuildingDef> = {
     height: 0.2,
     maxHealth: 100,
     color: 0x5c5a68,
+    isPlot: false,
+  },
+  // What the cave buys. Darkness is the oldest threat in this game — a raid
+  // has been survivable since the first wall, but the field at night has never
+  // been *visible*, and until now nothing you could craft answered that. A
+  // brazier is not stronger than anything; it lets you see what is coming.
+  brazier: {
+    id: "brazier",
+    category: "structure",
+    name: "Brazier",
+    footprintCells: [{ x: 0, z: 0 }],
+    cost: [
+      { itemId: "glow_crystal", qty: 2 },
+      { itemId: "stone", qty: 4 },
+    ],
+    height: 1.5,
+    // Low: it is a light, not a wall, and a raider that walks into one should
+    // put it out. Standing lights that also happened to be tough would make
+    // the brazier the cheapest fortification in the game.
+    maxHealth: 70,
+    color: 0x5b5560,
+    // Near-white with only a hint of the crystal's blue. A saturated cyan is
+    // what the crystal itself is, and it looked right in the abstract — but a
+    // cyan light falling on grass comes back green, and the first night shot
+    // had the homestead lit like a radioactive spill. The tint belongs on the
+    // crystal, not on everything the crystal shines at.
+    light: { color: 0xdcecff, intensity: 10, distance: 22, height: 1.55 },
     isPlot: false,
   },
   barrel: {

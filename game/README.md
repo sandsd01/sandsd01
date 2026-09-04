@@ -506,6 +506,73 @@ walls, more traps, more arrows — so the number that matters is how many raids
 you saw through. It is on the raid banner ("Raid 9 — wave 1/6") and the day is
 on the clock, rather than sitting in the save where only the code can read it.
 
+## Down the hole
+
+There is a second place now. Three boulder arches stand out in the rocky
+ground, each with a glowing ring in front of it, and walking into one puts you
+in a cave. Walking into the ring at the other end puts you back at the arch you
+came in by. No key, no prompt: you walk at it and you are somewhere else.
+
+The whole feature is one architectural move. The game was written on the
+assumption that there is exactly one place — `heightAt` is reached for from
+eleven files, and terrain, grass, water, nodes, landmarks, buildings and
+farming are all built once at boot and held by reference forever. Threading
+"which place" through all of that would have been a very large diff. Instead
+`world/region.ts` declares a `GroundSurface` interface (`Terrain` already
+satisfied it) and `RegionManager` **implements that interface itself**,
+delegating to whichever region is active. Every system keeps the single
+reference it was constructed with, and none of them ever learns that a switch
+happened.
+
+What the region *is* carries the rest: its ground mesh, its nodes, its portals,
+its lighting, its spawn rules, and its half-extent — so the world-edge clamp
+that stops you walking off the overworld is the same clamp that stops you
+walking through the wall of a cave, just asked a different number.
+
+Four decisions shape the design, and each of them cut work rather than adding
+it:
+
+- **The cave resets on every entry.** Nothing about its contents is saved; a
+  fresh seed builds a fresh cave each time you go down, and the old one is
+  disposed on the way out (three.js does not reference-count, so a group that
+  is merely dropped leaves its buffers on the GPU). The save holds two fields:
+  which region you are in, and where to come back out.
+- **You cannot build or farm down there.** `BuildingSystem` and `FarmingSystem`
+  are switched off wholesale rather than having their UI hidden, so the rule is
+  true of the debug hooks and of any call site added later.
+- **The raid clock is held, not the world clock.** Underground,
+  `RaidSystem.defer` pushes the whole schedule forward by the clock's own step
+  each frame — so two minutes in a cave neither skips a raid nor banks one.
+  Crops keep growing, nodes keep respawning and caches keep restocking, because
+  freezing `elapsedMs` outright would have quietly stopped all three.
+- **Quitting underground puts you back at the mouth.** The cave you logged out
+  of no longer exists, and the new one generated in its place could put you
+  inside a rock.
+
+What the trip is for is **glow crystal**, found nowhere else, and the
+**brazier** it buys: a standing light you can place around the homestead.
+Darkness is the oldest threat in this game — a raid has been survivable since
+the first wall went up, and the field at night has never been *visible* — and
+nothing you could craft has ever answered it. Braziers are capped at eight live
+`PointLight`s (every one widens the uniform arrays each material's shader is
+compiled against); past that the flame still draws, so the piece never silently
+changes appearance.
+
+Three things in here were found in screenshots and by nothing else:
+
+- The chase camera collides only with the ground, so an arrival point directly
+  in front of a portal put the camera **inside** it — the first frame in the
+  cave was a screenful of flat amber, and walking back out was a screenful of
+  purple. Both arrival points now stand well clear of their portal.
+- The first lighting pass ran fog from 6 to 44 over a near-black floor. The
+  numbers looked like "a cave"; the screenshot was crystals floating in a void,
+  with no ground legible even at the player's feet.
+- The arches were rotated with `atan2(-x, -z)`, which turned each one's back on
+  the player and stood it in front of its own portal.
+
+Hiding the overworld is measured, not assumed: 938 draw calls and 236k
+triangles on the surface, 188 and 49k inside the cave, on the same world.
+
 ## Raid night
 
 Every third night, something comes for you. Before this the day/night cycle was
@@ -682,6 +749,15 @@ the real damage path so a reduction under test is the one the game applies.
 For gates, bows and traps: `toggleDoor(id)` / `getDoorState(id)`,
 `shootArrow()` (the real firing path, draw cooldown and quiver check included)
 and `getArrowsInFlight()`.
+
+For regions: `getRegion()` reports the active region's id, name, half-extent,
+live node count and portals (each with its `armed` flag); `getCaveMouths()`
+lists the ways down and where each one puts you on the way back;
+`enterPortal(i)` teleports onto a portal and runs the ordinary per-frame
+trigger, so a check exercises the real transition rather than a kinder one that
+only tests have; and `setPortalArmed(i, armed)` drives the arming rule, which
+the current layout otherwise makes unreachable — see the note in
+`world/region.ts` about why it is kept anyway.
 
 For raids: `getRaidState()`, `startRaid()` and `endRaid()` drive a raid without
 waiting eighteen minutes for one; `spawnEnemyAt(enemyId, x, z)` puts one enemy

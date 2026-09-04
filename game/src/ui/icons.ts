@@ -20,6 +20,7 @@ import mountain from "lucide-static/icons/mountain.svg?raw";
 import navigation from "lucide-static/icons/navigation.svg?raw";
 import pickaxe from "lucide-static/icons/pickaxe.svg?raw";
 import shovel from "lucide-static/icons/shovel.svg?raw";
+import sparkles from "lucide-static/icons/sparkles.svg?raw";
 import sprout from "lucide-static/icons/sprout.svg?raw";
 import squareStack from "lucide-static/icons/square-stack.svg?raw";
 import sun from "lucide-static/icons/sun.svg?raw";
@@ -48,6 +49,7 @@ const SOURCES = {
   navigation,
   pickaxe,
   shovel,
+  sparkles,
   sprout,
   squareStack,
   sun,

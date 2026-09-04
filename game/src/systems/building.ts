@@ -43,6 +43,14 @@ const BUILDING_MATERIAL = new THREE.MeshStandardMaterial({
 
 const W = GRID_CELL_SIZE * 0.95;
 
+/**
+ * How many light-bearing pieces get an actual light at once.
+ *
+ * Every `PointLight` in the scene widens the uniform arrays every material's
+ * shader is compiled against, so this is a real cost and not a tidiness rule.
+ */
+const MAX_BUILDING_LIGHTS = 8;
+
 // A box per building was readable but lifeless. These keep the same footprint
 // and height the placement grid and collision assume, and spend their detail
 // on the silhouette: posts and rails on walls, a framed soil bed on a plot.
@@ -135,6 +143,33 @@ function buildBuildingGeometry(def: BuildingDef): THREE.BufferGeometry {
     parts.push(
       placed(paint(new THREE.BoxGeometry(W * 0.98, 0.17, W * 0.62), seam), 0, h - 0.085, 0),
     );
+    return merge(parts);
+  }
+
+  if (def.id === "brazier") {
+    // A bowl on legs. The bowl has to be visible from below the flame, because
+    // the flame is a separate unlit mesh added in spawnMesh and this geometry
+    // is what the piece looks like when it is a ghost or a wreck.
+    const metal = def.color;
+    const trim = 0x8e8798;
+    const parts: THREE.BufferGeometry[] = [
+      placed(paint(new THREE.CylinderGeometry(W * 0.34, W * 0.16, h * 0.28, 10), metal), 0, h * 0.86, 0),
+      placed(paint(new THREE.TorusGeometry(W * 0.34, 0.05, 6, 12), trim), 0, h, 0, { rotX: Math.PI / 2 }),
+      placed(paint(new THREE.CylinderGeometry(0.09, 0.12, h * 0.72, 6), metal), 0, h * 0.36, 0),
+    ];
+    // Three splayed feet, so it stands rather than being a pole stuck in soil.
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2;
+      parts.push(
+        placed(
+          paint(new THREE.BoxGeometry(0.1, h * 0.4, 0.1), metal),
+          Math.cos(a) * W * 0.2,
+          h * 0.2,
+          Math.sin(a) * W * 0.2,
+          { rotX: Math.sin(a) * 0.4, rotZ: -Math.cos(a) * 0.4 },
+        ),
+      );
+    }
     return merge(parts);
   }
 
@@ -249,6 +284,13 @@ export class BuildingSystem {
   private readonly meshes = new Map<string, THREE.Object3D>();
   private readonly occupancy = new Map<string, string>(); // cell key -> placedBuilding.id
   private readonly popIns: { mesh: THREE.Object3D; startMs: number }[] = [];
+  /** How many pieces currently hold a real light. See addLight. */
+  private liveLights = 0;
+  /**
+   * Whether the player is anywhere they can build at all. Set from outside,
+   * because "can you build in this place" is a fact about the place.
+   */
+  private enabled = true;
   /**
    * Where each mesh stands when it is whole. The damage lean and the hit shake
    * both push the mesh off this, and each has to start from the untouched
@@ -270,7 +312,7 @@ export class BuildingSystem {
   private nextInstanceId = 0;
 
   constructor(
-    private readonly scene: THREE.Scene,
+    private readonly scene: THREE.Object3D,
     private readonly terrain: Terrain,
     private readonly state: GameState,
     private readonly models: ModelLibrary = {},
@@ -290,6 +332,19 @@ export class BuildingSystem {
       const match = /^building-(\d+)$/.exec(placed.id);
       if (match) this.nextInstanceId = Math.max(this.nextInstanceId, Number(match[1]) + 1);
     }
+  }
+
+  /**
+   * Turns the whole system off, for somewhere the player cannot build.
+   *
+   * Enforced at the bottom of the system — placement, the ghost and the
+   * collision list all consult it — rather than at the handful of call sites
+   * that happen to exist today, so a new one cannot quietly opt out of the
+   * rule, and neither can the debug surface.
+   */
+  setEnabled(enabled: boolean): void {
+    this.enabled = enabled;
+    if (!enabled) this.selectBuilding(null);
   }
 
   selectBuilding(buildingId: string | null): void {
@@ -414,6 +469,7 @@ export class BuildingSystem {
   }
 
   update(aim: { x: number; z: number }, nowMs: number, canPlace = true): void {
+    canPlace = canPlace && this.enabled;
     this.updatePopIns(nowMs);
     this.updateShakes(nowMs);
 
@@ -445,6 +501,7 @@ export class BuildingSystem {
    */
   placeAt(buildingId: string, cellX: number, cellZ: number, rotation: number, nowMs: number):
     string | null {
+    if (!this.enabled) return null;
     const def = getBuilding(buildingId);
     const previous = this.rotation;
     this.rotation = rotation;
@@ -467,7 +524,7 @@ export class BuildingSystem {
   }
 
   tryPlace(aim: { x: number; z: number }, nowMs: number): boolean {
-    if (!this.selectedBuildingId) return false;
+    if (!this.enabled || !this.selectedBuildingId) return false;
     const def = getBuilding(this.selectedBuildingId);
     const anchor = this.anchorCellFor(aim);
     if (!this.isPlacementValid(def, anchor)) return false;
@@ -601,6 +658,11 @@ export class BuildingSystem {
     if (mesh) {
       this.scene.remove(mesh);
       this.meshes.delete(placedId);
+      // Give the budget back, or a base rebuilt in place would go dark one
+      // brazier at a time.
+      if (mesh.children.some((child) => (child as THREE.PointLight).isPointLight)) {
+        this.liveLights -= 1;
+      }
       const popIn = this.popIns.findIndex((p) => p.mesh === mesh);
       if (popIn !== -1) this.popIns.splice(popIn, 1);
     }
@@ -812,6 +874,8 @@ export class BuildingSystem {
       fallback.receiveShadow = true;
       mesh = fallback;
     }
+    if (def.light) this.addLight(mesh, def.light);
+
     // Both the models and the procedural geometry are built from their base
     // up, so a piece sits on the terrain rather than being centred in it.
     //
@@ -841,6 +905,32 @@ export class BuildingSystem {
     this.meshes.set(placed.id, mesh);
   }
 
+  /**
+   * Gives a light-bearing piece its flame, and — while there is room — a real
+   * light to go with it.
+   *
+   * The flame is always drawn: a brazier that reads as unlit because the
+   * player already had eight of them would be a piece that silently changes
+   * appearance based on something invisible. The `THREE.PointLight` is the
+   * part that is capped, because every extra one recompiles the scene's
+   * shaders and costs per fragment, and a base ringed in thirty braziers would
+   * otherwise be the slowest thing in the game.
+   */
+  private addLight(mesh: THREE.Object3D, light: NonNullable<BuildingDef["light"]>): void {
+    const flame = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(0.3, 0),
+      new THREE.MeshBasicMaterial({ color: light.color }),
+    );
+    flame.position.y = light.height;
+    mesh.add(flame);
+
+    if (this.liveLights >= MAX_BUILDING_LIGHTS) return;
+    this.liveLights += 1;
+    const point = new THREE.PointLight(light.color, light.intensity, light.distance, 1.4);
+    point.position.y = light.height;
+    mesh.add(point);
+  }
+
   // Whether a given kind of building stands within reach of a point. Crafting
   // uses this for recipes that need a station.
   hasNearby(buildingId: string, x: number, z: number, radius: number): boolean {
@@ -867,6 +957,12 @@ export class BuildingSystem {
    * player's way like a wall.
    */
   getCollidables(): Collidable[] {
+    // Nothing to walk into where nothing can be built: the pieces are still in
+    // memory and still in the surface group, but that group is not in the
+    // scene, and being stopped by a wall you cannot see is worse than any way
+    // of describing it.
+    if (!this.enabled) return [];
+
     const result: Collidable[] = [];
     for (const placed of this.state.placedBuildings) {
       const def = getBuilding(placed.buildingId);

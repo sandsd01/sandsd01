@@ -52,6 +52,7 @@ const ITEM_ICONS: Record<string, IconName> = {
   // material and gets a different glyph, or the bar shows two identical icons
   // side by side and tells the player nothing.
   ancient_stone: "landmark",
+  glow_crystal: "sparkles",
 };
 
 // The eight quick slots, holding what the player carries rather than what they

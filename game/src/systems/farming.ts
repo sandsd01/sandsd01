@@ -22,7 +22,7 @@ export class FarmingSystem {
   private unsubscribeRemoved: () => void;
 
   constructor(
-    private readonly scene: THREE.Scene,
+    private readonly scene: THREE.Object3D,
     private readonly terrain: Terrain,
     private readonly state: GameState,
   ) {
@@ -53,9 +53,21 @@ export class FarmingSystem {
     this.unsubscribeRemoved();
   }
 
+  /**
+   * Whether the player is anywhere their crops are. Same rule and the same
+   * reasoning as `BuildingSystem.setEnabled` — the plots are all on the
+   * surface, and a bed reached through a cave floor is not a bed.
+   */
+  private enabled = true;
+
+  setEnabled(enabled: boolean): void {
+    this.enabled = enabled;
+  }
+
   // The fallback for the farm *key*, mirroring gathering: the crosshair is the
   // primary way to pick a bed, but F while standing on one should still work.
   nearestPlot(x: number, z: number): PlotState | null {
+    if (!this.enabled) return null;
     let nearest: PlotState | null = null;
     let nearestDist = INTERACT_RANGE;
     for (const plot of this.state.plots) {
@@ -92,7 +104,7 @@ export class FarmingSystem {
   }
 
   tryInteract(plot: PlotState | null, selectedSeedItemId: string | null, nowMs: number): void {
-    if (!plot) return;
+    if (!this.enabled || !plot) return;
 
     if (plot.cropId === null) {
       if (!selectedSeedItemId) return;

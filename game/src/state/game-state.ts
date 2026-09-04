@@ -1,5 +1,6 @@
 import { hashStringToSeed } from "../utils/rng";
 import { DAY_LENGTH_MS, raidStartAfter } from "../systems/day-night";
+import type { RegionId } from "../world/region";
 
 export interface InventorySlot {
   itemId: string;
@@ -124,6 +125,22 @@ export interface GameState {
   /** The raid schedule. See `RaidState`. */
   raid: RaidState;
   /**
+   * Which place the player is standing in.
+   *
+   * A dungeon is rebuilt from a fresh seed on every entry, so **nothing about
+   * its contents is saved** — only the fact that the player was inside one,
+   * and where they came in from. On load, someone who quit underground is put
+   * back at that entrance rather than at the coordinates they logged out at:
+   * the cave those coordinates referred to no longer exists, and the new one
+   * generated in its place could put them inside a rock.
+   */
+  region: RegionId;
+  /**
+   * Where to come back out. Set on the way in, so it survives both the walk
+   * back through the portal and a reload from inside.
+   */
+  regionReturn: { x: number; z: number } | null;
+  /**
    * What is being worn, by item id, or null for nothing. One slot rather than
    * head/chest/legs: three slots is three times the UI, the save and the
    * balancing for depth the player cannot read off the screen anyway.
@@ -199,5 +216,7 @@ export function createInitialState(seedInput: string | number = "romestead"): Ga
     discovered: [],
     armour: null,
     raid: { nextRaidAtMs: raidStartAfter(elapsedMs), active: false, wave: 0, endsAtMs: 0, count: 0 },
+    region: "surface",
+    regionReturn: null,
   };
 }

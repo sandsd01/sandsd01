@@ -118,6 +118,6 @@ export function scatterResourceNodes(
   return nodes;
 }
 
-export function addNodesToScene(scene: THREE.Scene, nodes: ResourceNode[]): void {
+export function addNodesToScene(scene: THREE.Object3D, nodes: ResourceNode[]): void {
   for (const node of nodes) scene.add(node.object);
 }

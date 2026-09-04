@@ -26,6 +26,9 @@ const TRACKED_ITEMS = [
   // The frontier material, and the only one whose count tells the player
   // whether the trip they are planning is worth making.
   "ancient_stone",
+  // The cave material, for the same reason: the count is what tells you
+  // whether the next trip down is worth taking.
+  "glow_crystal",
 ];
 // Each tracked resource gets a glyph as well as a colour: the icon says what
 // it is, the tint only reinforces it.
@@ -49,6 +52,10 @@ const ITEM_ICONS: Record<string, IconName> = {
   // the same as neither having one. The columned-ruin shape also says where
   // this came from: the frontier, not a vein near the door.
   ancient_stone: "landmark",
+  // Not "gem" (iron ore) and not "flame" (broth in the hotbar) — the check
+  // that no two chips share a glyph is there because this mistake has now been
+  // made three times.
+  glow_crystal: "sparkles",
 };
 const ITEM_COLORS: Record<string, number> = {
   wood: 0x8b5a2b,
@@ -63,6 +70,7 @@ const ITEM_COLORS: Record<string, number> = {
   hide: 0x7a5238,
   arrow: 0xcfc3a8,
   ancient_stone: 0x8d88a0,
+  glow_crystal: 0x63d9ff,
 };
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -74,6 +82,8 @@ const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 export type CrosshairState = "none" | "node" | "enemy" | "plot" | "place";
 
 export class Hud {
+  private readonly placeBanner: HTMLDivElement;
+  private readonly placeLabel: HTMLSpanElement;
   private readonly crosshair: HTMLDivElement;
   private readonly crosshairRing: SVGSVGElement;
   private readonly crosshairProgress: SVGCircleElement;
@@ -141,6 +151,17 @@ export class Hud {
     this.raidBanner.append(raidIcon, this.raidLabel);
     this.raidBanner.hidden = true;
 
+    // Where you are, shown only when that is not the obvious answer. It sits in
+    // the raid banner's slot on purpose: the two can never be on screen at
+    // once, because a raid is a thing that happens to the homestead and this
+    // only appears when the player is not at it.
+    this.placeBanner = el("div", "hud-place");
+    const placeIcon = el("span", "hud-place-icon icon");
+    placeIcon.innerHTML = iconSvg("mountain");
+    this.placeLabel = el("span", "hud-place-label", "");
+    this.placeBanner.append(placeIcon, this.placeLabel);
+    this.placeBanner.hidden = true;
+
     this.prompt = el("div", "hud-prompt");
     this.prompt.style.display = "none";
 
@@ -184,6 +205,7 @@ export class Hud {
       healthWrap,
       timeWrap,
       this.raidBanner,
+      this.placeBanner,
       this.resourceRow,
       this.prompt,
       crosshair,
@@ -298,6 +320,21 @@ export class Hud {
       `Raid ${status.raid} — wave ${status.wave}/${status.totalWaves} · ${status.remaining} left`;
     this.raidBanner.hidden = false;
     if (this.raidLabel.textContent !== text) this.raidLabel.textContent = text;
+  }
+
+  /**
+   * Names the place, or hides the label when the player is on the surface.
+   *
+   * Underground the sky is gone, the clock keeps running and no raid ever
+   * arrives — three things a player could reasonably read as the game having
+   * broken. One line saying where they are is what makes all three read as
+   * intended instead.
+   */
+  setPlace(name: string | null): void {
+    this.placeBanner.hidden = name === null;
+    if (name !== null && this.placeLabel.textContent !== name) {
+      this.placeLabel.textContent = name;
+    }
   }
 
   // t is the day-night fraction in [0,1) from DayNightSystem.getTimeOfDay —

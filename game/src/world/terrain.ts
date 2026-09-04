@@ -30,7 +30,20 @@ export const OPEN_RADIUS = 22; // flattened build/farm zone around spawn
  * question as where a wave of raiders should be allowed to land.
  */
 export function clampToWorld(value: number, margin = 0): number {
-  const limit = WORLD_SIZE / 2 - margin;
+  return clampToExtent(value, WORLD_SIZE / 2, margin);
+}
+
+/**
+ * The same clamp, against a boundary that is not the overworld's.
+ *
+ * A cave is 70 units across and the overworld is 400, so a body inside one
+ * that was held only to `WORLD_SIZE` would walk straight through the rock
+ * wall and out over nothing. Every caller takes its half-extent from whichever
+ * place it is currently standing in, which is what makes the edge rule one
+ * rule rather than one per region.
+ */
+export function clampToExtent(value: number, halfExtent: number, margin = 0): number {
+  const limit = Math.max(0, halfExtent - margin);
   return Math.min(limit, Math.max(-limit, value));
 }
 // Segments scale with the world, not with the triangle budget: 128 quads over
@@ -48,8 +61,33 @@ const WETLAND_DEPTH = 1.2;
 // the hills from looking like a painted-green bedsheet.
 const SLOPE_ROCK = new THREE.Color(0x7c7466);
 
-export class Terrain {
+/**
+ * Anything a body can stand on.
+ *
+ * `Terrain` satisfied this already; naming it is what lets somewhere that is
+ * not the overworld — a cave floor, a floating island — be stood on by the
+ * same player controller, enemies and props, without any of them learning
+ * that more than one place exists. See `world/region.ts`.
+ */
+export interface GroundSurface {
+  heightAt(x: number, z: number): number;
+}
+
+/**
+ * Ground that also knows where it stops.
+ *
+ * Split from `GroundSurface` because plenty of callers only ever ask how high
+ * something is, and only the ones that move a body need to know where the
+ * edge of the world they are standing in lies.
+ */
+export interface BoundedGround extends GroundSurface {
+  /** Half the walkable extent, measured from the origin on either axis. */
+  readonly halfExtent: number;
+}
+
+export class Terrain implements BoundedGround {
   readonly mesh: THREE.Mesh;
+  readonly halfExtent = WORLD_SIZE / 2;
   private readonly noise: ValueNoise2D;
 
   constructor(seed: number) {
