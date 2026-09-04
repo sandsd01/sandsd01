@@ -1199,9 +1199,16 @@ window.__gameDebug = {
     const stepZ = (z - start.z) / steps;
     for (let i = 0; i < steps; i++) {
       const solved = resolveCollisions(cx + stepX, cz + stepZ, PLAYER_RADIUS, getCollidables());
-      cx = solved.x;
-      cz = solved.z;
-      player.teleport(cx, cz);
+      player.teleport(solved.x, solved.z);
+      // Read the body back rather than trusting the running total. `teleport`
+      // clamps to the world's edge, so at the boundary the two disagree — and
+      // a total that kept marching outward would both walk the next step from
+      // somewhere the player is not, and hand the caller a final position the
+      // player never occupied. That is the difference between a check that
+      // asks "where did the body end up" and one that asks "what did I add up".
+      const at = player.getFeetPosition();
+      cx = at.x;
+      cz = at.z;
     }
     return { x: cx, z: cz };
   },

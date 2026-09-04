@@ -10,6 +10,29 @@ import { getZone, initZones, ZONE_GROUND_COLOR } from "./zones";
 // place you have not seen yet.
 export const WORLD_SIZE = 400;
 export const OPEN_RADIUS = 22; // flattened build/farm zone around spawn
+
+/**
+ * Keeps a point on the map, one axis at a time.
+ *
+ * The single definition of where the world stops. `heightAt` is a noise
+ * function and will answer for any coordinate you hand it, mesh or no mesh —
+ * so nothing about walking off the edge fails loudly. A body out there simply
+ * stands on ground that was never drawn, which is how the player, and every
+ * raider a wave dropped near them, could end up over open sky without
+ * anything in the game noticing.
+ *
+ * Clamped **per axis** on purpose: that is what lets a body slide along the
+ * boundary the way it slides along a wall. Rejecting the whole move whenever
+ * either axis went out would pin you to the spot you touched it at.
+ *
+ * `margin` is how far inside the mesh's own edge to stop, and each caller has
+ * its own reason for the number it passes — a body's own width is not the same
+ * question as where a wave of raiders should be allowed to land.
+ */
+export function clampToWorld(value: number, margin = 0): number {
+  const limit = WORLD_SIZE / 2 - margin;
+  return Math.min(limit, Math.max(-limit, value));
+}
 // Segments scale with the world, not with the triangle budget: 128 quads over
 // 200 units was a ~1.6-unit quad, and keeping that count on a world twice as
 // wide would have doubled the quad to 3.1 units — every hill within sight of

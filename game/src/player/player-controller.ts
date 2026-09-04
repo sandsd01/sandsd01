@@ -4,6 +4,7 @@ import type { InputManager } from "../input/input-manager";
 import type { ThirdPersonCamera } from "../core/camera";
 import type { Terrain } from "../world/terrain";
 import { resolveCollisions, type Collidable } from "../utils/collision";
+import { clampToWorld } from "../world/terrain";
 import { events } from "../utils/events";
 import { buildFigureGeometry, createFigureMaterial } from "../world/figures";
 import { HeldItem } from "../world/held-item";
@@ -13,6 +14,16 @@ import { instantiate, type ModelLibrary } from "../world/models";
 const MOVE_SPEED = 5;
 const SPRINT_MULTIPLIER = 1.6;
 export const PLAYER_RADIUS = 0.4;
+/**
+ * How far inside the terrain's own edge the player is stopped.
+ *
+ * Wider than `PLAYER_RADIUS`, which is only what the collision circle needs:
+ * the drawn body is broader than its collision circle, and standing with the
+ * mesh's last quad under your heels reads as teetering on a lip rather than as
+ * having reached the end of the world. Picked by walking to the edge and
+ * looking at it, not by arithmetic.
+ */
+const PLAYER_EDGE_MARGIN = 3;
 const MOUSE_SENSITIVITY = 0.0025;
 const PLAYER_HEIGHT = 1.7;
 const BOB_FREQUENCY = 9; // cycles/sec while moving at full speed
@@ -252,12 +263,31 @@ export class PlayerController {
     return new THREE.Vector3(this.state.player.x, this.state.player.y, this.state.player.z);
   }
 
+  /**
+   * The one place the player's ground position is written.
+   *
+   * Both callers — the movement step and the debug teleport — go through here
+   * so the world's edge is enforced on the path everything takes, rather than
+   * sprinkled at each call site where the next one added would quietly miss
+   * it. Returns where the body actually ended up, because that is not always
+   * where the caller asked for.
+   *
+   * `y` is deliberately not set here: the movement path owns it through
+   * `updateVertical` (jumping, falling), and teleport wants the ground.
+   */
+  private setGroundPosition(x: number, z: number): { x: number; z: number } {
+    this.state.player.x = clampToWorld(x, PLAYER_EDGE_MARGIN);
+    this.state.player.z = clampToWorld(z, PLAYER_EDGE_MARGIN);
+    return { x: this.state.player.x, z: this.state.player.z };
+  }
+
   // Debug/testing-only teleport (see window.__gameDebug in main.ts) — not used
-  // by normal gameplay input handling.
+  // by normal gameplay input handling. Clamped like any other move: a debug
+  // hook that could put the player somewhere the game cannot is a hook that
+  // tests things the game will never do.
   teleport(x: number, z: number): void {
-    this.state.player.x = x;
-    this.state.player.z = z;
-    this.state.player.y = this.terrain.heightAt(x, z);
+    const at = this.setGroundPosition(x, z);
+    this.state.player.y = this.terrain.heightAt(at.x, at.z);
     this.syncObjectFromState();
   }
 
@@ -299,9 +329,8 @@ export class PlayerController {
     }
 
     const resolved = resolveCollisions(x, z, PLAYER_RADIUS, collidables);
-    this.state.player.x = resolved.x;
-    this.state.player.z = resolved.z;
-    this.updateVertical(dt, nowMs, input, this.terrain.heightAt(resolved.x, resolved.z));
+    const at = this.setGroundPosition(resolved.x, resolved.z);
+    this.updateVertical(dt, nowMs, input, this.terrain.heightAt(at.x, at.z));
 
     this.regenStamina(dt, nowMs);
     this.syncObjectFromState();

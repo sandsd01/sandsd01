@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { getEnemy, type EnemyDef } from "../data/enemies";
 import type { Terrain } from "../world/terrain";
 import { getZone } from "../world/zones";
-import { WORLD_SIZE } from "../world/terrain";
+import { clampToWorld } from "../world/terrain";
 import { mulberry32 } from "../utils/rng";
 import { events } from "../utils/events";
 import { resolveCollisions, type Collidable } from "../utils/collision";
@@ -175,6 +175,18 @@ export class Enemy {
       }
     }
 
+    // Where they spawn was already clamped; where they end up was not. An
+    // enemy shoved outward by being resolved against a wall built at the
+    // boundary — or dropped outside by a debug hook — could stand on ground
+    // that was never drawn, and nothing in the game would have said so.
+    //
+    // Here rather than inside the chase branch, and for the same reason the
+    // ground-height line below is here: this is the "whatever happened this
+    // frame, put the body where it belongs" step. Clamping only the walk would
+    // leave an enemy that is standing still off the map standing still off the
+    // map.
+    this.object.position.x = clampToWorld(this.object.position.x, ENEMY_RADIUS);
+    this.object.position.z = clampToWorld(this.object.position.z, ENEMY_RADIUS);
     this.object.position.y = terrain.heightAt(this.object.position.x, this.object.position.z);
 
     // Brief flash on taking a hit — clearer feedback than the health bar
@@ -240,18 +252,14 @@ const BRUTE_SHARE_ROUGH_BIOME = 0.5;
  * the spawn rate and the mix of what spawns have to agree about it.
  */
 /**
- * Keeps a spawn point on the map.
+ * How far inside the map's edge a wave is allowed to land.
  *
- * Both spawners now ring the *player*, and a player standing near the edge has
- * most of that ring hanging over the void: the terrain mesh stops at
- * ±WORLD_SIZE/2 even though `heightAt` will happily answer for a point past
- * it, so an unclamped spawn drops a raider onto ground that is not drawn.
+ * Both spawners ring the *player*, and a player standing near the edge has
+ * most of that ring hanging over the void. Wider than a body's own width on
+ * purpose: a raider that spawns exactly on the boundary has nowhere to be
+ * pushed to when the next one lands on top of it.
  */
 const EDGE_MARGIN = 4;
-function onMap(v: number): number {
-  const limit = WORLD_SIZE / 2 - EDGE_MARGIN;
-  return THREE.MathUtils.clamp(v, -limit, limit);
-}
 
 export function dangerAt(x: number, z: number): number {
   const d = Math.hypot(x, z);
@@ -301,8 +309,8 @@ export class EnemyManager {
   private spawnOne(playerX: number, playerZ: number): void {
     const angle = this.rand() * Math.PI * 2;
     const radius = SPAWN_RADIUS_MIN + this.rand() * (SPAWN_RADIUS_MAX - SPAWN_RADIUS_MIN);
-    const x = onMap(playerX + Math.cos(angle) * radius);
-    const z = onMap(playerZ + Math.sin(angle) * radius);
+    const x = clampToWorld(playerX + Math.cos(angle) * radius, EDGE_MARGIN);
+    const z = clampToWorld(playerZ + Math.sin(angle) * radius, EDGE_MARGIN);
     // Two things decide what turns up: how far out it is, and what kind of
     // ground it is. Distance is the stronger of the two and it is the one the
     // player can see themselves making — the biome rule stays because rocky
@@ -368,8 +376,8 @@ export class EnemyManager {
       const def = getEnemy(i < brutes ? "brute" : "zombie");
       const enemy = this.spawnAt(
         def,
-        onMap(aroundX + Math.cos(angle) * radius),
-        onMap(aroundZ + Math.sin(angle) * radius),
+        clampToWorld(aroundX + Math.cos(angle) * radius, EDGE_MARGIN),
+        clampToWorld(aroundZ + Math.sin(angle) * radius, EDGE_MARGIN),
       );
       // Reaches all the way back to the player from the spawn ring, so a wave
       // closes in rather than milling about where it landed.
