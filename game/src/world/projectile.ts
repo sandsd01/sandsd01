@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import type { Terrain } from "./terrain";
+import type { GroundSurface } from "./terrain";
 import type { Enemy } from "../systems/enemy-ai";
 import type { Collidable } from "../utils/collision";
 
@@ -97,7 +97,7 @@ export class Projectiles {
 
   constructor(
     private readonly scene: THREE.Scene,
-    private readonly terrain: Terrain,
+    private readonly terrain: GroundSurface,
   ) {}
 
   /** Looses an arrow from the shooter's chest along `direction`. */
@@ -116,6 +116,18 @@ export class Projectiles {
       velocity: dir.multiplyScalar(SPEED),
       bornMs: nowMs,
     });
+  }
+
+  /**
+   * Takes every arrow out of the air without landing it.
+   *
+   * Only for a change of region: an arrow loosed on the surface has nowhere to
+   * land in a cave, and dropping it as loot would post an arrow through the
+   * floor of a place it was never fired in.
+   */
+  clear(): void {
+    for (const arrow of this.arrows) this.scene.remove(arrow.mesh);
+    this.arrows.length = 0;
   }
 
   /** How many arrows are in the air. For tests, and for nothing else. */

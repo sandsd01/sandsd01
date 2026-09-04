@@ -28,6 +28,7 @@ const NODE_COLORS: Record<string, string> = {
   clay_pit: "#9c6642",
   iron_vein: "#c87a44",
   ancient_stone: "#c9c3dc",
+  glow_crystal: "#63d9ff",
 };
 
 // North-up, player-centred. North-up rather than rotating the whole map with
@@ -60,6 +61,13 @@ export class Minimap {
     enemies: Enemy[],
     buildingMesh: (id: string) => THREE.Object3D | undefined,
     landmarks: { id: string; x: number; z: number }[] = [],
+    /**
+     * A flat ground colour for a place with no biomes, or null for the
+     * overworld's sampled zones. Underground the zone map is still perfectly
+     * happy to answer — with the colour of the forest a hundred metres above
+     * the player's head, which is worse than no map at all.
+     */
+    enclosedGround: number | null = null,
   ): void {
     const ctx = this.ctx;
     if (!ctx) return;
@@ -81,13 +89,18 @@ export class Minimap {
     ctx.arc(half, half, half, 0, Math.PI * 2);
     ctx.clip();
 
-    // Biomes, sampled on a coarse grid.
-    for (let sx = 0; sx < SIZE; sx += GROUND_STEP) {
-      for (let sy = 0; sy < SIZE; sy += GROUND_STEP) {
-        const wx = px + (sx + GROUND_STEP / 2 - half) / scale;
-        const wz = pz + (sy + GROUND_STEP / 2 - half) / scale;
-        ctx.fillStyle = colorToCss(ZONE_GROUND_COLOR[getZone(wx, wz)]);
-        ctx.fillRect(sx, sy, GROUND_STEP, GROUND_STEP);
+    if (enclosedGround !== null) {
+      ctx.fillStyle = colorToCss(enclosedGround);
+      ctx.fillRect(0, 0, SIZE, SIZE);
+    } else {
+      // Biomes, sampled on a coarse grid.
+      for (let sx = 0; sx < SIZE; sx += GROUND_STEP) {
+        for (let sy = 0; sy < SIZE; sy += GROUND_STEP) {
+          const wx = px + (sx + GROUND_STEP / 2 - half) / scale;
+          const wz = pz + (sy + GROUND_STEP / 2 - half) / scale;
+          ctx.fillStyle = colorToCss(ZONE_GROUND_COLOR[getZone(wx, wz)]);
+          ctx.fillRect(sx, sy, GROUND_STEP, GROUND_STEP);
+        }
       }
     }
     // Knock the whole ground back so the markers on top stay the bright part.
@@ -106,6 +119,9 @@ export class Minimap {
     }
 
     for (const placed of state.placedBuildings) {
+      // Nothing the player built is anywhere near them underground, and a
+      // homestead drawn over a cave floor would be a map of somewhere else.
+      if (enclosedGround !== null) break;
       if (!buildingMesh(placed.id)) continue;
       const p = toMap(placed.cellX * GRID_CELL_SIZE, placed.cellZ * GRID_CELL_SIZE);
       ctx.fillStyle = "#d8b45a";

@@ -2,9 +2,9 @@ import * as THREE from "three";
 import type { GameState } from "../state/game-state";
 import type { InputManager } from "../input/input-manager";
 import type { ThirdPersonCamera } from "../core/camera";
-import type { Terrain } from "../world/terrain";
+import type { BoundedGround } from "../world/terrain";
 import { resolveCollisions, type Collidable } from "../utils/collision";
-import { clampToWorld } from "../world/terrain";
+import { clampToExtent } from "../world/terrain";
 import { events } from "../utils/events";
 import { buildFigureGeometry, createFigureMaterial } from "../world/figures";
 import { HeldItem } from "../world/held-item";
@@ -79,7 +79,7 @@ export class PlayerController {
 
   constructor(
     private readonly state: GameState,
-    private readonly terrain: Terrain,
+    private readonly terrain: BoundedGround,
     models: ModelLibrary = {},
   ) {
     this.object = new THREE.Group();
@@ -276,8 +276,11 @@ export class PlayerController {
    * `updateVertical` (jumping, falling), and teleport wants the ground.
    */
   private setGroundPosition(x: number, z: number): { x: number; z: number } {
-    this.state.player.x = clampToWorld(x, PLAYER_EDGE_MARGIN);
-    this.state.player.z = clampToWorld(z, PLAYER_EDGE_MARGIN);
+    // The edge asked for is whichever place the player is standing in — the
+    // overworld's, or the wall of the cave they walked into.
+    const extent = this.terrain.halfExtent;
+    this.state.player.x = clampToExtent(x, extent, PLAYER_EDGE_MARGIN);
+    this.state.player.z = clampToExtent(z, extent, PLAYER_EDGE_MARGIN);
     return { x: this.state.player.x, z: this.state.player.z };
   }
 

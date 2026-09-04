@@ -241,7 +241,7 @@ const RECIPES: Recipe[] = [
  * borders are noise-warped and no longer a formula you can solve for.
  */
 export function createLandmarks(
-  scene: THREE.Scene,
+  scene: THREE.Object3D,
   terrain: Terrain,
   seed: number,
   models: ModelLibrary,

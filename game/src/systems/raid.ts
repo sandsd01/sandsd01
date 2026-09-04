@@ -130,6 +130,28 @@ export class RaidSystem {
     this.releaseWave(nowMs, playerX, playerZ);
   }
 
+  /**
+   * Pushes the whole schedule forward by `deltaMs`.
+   *
+   * Called every frame the player is somewhere the raid cannot reach — a
+   * dungeon — which is what "the raid clock stops while you are underground"
+   * actually means. Done a frame at a time rather than settled up in one lump
+   * on the way out, so the schedule in the save file is correct at every
+   * instant: a player who quits underground and comes back an hour later
+   * should not be met by a raid they owe.
+   *
+   * Note what this does *not* stop: the world clock, crops, node respawns and
+   * cache restocks all carry on. Only the raid is held.
+   */
+  defer(deltaMs: number): void {
+    const raid = this.state.raid;
+    raid.nextRaidAtMs += deltaMs;
+    if (raid.active) {
+      raid.endsAtMs += deltaMs;
+      if (Number.isFinite(this.nextWaveAtMs)) this.nextWaveAtMs += deltaMs;
+    }
+  }
+
   update(nowMs: number, playerX: number, playerZ: number): void {
     const raid = this.state.raid;
 

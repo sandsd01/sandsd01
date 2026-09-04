@@ -240,6 +240,44 @@ body {
   }
 }
 
+/* --- Where you are ---
+   Sits exactly where the raid banner does, and cannot collide with it: a raid
+   only runs on the surface, and this only appears off it. Calm rather than
+   alarming — it reports where you are, it is not a warning, so it takes the
+   ordinary edge and no pulse. */
+.hud-place {
+  position: absolute;
+  top: 58px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(260px, 70vw);
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: var(--slate-solid);
+  border: 1px solid var(--edge-strong);
+  box-shadow: var(--shadow);
+  color: var(--ink);
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+/* Same trap as `.hud-raid` two rules up: `display: flex` beats the browser's
+   own `[hidden]` rule, and without this the label sits on screen naming a
+   place the player has never been from the moment the page loads. */
+.hud-place[hidden] {
+  display: none;
+}
+
+.hud-place-icon.icon {
+  width: 15px;
+  height: 15px;
+  color: var(--ink-dim);
+}
+
 /* --- Status: carried resources --- */
 
 .hud-resources {

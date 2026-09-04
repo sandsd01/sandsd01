@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import type { GroundSurface } from "./terrain";
 import { getItem } from "../data/items";
 import { addItem } from "../systems/inventory";
 import type { GameState } from "../state/game-state";
@@ -36,7 +37,7 @@ export class DroppedItems {
 
   constructor(
     private readonly scene: THREE.Scene,
-    private readonly terrain: { heightAt(x: number, z: number): number },
+    private readonly terrain: GroundSurface,
   ) {}
 
   /**
@@ -107,6 +108,16 @@ export class DroppedItems {
         this.remove(i);
       }
     }
+  }
+
+  /**
+   * Sweeps the floor. Used when the player changes region — loot lying in a
+   * cave is not loot lying on the homestead, and the drops themselves are
+   * already understood to belong to the fight that produced them (nothing here
+   * is ever saved).
+   */
+  clear(): void {
+    for (let i = this.items.length - 1; i >= 0; i--) this.remove(i);
   }
 
   /** For tests and the debug surface: what is currently on the floor. */

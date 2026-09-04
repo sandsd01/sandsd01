@@ -89,6 +89,19 @@ function backfillDefaults(state: GameState): void {
   // missing-record case is the easy half of this to get right and the easy
   // half to stop at.
   if (typeof state.raid.count !== "number") state.raid.count = 0;
+  // Every save written before there was anywhere else to be was written on the
+  // surface, which is also the only place a save can legitimately resume: a
+  // dungeon is regenerated on entry, so a save taken inside one has nothing to
+  // come back to. Someone who quit underground is put back at the entrance
+  // they used, and if that was never recorded, at wherever they stood.
+  if (state.regionReturn === undefined) state.regionReturn = null;
+  if (state.region !== "surface") {
+    if (state.regionReturn) {
+      state.player.x = state.regionReturn.x;
+      state.player.z = state.regionReturn.z;
+    }
+    state.region = "surface";
+  }
   // Nothing was worn before there was anything to wear.
   if (typeof state.armour !== "string") state.armour = null;
 

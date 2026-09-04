@@ -102,6 +102,17 @@ export const ITEMS: Record<string, ItemDef> = {
     stackSize: 99,
     color: 0x8d88a0,
   },
+  // The cave's material. Spent on light, which is the one threat in this game
+  // that has never had an answer: night has been survivable since the first
+  // wall went up, but it has always been *dark*, and a torch you cannot craft
+  // is a torch that does not exist.
+  glow_crystal: {
+    id: "glow_crystal",
+    name: "Glow Crystal",
+    category: "resource",
+    stackSize: 99,
+    color: 0x63d9ff,
+  },
   bone_club: { id: "bone_club", name: "Bone Club", category: "tool", stackSize: 1, color: 0xdcd3b8 },
   broth: { id: "broth", name: "Broth", category: "crop", stackSize: 99, color: 0xb5793c, heals: 25 },
 };

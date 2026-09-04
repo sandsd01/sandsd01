@@ -1,8 +1,8 @@
 import * as THREE from "three";
 import { getEnemy, type EnemyDef } from "../data/enemies";
-import type { Terrain } from "../world/terrain";
+import type { BoundedGround } from "../world/terrain";
 import { getZone } from "../world/zones";
-import { clampToWorld } from "../world/terrain";
+import { clampToExtent } from "../world/terrain";
 import { mulberry32 } from "../utils/rng";
 import { events } from "../utils/events";
 import { resolveCollisions, type Collidable } from "../utils/collision";
@@ -113,7 +113,7 @@ export class Enemy {
     dt: number,
     nowMs: number,
     playerPos: THREE.Vector3,
-    terrain: Terrain,
+    terrain: BoundedGround,
     onAttackPlayer: (damage: number) => void,
     collidables: Collidable[] = [],
     onAttackBuilding: (x: number, z: number, damage: number) => boolean = () => false,
@@ -185,8 +185,9 @@ export class Enemy {
     // frame, put the body where it belongs" step. Clamping only the walk would
     // leave an enemy that is standing still off the map standing still off the
     // map.
-    this.object.position.x = clampToWorld(this.object.position.x, ENEMY_RADIUS);
-    this.object.position.z = clampToWorld(this.object.position.z, ENEMY_RADIUS);
+    const extent = terrain.halfExtent;
+    this.object.position.x = clampToExtent(this.object.position.x, extent, ENEMY_RADIUS);
+    this.object.position.z = clampToExtent(this.object.position.z, extent, ENEMY_RADIUS);
     this.object.position.y = terrain.heightAt(this.object.position.x, this.object.position.z);
 
     // Brief flash on taking a hit — clearer feedback than the health bar
@@ -260,6 +261,9 @@ const BRUTE_SHARE_ROUGH_BIOME = 0.5;
  * pushed to when the next one lands on top of it.
  */
 const EDGE_MARGIN = 4;
+/** How close to the player a dungeon will drop something. Far enough not to
+ * appear in their face, near enough to be inside the room. */
+const DUNGEON_SPAWN_MIN = 14;
 
 export function dangerAt(x: number, z: number): number {
   const d = Math.hypot(x, z);
@@ -274,6 +278,13 @@ export function dangerAt(x: number, z: number): number {
 const WAVE_RADIUS_MIN = 26;
 const WAVE_RADIUS_MAX = 38;
 
+/** How a dungeon populates itself. See `Region.enemies`. */
+export interface DungeonSpawnRules {
+  kinds: string[];
+  maxAlive: number;
+  intervalMs: number;
+}
+
 export class EnemyManager {
   private readonly enemies: Enemy[] = [];
   private lastSpawnMs = -Infinity;
@@ -282,10 +293,19 @@ export class EnemyManager {
   private raiding = false;
   /** Ids spawned as part of the current raid, so "the wave is dead" is answerable. */
   private readonly raidIds = new Set<string>();
+  /**
+   * The spawning rules of a dungeon, while the player is in one.
+   *
+   * Set rather than inferred, because every rule the overworld spawner uses —
+   * biome, distance from the origin, the brute share that rises towards the
+   * frontier — is a fact about the overworld, and none of it means anything
+   * seventy units underground.
+   */
+  private dungeon: DungeonSpawnRules | null = null;
 
   constructor(
     private readonly scene: THREE.Scene,
-    private readonly terrain: Terrain,
+    private readonly terrain: BoundedGround,
     seed: number,
   ) {
     this.rand = mulberry32(seed ^ 0x1337beef);
@@ -308,9 +328,27 @@ export class EnemyManager {
    */
   private spawnOne(playerX: number, playerZ: number): void {
     const angle = this.rand() * Math.PI * 2;
+    const extent = this.terrain.halfExtent;
+
+    if (this.dungeon) {
+      // A ring sized to the room. The overworld's 30-to-90 is most of the way
+      // across a cave, so borrowing it would clamp nearly every spawn onto a
+      // wall and stack the arrivals in the four corners.
+      const reach = Math.max(DUNGEON_SPAWN_MIN + 4, extent - EDGE_MARGIN);
+      const r = DUNGEON_SPAWN_MIN + this.rand() * (reach - DUNGEON_SPAWN_MIN);
+      const kinds = this.dungeon.kinds;
+      this.spawnAt(
+        getEnemy(kinds[Math.floor(this.rand() * kinds.length)]),
+        clampToExtent(playerX + Math.cos(angle) * r, extent, EDGE_MARGIN),
+        clampToExtent(playerZ + Math.sin(angle) * r, extent, EDGE_MARGIN),
+      );
+      return;
+    }
+
     const radius = SPAWN_RADIUS_MIN + this.rand() * (SPAWN_RADIUS_MAX - SPAWN_RADIUS_MIN);
-    const x = clampToWorld(playerX + Math.cos(angle) * radius, EDGE_MARGIN);
-    const z = clampToWorld(playerZ + Math.sin(angle) * radius, EDGE_MARGIN);
+    const x = clampToExtent(playerX + Math.cos(angle) * radius, extent, EDGE_MARGIN);
+    const z = clampToExtent(playerZ + Math.sin(angle) * radius, extent, EDGE_MARGIN);
+
     // Two things decide what turns up: how far out it is, and what kind of
     // ground it is. Distance is the stronger of the two and it is the one the
     // player can see themselves making — the biome rule stays because rocky
@@ -376,8 +414,8 @@ export class EnemyManager {
       const def = getEnemy(i < brutes ? "brute" : "zombie");
       const enemy = this.spawnAt(
         def,
-        clampToWorld(aroundX + Math.cos(angle) * radius, EDGE_MARGIN),
-        clampToWorld(aroundZ + Math.sin(angle) * radius, EDGE_MARGIN),
+        clampToExtent(aroundX + Math.cos(angle) * radius, this.terrain.halfExtent, EDGE_MARGIN),
+        clampToExtent(aroundZ + Math.sin(angle) * radius, this.terrain.halfExtent, EDGE_MARGIN),
       );
       // Reaches all the way back to the player from the spawn ring, so a wave
       // closes in rather than milling about where it landed.
@@ -406,6 +444,37 @@ export class EnemyManager {
     });
   }
 
+  /**
+   * Switches the spawner between the overworld's rules and a dungeon's, or
+   * back. Passing null restores the overworld.
+   */
+  setDungeonRules(rules: DungeonSpawnRules | null, nowMs: number): void {
+    this.dungeon = rules;
+    // The clock restarts from *now*, not from never.
+    //
+    // `-Infinity` looks like the same idea and is not: it makes the next spawn
+    // immediately due, so walking out of a cave put a wanderer on the field in
+    // the same frame — which reads, exactly and wrongly, as something having
+    // followed you through the portal.
+    this.lastSpawnMs = nowMs;
+  }
+
+  /**
+   * Takes every enemy off the field at once, alive or dying.
+   *
+   * Used when the player changes region: what was chasing them across the
+   * homestead has no business following them underground, and a cave brute
+   * left standing on the surface after they walk back out would be a monster
+   * from a place that no longer exists. Nothing is killed — no loot, no
+   * "enemy-killed" — because nothing died.
+   */
+  clearAll(nowMs: number): void {
+    for (const enemy of this.enemies) this.scene.remove(enemy.object);
+    this.enemies.length = 0;
+    this.raidIds.clear();
+    this.lastSpawnMs = nowMs;
+  }
+
   update(
     dt: number,
     nowMs: number,
@@ -416,12 +485,15 @@ export class EnemyManager {
   ): void {
     // The trickle is suspended for the night: left running it would spend the
     // raid ceiling on wanderers and thin out the waves themselves.
-    const interval = THREE.MathUtils.lerp(
-      SPAWN_INTERVAL_MS,
-      FRONTIER_SPAWN_INTERVAL_MS,
-      dangerAt(playerPos.x, playerPos.z),
-    );
-    if (!this.raiding && nowMs - this.lastSpawnMs > interval && this.enemies.length < MAX_ENEMIES) {
+    const interval = this.dungeon
+      ? this.dungeon.intervalMs
+      : THREE.MathUtils.lerp(
+          SPAWN_INTERVAL_MS,
+          FRONTIER_SPAWN_INTERVAL_MS,
+          dangerAt(playerPos.x, playerPos.z),
+        );
+    const ceiling = this.dungeon ? this.dungeon.maxAlive : MAX_ENEMIES;
+    if (!this.raiding && nowMs - this.lastSpawnMs > interval && this.enemies.length < ceiling) {
       this.lastSpawnMs = nowMs;
       // The ceiling of eight holds wherever the player stands. Out on the
       // frontier they arrive faster, not in greater numbers at once: lifting

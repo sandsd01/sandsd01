@@ -9,7 +9,8 @@ export type ResourceNodeKind =
   | "berry_bush"
   | "clay_pit"
   | "iron_vein"
-  | "ancient_stone";
+  | "ancient_stone"
+  | "glow_crystal";
 
 export interface ResourceNodeConfig {
   kind: ResourceNodeKind;
@@ -101,6 +102,18 @@ export const RESOURCE_NODE_CONFIGS: Record<ResourceNodeKind, ResourceNodeConfig>
     // far ring into a quarry with a walk attached rather than a place to go.
     respawnMs: 90_000,
   },
+  // The cave's own material, and the only place it is found. Quick to work
+  // compared with ancient stone because the cost of a crystal is the trip
+  // down and what is waiting in the dark, not the swinging — and because a
+  // cave is rebuilt on every entry, a long respawn would never be waited out.
+  glow_crystal: {
+    kind: "glow_crystal",
+    yieldItemId: "glow_crystal",
+    yield: { min: 1, max: 2 },
+    finalHitBonus: 2,
+    hitsToDeplete: 4,
+    respawnMs: 30_000,
+  },
 };
 
 // Every prop shares one flat-shaded material and carries its colour in vertex
@@ -112,6 +125,31 @@ const PROP_MATERIAL = new THREE.MeshStandardMaterial({
   roughness: 0.85,
   metalness: 0,
 });
+
+/** The one colour in the cave that is not grey. */
+const CRYSTAL_TINT = 0x63d9ff;
+
+/**
+ * Lit props go black in a cave.
+ *
+ * Everything else in the world is `PROP_MATERIAL`, which is fine outdoors
+ * where there is a sun. A crystal is the thing the player came down for and it
+ * sits in a place with almost no light, so it carries its own — emissive, not
+ * merely pale, because a pale surface with nothing shining on it is dark.
+ */
+const GLOW_MATERIAL = new THREE.MeshStandardMaterial({
+  vertexColors: true,
+  flatShading: true,
+  roughness: 0.35,
+  metalness: 0.05,
+  emissive: new THREE.Color(CRYSTAL_TINT),
+  emissiveIntensity: 0.85,
+});
+
+/** Kinds that light themselves. Everything absent here uses `PROP_MATERIAL`. */
+const MATERIAL_OVERRIDES: Partial<Record<ResourceNodeKind, THREE.Material>> = {
+  glow_crystal: GLOW_MATERIAL,
+};
 
 const BARK = 0x7a5638;
 // Foliage sits brighter than it looks: tone mapping pulls mid-greens down, and
@@ -334,6 +372,36 @@ function buildAncientStoneGeometry(rand: () => number): THREE.BufferGeometry {
   return merge(parts);
 }
 
+// A cluster of shards leaning off one another. Tall and thin, with nothing
+// else in the game shaped like it, because the cave is dark and a crystal has
+// to be recognised from its silhouette against the fog before its colour is
+// legible at all.
+function buildGlowCrystalGeometry(rand: () => number): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [];
+  const count = 3 + Math.floor(rand() * 3);
+  for (let i = 0; i < count; i++) {
+    const h = 0.7 + rand() * 1.1;
+    const r = 0.16 + rand() * 0.12;
+    const a = (i / count) * Math.PI * 2 + rand() * 0.6;
+    const d = rand() * 0.34;
+    parts.push(
+      placed(
+        paint(new THREE.ConeGeometry(r, h, 5), varyColor(CRYSTAL_TINT, rand, 0.12)),
+        Math.cos(a) * d,
+        h / 2,
+        Math.sin(a) * d,
+        { rotX: Math.cos(a) * 0.28, rotZ: -Math.sin(a) * 0.28, rotY: rand() * Math.PI },
+      ),
+    );
+  }
+  // A dull rock base, so the shards read as growing out of the floor rather
+  // than as glowing spikes someone dropped there.
+  parts.push(
+    roughen(paint(new THREE.IcosahedronGeometry(0.42, 0), varyColor(0x4a4652, rand, 0.08)), 0.1, rand),
+  );
+  return merge(parts);
+}
+
 const GEOMETRY_BUILDERS: Record<ResourceNodeKind, (rand: () => number) => THREE.BufferGeometry> = {
   tree: buildTreeGeometry,
   rock: buildRockGeometry,
@@ -341,6 +409,7 @@ const GEOMETRY_BUILDERS: Record<ResourceNodeKind, (rand: () => number) => THREE.
   clay_pit: buildClayPitGeometry,
   iron_vein: buildIronVeinGeometry,
   ancient_stone: buildAncientStoneGeometry,
+  glow_crystal: buildGlowCrystalGeometry,
 };
 
 // Which pack model stands in for each resource, where the pack has something
@@ -391,7 +460,10 @@ export class ResourceNode {
     } else {
       // No model for this kind, or the file failed to load: the procedural
       // prop the game shipped with still works.
-      const mesh = new THREE.Mesh(GEOMETRY_BUILDERS[kind](rand), PROP_MATERIAL);
+      const mesh = new THREE.Mesh(
+        GEOMETRY_BUILDERS[kind](rand),
+        MATERIAL_OVERRIDES[kind] ?? PROP_MATERIAL,
+      );
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       this.object = mesh;
