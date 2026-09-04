@@ -133,6 +133,30 @@ export interface GameState {
    * you.
    */
   armour: string | null;
+  /**
+   * Restock timers for the world's caches, keyed by the cache's placed-building
+   * id. **Sparse on purpose**, like `nodes`: a cache with something still in it
+   * has no entry at all, and one appears only once the player has cleared it
+   * out. `restockAtMs` is an absolute position on the `elapsedMs` clock for the
+   * same reason `RaidState` and `NodeSaveState.depletedAtMs` are — the debug
+   * clock can be wound back, and a countdown stored as "days remaining" would
+   * walk backwards with it.
+   */
+  pois: Record<string, PoiSaveState>;
+  /**
+   * Landmarks the player has walked up to, by id.
+   *
+   * The outer ring stands past the fog, so it cannot be seen from home and is
+   * found only by going there. This is what lets the minimap keep a pin on one
+   * afterwards — without it, finding a place a second time would be exactly as
+   * hard as finding it the first, which is the same as not having found it.
+   */
+  discovered: string[];
+}
+
+/** Persisted per-cache restock timer. `restockAtMs` is on the `elapsedMs` clock. */
+export interface PoiSaveState {
+  restockAtMs: number;
 }
 
 /** Persisted per-node progress. `depletedAtMs` is on the `elapsedMs` clock. */
@@ -171,6 +195,8 @@ export function createInitialState(seedInput: string | number = "romestead"): Ga
     equippedSlot: 0,
     containers: {},
     nodes: {},
+    pois: {},
+    discovered: [],
     armour: null,
     raid: { nextRaidAtMs: raidStartAfter(elapsedMs), active: false, wave: 0, endsAtMs: 0, count: 0 },
   };

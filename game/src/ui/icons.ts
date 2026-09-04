@@ -8,10 +8,12 @@ import brickWall from "lucide-static/icons/brick-wall.svg?raw";
 import crosshair from "lucide-static/icons/crosshair.svg?raw";
 import fence from "lucide-static/icons/fence.svg?raw";
 import flame from "lucide-static/icons/flame.svg?raw";
+import footprints from "lucide-static/icons/footprints.svg?raw";
 import hammer from "lucide-static/icons/hammer.svg?raw";
 import gem from "lucide-static/icons/gem.svg?raw";
 import grape from "lucide-static/icons/grape.svg?raw";
 import heart from "lucide-static/icons/heart.svg?raw";
+import landmark from "lucide-static/icons/landmark.svg?raw";
 import layers from "lucide-static/icons/layers.svg?raw";
 import moon from "lucide-static/icons/moon.svg?raw";
 import mountain from "lucide-static/icons/mountain.svg?raw";
@@ -34,9 +36,11 @@ const SOURCES = {
   crosshair,
   fence,
   flame,
+  footprints,
   gem,
   hammer,
   grape,
+  landmark,
   heart,
   layers,
   moon,

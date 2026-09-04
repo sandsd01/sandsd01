@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { getEnemy, type EnemyDef } from "../data/enemies";
 import type { Terrain } from "../world/terrain";
 import { getZone } from "../world/zones";
+import { WORLD_SIZE } from "../world/terrain";
 import { mulberry32 } from "../utils/rng";
 import { events } from "../utils/events";
 import { resolveCollisions, type Collidable } from "../utils/collision";
@@ -189,9 +190,77 @@ export class Enemy {
 // eight (which counts the dying, too) would arrive as two.
 const MAX_ENEMIES = 8;
 const RAID_MAX_ENEMIES = 18;
+/**
+ * How often a wanderer turns up near the homestead, and how much faster that
+ * gets out on the frontier.
+ *
+ * The interval is scaled by distance rather than the count being: a spawner
+ * that dropped three at once out there would read as an ambush the game had
+ * decided on, where a shorter gap reads as a place that simply has more in it.
+ */
 const SPAWN_INTERVAL_MS = 9000;
+const FRONTIER_SPAWN_INTERVAL_MS = 3500;
 const SPAWN_RADIUS_MIN = 30;
 const SPAWN_RADIUS_MAX = 90;
+/**
+ * Where the ground stops being safe, and where it is as dangerous as it gets.
+ *
+ * Matches `FRONTIER_RADIUS` in world/resource-node's scatter — the ring that
+ * holds the only ancient stone in the world is the ring that is worst to stand
+ * in, which is the entire bargain the frontier offers.
+ */
+const DANGER_RADIUS_MIN = 60;
+const DANGER_RADIUS_MAX = 150;
+/**
+ * Share of wanderers that are brutes, at the near and far ends of that range.
+ *
+ * Zero at home is the *distance* term only — the biome floor below still puts
+ * brutes in rough country a short walk from the door, which is what the
+ * original zone rule did and is not something this change set out to soften.
+ */
+const BRUTE_SHARE_HOME = 0;
+const BRUTE_SHARE_FRONTIER = 0.85;
+/**
+ * Rocky and wetland are harder ground to fight across wherever they are, so
+ * they keep a floor under the distance term, and that floor is what stops this
+ * change from quietly making the early game easier: the old rule was "zone
+ * decides", which put brutes a short walk from the door, and softening that
+ * was not what widening the world set out to do.
+ *
+ * Measured over 140 seconds of game time at each end (explorecheck): a ring
+ * around the homestead is mostly rough country, so this floor alone lands
+ * about 43% of the wanderers near home as brutes, against 83% out past 150.
+ */
+const BRUTE_SHARE_ROUGH_BIOME = 0.5;
+
+/**
+ * How exposed a point is, 0 at the homestead and 1 out past the frontier.
+ *
+ * Exported because this is the one number that says what "far" means, and both
+ * the spawn rate and the mix of what spawns have to agree about it.
+ */
+/**
+ * Keeps a spawn point on the map.
+ *
+ * Both spawners now ring the *player*, and a player standing near the edge has
+ * most of that ring hanging over the void: the terrain mesh stops at
+ * ±WORLD_SIZE/2 even though `heightAt` will happily answer for a point past
+ * it, so an unclamped spawn drops a raider onto ground that is not drawn.
+ */
+const EDGE_MARGIN = 4;
+function onMap(v: number): number {
+  const limit = WORLD_SIZE / 2 - EDGE_MARGIN;
+  return THREE.MathUtils.clamp(v, -limit, limit);
+}
+
+export function dangerAt(x: number, z: number): number {
+  const d = Math.hypot(x, z);
+  return THREE.MathUtils.clamp(
+    (d - DANGER_RADIUS_MIN) / (DANGER_RADIUS_MAX - DANGER_RADIUS_MIN),
+    0,
+    1,
+  );
+}
 // A wave lands close enough to reach the player before the night is over, and
 // far enough out that nothing materialises in the middle of the yard.
 const WAVE_RADIUS_MIN = 26;
@@ -220,15 +289,37 @@ export class EnemyManager {
     return this.enemies.filter((e) => !e.dying);
   }
 
-  private spawnOne(): void {
+  /**
+   * Drops one wanderer on a ring around the **player**.
+   *
+   * It used to be a ring around the world origin, which was survivable on a
+   * 200-unit map and is not on a 400-unit one: a player standing at the far
+   * edge would have every wanderer in the game spawn back at the homestead and
+   * never reach them, so walking away from spawn was the safest thing you
+   * could do — exactly backwards from the world this is meant to be.
+   */
+  private spawnOne(playerX: number, playerZ: number): void {
     const angle = this.rand() * Math.PI * 2;
     const radius = SPAWN_RADIUS_MIN + this.rand() * (SPAWN_RADIUS_MAX - SPAWN_RADIUS_MIN);
-    const x = Math.cos(angle) * radius;
-    const z = Math.sin(angle) * radius;
-    // Rocky/wetland biomes are tougher terrain to fight through, so they
-    // spawn the stronger Brute instead of a regular Zombie.
+    const x = onMap(playerX + Math.cos(angle) * radius);
+    const z = onMap(playerZ + Math.sin(angle) * radius);
+    // Two things decide what turns up: how far out it is, and what kind of
+    // ground it is. Distance is the stronger of the two and it is the one the
+    // player can see themselves making — the biome rule stays because rocky
+    // and wetland are harder ground to fight across wherever they are.
+    //
+    // Note what is *not* here: no enemy gets extra health or damage for being
+    // far from home. A brute is a brute at any radius. The frontier is harder
+    // because more of what walks out of it are brutes, which the player can
+    // read off the silhouettes — not because the game quietly rewrote the
+    // numbers behind the same model.
     const zone = getZone(x, z);
-    this.spawnAt(getEnemy(zone === "rocky" || zone === "wetland" ? "brute" : "zombie"), x, z);
+    const danger = dangerAt(x, z);
+    let bruteChance = BRUTE_SHARE_HOME + (BRUTE_SHARE_FRONTIER - BRUTE_SHARE_HOME) * danger;
+    if (zone === "rocky" || zone === "wetland") {
+      bruteChance = Math.max(bruteChance, BRUTE_SHARE_ROUGH_BIOME);
+    }
+    this.spawnAt(getEnemy(this.rand() < bruteChance ? "brute" : "zombie"), x, z);
   }
 
   private spawnAt(def: EnemyDef, x: number, z: number): Enemy {
@@ -277,8 +368,8 @@ export class EnemyManager {
       const def = getEnemy(i < brutes ? "brute" : "zombie");
       const enemy = this.spawnAt(
         def,
-        aroundX + Math.cos(angle) * radius,
-        aroundZ + Math.sin(angle) * radius,
+        onMap(aroundX + Math.cos(angle) * radius),
+        onMap(aroundZ + Math.sin(angle) * radius),
       );
       // Reaches all the way back to the player from the spawn ring, so a wave
       // closes in rather than milling about where it landed.
@@ -317,13 +408,18 @@ export class EnemyManager {
   ): void {
     // The trickle is suspended for the night: left running it would spend the
     // raid ceiling on wanderers and thin out the waves themselves.
-    if (
-      !this.raiding &&
-      nowMs - this.lastSpawnMs > SPAWN_INTERVAL_MS &&
-      this.enemies.length < MAX_ENEMIES
-    ) {
+    const interval = THREE.MathUtils.lerp(
+      SPAWN_INTERVAL_MS,
+      FRONTIER_SPAWN_INTERVAL_MS,
+      dangerAt(playerPos.x, playerPos.z),
+    );
+    if (!this.raiding && nowMs - this.lastSpawnMs > interval && this.enemies.length < MAX_ENEMIES) {
       this.lastSpawnMs = nowMs;
-      this.spawnOne();
+      // The ceiling of eight holds wherever the player stands. Out on the
+      // frontier they arrive faster, not in greater numbers at once: lifting
+      // the cap as well would turn a long walk into an unwinnable one, and the
+      // cap is also what keeps the frame budget honest.
+      this.spawnOne(playerPos.x, playerPos.z);
     }
 
     for (const enemy of this.enemies) {

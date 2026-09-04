@@ -14,6 +14,9 @@ const REDRAW_INTERVAL_MS = 120;
 // The ground is sampled on a coarse grid rather than per pixel — biome edges
 // are soft and this runs on the CPU.
 const GROUND_STEP = 12;
+// How far inside the rim an off-map pin sits, so it is drawn whole rather than
+// clipped in half by the circular mask.
+const EDGE_INSET = 7;
 
 // Red is reserved for enemies. Berries are crimson in the world, but on a map
 // dense with bushes a field of red dots reads as being surrounded — so they
@@ -24,6 +27,7 @@ const NODE_COLORS: Record<string, string> = {
   berry_bush: "#8e4fa8",
   clay_pit: "#9c6642",
   iron_vein: "#c87a44",
+  ancient_stone: "#c9c3dc",
 };
 
 // North-up, player-centred. North-up rather than rotating the whole map with
@@ -55,7 +59,7 @@ export class Minimap {
     nodes: ResourceNode[],
     enemies: Enemy[],
     buildingMesh: (id: string) => THREE.Object3D | undefined,
-    landmarks: { x: number; z: number }[] = [],
+    landmarks: { id: string; x: number; z: number }[] = [],
   ): void {
     const ctx = this.ctx;
     if (!ctx) return;
@@ -112,17 +116,51 @@ export class Minimap {
     // outlined marker as well as the only red.
     // Landmarks get an outlined triangle: a shape nothing else on the map
     // uses, so which blip is which never depends on telling two tints apart.
+    //
+    // A landmark the player has walked up to is never dropped, however far
+    // behind them it is: it is pinned to the rim of the map in the direction
+    // it lies, as a hollow diamond. The outer ring stands past the fog, so
+    // without this, finding one a second time would be exactly as hard as
+    // finding it the first — and the pin has to be a different *shape* from
+    // the in-range triangle, not a different tint, or "there" and "that way"
+    // would be the same marker.
     for (const landmark of landmarks) {
-      const p = toMap(landmark.x, landmark.z);
+      const dx = landmark.x - px;
+      const dz = landmark.z - pz;
+      const distance = Math.hypot(dx, dz);
+      const inRange = distance <= RANGE;
+      if (!inRange && !state.discovered.includes(landmark.id)) continue;
+
+      if (inRange) {
+        const p = toMap(landmark.x, landmark.z);
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y - 5);
+        ctx.lineTo(p.x + 4.5, p.y + 3.5);
+        ctx.lineTo(p.x - 4.5, p.y + 3.5);
+        ctx.closePath();
+        ctx.fillStyle = "#f4eee2";
+        ctx.fill();
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = "rgba(20, 17, 14, 0.8)";
+        ctx.stroke();
+        continue;
+      }
+
+      // Clamped to just inside the rim, so the pin sits on the map rather than
+      // half off the clipped edge.
+      const edge = half - EDGE_INSET;
+      const cx = half + (dx / distance) * edge;
+      const cy = half + (dz / distance) * edge;
       ctx.beginPath();
-      ctx.moveTo(p.x, p.y - 5);
-      ctx.lineTo(p.x + 4.5, p.y + 3.5);
-      ctx.lineTo(p.x - 4.5, p.y + 3.5);
+      ctx.moveTo(cx, cy - 4.5);
+      ctx.lineTo(cx + 4.5, cy);
+      ctx.lineTo(cx, cy + 4.5);
+      ctx.lineTo(cx - 4.5, cy);
       ctx.closePath();
-      ctx.fillStyle = "#f4eee2";
+      ctx.fillStyle = "rgba(20, 17, 14, 0.55)";
       ctx.fill();
-      ctx.lineWidth = 1;
-      ctx.strokeStyle = "rgba(20, 17, 14, 0.8)";
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = "#f4eee2";
       ctx.stroke();
     }
 

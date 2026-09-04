@@ -167,6 +167,31 @@ export const BUILDINGS: Record<string, BuildingDef> = {
     isPlot: false,
     isDoor: true,
   },
+  // What a journey to the frontier buys. Brick tops out at 300, which a raid
+  // in the teens walks through: this is the piece that lets a base keep pace
+  // with a schedule that escalates forever. Deliberately a *wall* and not a
+  // third suit of armour — the player's own numbers stopped climbing when
+  // iron armour was crafted, and the homestead is what grows after that.
+  reinforced_wall: {
+    id: "reinforced_wall",
+    category: "structure",
+    name: "Reinforced Wall",
+    footprintCells: [{ x: 0, z: 0 }],
+    cost: [
+      { itemId: "ancient_stone", qty: 4 },
+      { itemId: "brick", qty: 2 },
+    ],
+    height: 2.6,
+    maxHealth: 700,
+    // Lighter than the ancient stone node it is quarried from (0x6d6a78), not
+    // the same value: rendered at the node's own colour a wall of these came
+    // out as a flat near-black slab with none of its posts or rail visible —
+    // the most expensive piece in the game reading as a hole in the world.
+    // Its posts take the darker node colour instead, so the piece has internal
+    // contrast the way the brick wall does. Seen, not reasoned about.
+    color: 0x9a94ad,
+    isPlot: false,
+  },
   // Low enough to be walked over rather than around — see WALKABLE_HEIGHT in
   // systems/building.ts. That is the whole design: raiders come straight at
   // the player and take whatever is underfoot on the way.
@@ -182,6 +207,24 @@ export const BUILDINGS: Record<string, BuildingDef> = {
     height: 0.2,
     maxHealth: 60,
     color: 0x7c7266,
+    isPlot: false,
+  },
+  // The spike trap wears a wave down; this one takes pieces out of it. Same
+  // rule as the spike trap — it never wears out — so the cost is the frontier
+  // trip, paid once, rather than a consumable that turns every raid into a
+  // restocking errand.
+  heavy_trap: {
+    id: "heavy_trap",
+    category: "structure",
+    name: "Heavy Trap",
+    footprintCells: [{ x: 0, z: 0 }],
+    cost: [
+      { itemId: "ancient_stone", qty: 3 },
+      { itemId: "iron_ingot", qty: 1 },
+    ],
+    height: 0.2,
+    maxHealth: 100,
+    color: 0x5c5a68,
     isPlot: false,
   },
   barrel: {

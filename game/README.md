@@ -275,16 +275,73 @@ all — nothing to steer by and nowhere to aim for.
   noise before the zone test, so a biome boundary is a meandering coast rather
   than a ruled line. The spawn clearing stays a true circle, because building
   rules depend on it.
-- **Three landmarks, one per biome** — the Bleached Giant, the Spire and the
-  Standing Stones — stand 65–75 units out and well above the treeline, each
-  differing from its surroundings in *shape and value*, not only in size. The
-  existing fog (`Fog(0x9fd0e8, 95, 250)`) gives them atmospheric perspective
-  for free. They are checked by looking at renders from spawn, not by reading
-  the diff: the Giant was widened after a render showed it reading as just
-  another trunk.
+- **Six landmarks in two rings, two per biome.** The near ring — the Bleached
+  Giant, the Spire and the Standing Stones — stands 58–96 units out and well
+  above the treeline, each differing from its surroundings in *shape and
+  value*, not only in size. The existing fog (`Fog(0x9fd0e8, 95, 250)`) gives
+  them atmospheric perspective for free. They are checked by looking at renders
+  from spawn, not by reading the diff: the Giant was widened after a render
+  showed it reading as just another trunk.
+- **The far ring** — the Ashen Grove, the Fallen Obelisk and the Drowned
+  Pillar — stands 130–175 units out, past the fog and so **invisible from
+  home**. That is deliberate: the near ring is what you steer by, the far ring
+  is what you find. The fog was left exactly where it was, because it is the
+  horizon and not the size of the map.
 - **Each has a stocked cache at its foot**, so arriving pays for the walk and
-  the barrel system has a purpose from the first minute. Loot one and it stays
-  empty — the caches never refill.
+  the barrel system has a purpose from the first minute. A far cache is worth
+  substantially more than a near one and is the only cache that holds ancient
+  stone. **They refill** ~2 in-game days after being emptied
+  (`GameState.pois`, an absolute time on the `elapsedMs` clock like
+  `RaidState`), and never while the player is standing within 40 units —
+  watching a barrel fill itself is the moment it stops being somewhere
+  abandoned and becomes a spawner. A cache with anything in it has no timer at
+  all, so a barrel the player has adopted as their own storage is never topped
+  up on top of what they left there.
+- **What you have walked up to is remembered** (`GameState.discovered`), and
+  the minimap keeps a hollow-diamond pin for it clamped to the rim of the map
+  once it is out of the 70-unit range — a different *shape* from the in-range
+  triangle, so "there" and "that way" are never the same marker. Without it,
+  finding a far landmark a second time would be exactly as hard as the first.
+
+## The frontier
+
+The world is **400 × 400** (it was 200), with the terrain mesh at 192 segments
+rather than 128 so the quad stays ~2.1 units and the hills near the homestead
+do not come out coarser as a side effect of somewhere far away getting bigger.
+Resource scatter is stated as **attempts per square unit** rather than a flat
+count, so four times the area means four times the trees rather than the same
+trees a quarter as thick — and the rejection test is bucketed by grid cell,
+because the old O(n²) scan was invisible at 900 attempts and is not at 3,600.
+
+The reinforced wall gets its own geometry rather than the generic wall panel,
+and the reason is worth recording because it is invisible in a diff. Rendered
+as a plain panel beside a brick wall in the same light, the *lit* faces came
+out near equal (luminance 113 against brick's 121) and the *shaded* faces did
+not — 70 against 105. Warm saturated brick keeps its identity in the scene's
+cool ambient shade; a desaturated cool grey has none left to keep, so the most
+expensive piece in the game read as a hole cut out of the world. It carries the
+material by **pattern** now — the pale inlaid bands and capstone that the
+ancient stone node wears — which survives any light the scene puts on it and
+says "the same stone you quarried" rather than "a different grey".
+
+- **`ancient_stone` spawns only at radius ≥ 120** (`FRONTIER_RADIUS`), in every
+  biome, and nowhere closer. It is the one material distance buys, and it is
+  spent on the *base*: `reinforced_wall` (700 health, against brick's 300) and
+  `heavy_trap` (22 damage a bite, against the spike trap's 6). Deliberately not
+  a third suit of armour — the player's own numbers stop climbing at iron
+  armour by design, and the homestead is what grows after that.
+- **Danger rises with distance.** Wandering enemies now spawn on a ring around
+  the **player** rather than around the world origin. On a 400-unit map the old
+  rule made walking away from spawn the safest thing you could do: every
+  wanderer in the game would appear back at the homestead and never reach you.
+  The interval shortens from 9s near home to 3.5s out past 150 units, and the
+  share of brutes climbs from none to about two thirds. The eight-wanderer
+  ceiling holds everywhere.
+- **No enemy is quietly buffed for being far out.** A brute has the same health
+  and damage at radius 10 as at radius 190. The frontier is harder because more
+  of what walks out of it are brutes — which the player can read off the
+  silhouettes — not because the game rewrote the numbers behind the same model.
+  Same principle the raid schedule follows.
 
 ## Fighting and gathering pay out
 

@@ -21,11 +21,13 @@ const REQUIRED_TOOL: Partial<Record<string, ToolKind>> = {
   tree: "axe",
   rock: "pickaxe",
   iron_vein: "pickaxe",
+  ancient_stone: "pickaxe",
 };
 const GATHER_VERB: Record<string, string> = {
   tree: "chop",
   rock: "mine",
   iron_vein: "mine",
+  ancient_stone: "mine",
   berry_bush: "pick",
   clay_pit: "dig",
 };

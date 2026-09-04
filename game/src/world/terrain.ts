@@ -2,13 +2,21 @@ import * as THREE from "three";
 import { ValueNoise2D } from "./noise";
 import { getZone, initZones, ZONE_GROUND_COLOR } from "./zones";
 
-// MVP world is a single fixed-size heightmap plane (not infinite/streamed).
-export const WORLD_SIZE = 200;
+// A single fixed-size heightmap plane (not infinite/streamed).
+//
+// 400 rather than the 200 it shipped with. At 200 the far edge was a couple
+// of minutes' walk from the door, which meant "out there" was somewhere you
+// had already been by the end of the first day and the map had no room for a
+// place you have not seen yet.
+export const WORLD_SIZE = 400;
 export const OPEN_RADIUS = 22; // flattened build/farm zone around spawn
-// 128 segments over 200 units is a ~1.6-unit quad: fine enough for the
-// hills and the slope/zone colouring, without spending 80k triangles on
-// ground the fog swallows anyway.
-const SEGMENTS = 128;
+// Segments scale with the world, not with the triangle budget: 128 quads over
+// 200 units was a ~1.6-unit quad, and keeping that count on a world twice as
+// wide would have doubled the quad to 3.1 units — every hill within sight of
+// the homestead would have come out visibly coarser as a side effect of
+// somewhere far away getting bigger. 192 holds the quad at ~2.1 units, and the
+// cost was measured (see the PR) rather than assumed.
+const SEGMENTS = 192;
 const HEIGHT_SCALE = 6;
 // How far the wetland basin sits below the rest of the world.
 const WETLAND_DEPTH = 1.2;

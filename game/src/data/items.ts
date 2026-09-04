@@ -90,6 +90,18 @@ export const ITEMS: Record<string, ItemDef> = {
     stackSize: 99,
     color: 0xcfc3a8,
   },
+  // The frontier material. Quarried only past FRONTIER_RADIUS, and spent only
+  // on the base: it buys a wall that holds a raid the brick one no longer does
+  // and a trap that actually kills, rather than a third tier of armour. The
+  // shape the game has settled into is that the player stops improving and the
+  // homestead keeps going, so what a long journey pays for is the homestead.
+  ancient_stone: {
+    id: "ancient_stone",
+    name: "Ancient Stone",
+    category: "resource",
+    stackSize: 99,
+    color: 0x8d88a0,
+  },
   bone_club: { id: "bone_club", name: "Bone Club", category: "tool", stackSize: 1, color: 0xdcd3b8 },
   broth: { id: "broth", name: "Broth", category: "crop", stackSize: 99, color: 0xb5793c, heals: 25 },
 };

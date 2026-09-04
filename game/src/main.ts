@@ -19,14 +19,14 @@ import { InputManager } from "./input/input-manager";
 import { PlayerController, PLAYER_RADIUS } from "./player/player-controller";
 import { damagePlayer, isPlayerDead, respawnPlayer } from "./player/player-state";
 
-import { Terrain } from "./world/terrain";
+import { Terrain, WORLD_SIZE } from "./world/terrain";
 import { getZone } from "./world/zones";
 import { scatterResourceNodes, addNodesToScene } from "./world/world-objects";
 import { createGrass } from "./world/grass";
 import { Water, WATER_LEVEL } from "./world/water";
 import { loadModels } from "./world/models";
 import { createLandmarks } from "./world/landmarks";
-import { createPointsOfInterest } from "./world/pois";
+import { createPointsOfInterest, updatePointsOfInterest } from "./world/pois";
 import { createComposer } from "./core/postprocessing";
 
 import {
@@ -41,7 +41,7 @@ import { Targeting, type Target } from "./systems/targeting";
 import { TargetOutline } from "./world/target-outline";
 import { addItem, consumeItem, hasQty, removeItem } from "./systems/inventory";
 import { getItem } from "./data/items";
-import { getBuilding } from "./data/buildings";
+import { BUILDINGS, getBuilding } from "./data/buildings";
 import { RECIPES } from "./data/recipes";
 import {
   assignFromInventory,
@@ -174,7 +174,7 @@ const composer = createComposer(renderer, scene, camera.camera);
 
 // Landmarks first: the caches below are placed relative to them.
 const landmarks = createLandmarks(scene, terrain, state.seed, models);
-createPointsOfInterest(state, landmarks, state.seed);
+const poiSites = createPointsOfInterest(state, landmarks, state.seed);
 
 const buildingSystem = new BuildingSystem(scene, terrain, state, models);
 const farmingSystem = new FarmingSystem(scene, terrain, state);
@@ -826,6 +826,11 @@ const loop = new GameLoop((dt) => {
   else targetOutline.hide();
   hud.setCrosshairState(crosshairStateFor(target));
 
+  // Restock timers and landmark discovery. Cheap — a handful of distance
+  // checks over six sites — so it runs with everything else rather than on a
+  // timer of its own.
+  updatePointsOfInterest(state, poiSites, currentNowMs, state.player.x, state.player.z);
+
   minimap.update(
     currentNowMs,
     state,
@@ -926,6 +931,14 @@ declare global {
       repairBuilding: (placedId: string) => boolean;
       enemyAttackAt: (x: number, z: number, damage: number) => boolean;
       spawnEnemyAt: (enemyId: string, x: number, z: number) => string;
+      clearEnemies: () => number;
+      getBuildingDef: (buildingId: string) => {
+        id: string;
+        name: string;
+        maxHealth: number;
+        height: number;
+        cost: { itemId: string; qty: number }[];
+      } | null;
       getArmour: () => string | null;
       wearArmour: (itemId: string) => boolean;
       takeOffArmour: () => string | null;
@@ -997,10 +1010,19 @@ declare global {
         id: string;
         name: string;
         zone: string;
+        far: boolean;
         x: number;
         z: number;
         height: number;
       }[];
+      getPois: () => {
+        id: string;
+        landmarkId: string;
+        far: boolean;
+        restockAtMs: number | null;
+      }[];
+      getDiscovered: () => string[];
+      getWorldSize: () => number;
       getZoneAt: (x: number, z: number) => string;
     };
   }
@@ -1196,6 +1218,28 @@ window.__gameDebug = {
   // which knows nothing about what was inside.
   enemyAttackAt: (x, z, damage) => attackBuildingAt(x, z, damage),
   spawnEnemyAt: (enemyId, x, z) => enemyManager.spawnEnemyAt(enemyId, x, z),
+  // Sweeps the field so a spawn test measures the *next* batch rather than
+  // whatever was already standing about. Goes through removeEnemy, so loot and
+  // the kill event fire exactly as they would in play.
+  clearEnemies: () => {
+    const living = enemyManager.getEnemies();
+    for (const enemy of living) enemyManager.removeEnemy(enemy.id, clock.now());
+    return living.length;
+  },
+  // The piece table as data. A test comparing what a wall withstands should
+  // read the game's own number rather than restate it and go stale the first
+  // time it is tuned.
+  getBuildingDef: (buildingId) => {
+    const def = BUILDINGS[buildingId];
+    if (!def) return null;
+    return {
+      id: def.id,
+      name: def.name,
+      maxHealth: def.maxHealth,
+      height: def.height,
+      cost: def.cost.map((c) => ({ ...c })),
+    };
+  },
   getArmour: () => state.armour,
   wearArmour: (itemId) => wearArmour(state, itemId),
   takeOffArmour: () => takeOffArmour(state),
@@ -1307,10 +1351,23 @@ window.__gameDebug = {
       id: l.id,
       name: l.name,
       zone: l.zone,
+      far: l.far,
       x: Number(l.x.toFixed(1)),
       z: Number(l.z.toFixed(1)),
       height: Number(l.height.toFixed(2)),
     })),
+  // Which caches exist and when each is due to refill. A restock timer has no
+  // DOM of its own, so without this a test could only observe it by standing
+  // in the world for two in-game days and looking in a barrel.
+  getPois: () =>
+    poiSites.map((site) => ({
+      id: site.id,
+      landmarkId: site.landmark.id,
+      far: site.landmark.far,
+      restockAtMs: state.pois[site.id]?.restockAtMs ?? null,
+    })),
+  getDiscovered: () => [...state.discovered],
+  getWorldSize: () => WORLD_SIZE,
   getZoneAt: (x, z) => getZone(x, z),
   // Lighting/shadow state, for checking that a visual change actually took
   // effect rather than inferring it from a screenshot.

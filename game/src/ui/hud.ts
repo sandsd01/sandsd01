@@ -23,6 +23,9 @@ const TRACKED_ITEMS = [
   "hide",
   // Ammunition you cannot see the count of is not ammunition.
   "arrow",
+  // The frontier material, and the only one whose count tells the player
+  // whether the trip they are planning is worth making.
+  "ancient_stone",
 ];
 // Each tracked resource gets a glyph as well as a colour: the icon says what
 // it is, the tint only reinforces it.
@@ -36,8 +39,16 @@ const ITEM_ICONS: Record<string, IconName> = {
   wheat_seed: "sprout",
   wheat: "wheat",
   bone: "bone",
-  hide: "layers",
+  // Not "layers" — clay already has it, and clay and hide are both brown, so
+  // the row was showing two chips a player could not tell apart at all. Found
+  // by a check that no two chips in the row share a glyph, added after the
+  // same mistake was made twice.
+  hide: "footprints",
   arrow: "navigation",
+  // NOT "gem" — that is iron ore's, and two materials sharing one glyph is
+  // the same as neither having one. The columned-ruin shape also says where
+  // this came from: the frontier, not a vein near the door.
+  ancient_stone: "landmark",
 };
 const ITEM_COLORS: Record<string, number> = {
   wood: 0x8b5a2b,
@@ -51,6 +62,7 @@ const ITEM_COLORS: Record<string, number> = {
   bone: 0xe6e0cc,
   hide: 0x7a5238,
   arrow: 0xcfc3a8,
+  ancient_stone: 0x8d88a0,
 };
 
 const SVG_NS = "http://www.w3.org/2000/svg";
