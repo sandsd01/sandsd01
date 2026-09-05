@@ -114,7 +114,7 @@ export class Enemy {
     nowMs: number,
     playerPos: THREE.Vector3,
     terrain: BoundedGround,
-    onAttackPlayer: (damage: number) => void,
+    onAttackPlayer: (damage: number, attacker: Enemy) => void,
     collidables: Collidable[] = [],
     onAttackBuilding: (x: number, z: number, damage: number) => boolean = () => false,
   ): void {
@@ -178,7 +178,11 @@ export class Enemy {
         this.aiState = "chase";
       } else if (nowMs - this.lastAttackMs >= this.def.attackCooldownMs) {
         this.lastAttackMs = nowMs;
-        onAttackPlayer(this.def.damage);
+        // The attacker goes with the damage. It was always in scope here and
+        // was discarded at every layer above, which meant nothing downstream
+        // could answer "who hit me" — the question a reflecting cloak is
+        // entirely made of.
+        onAttackPlayer(this.def.damage, this);
       }
     }
 
@@ -502,7 +506,7 @@ export class EnemyManager {
     dt: number,
     nowMs: number,
     playerPos: THREE.Vector3,
-    onAttackPlayer: (damage: number) => void,
+    onAttackPlayer: (damage: number, attacker: Enemy) => void,
     collidables: Collidable[] = [],
     onAttackBuilding: (x: number, z: number, damage: number) => boolean = () => false,
   ): void {

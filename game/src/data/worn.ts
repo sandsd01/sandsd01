@@ -1,0 +1,147 @@
+import type { GameState } from "../state/game-state";
+
+/**
+ * What can be worn, where, and what wearing it does.
+ *
+ * This replaces the single `state.armour` field and the `ARMOUR` table it was
+ * keyed against. The reason for three slots now, when one was deliberately
+ * chosen before (the old comment on `GameState.armour` argued that "three
+ * slots is three times the UI for depth the player cannot read off the
+ * screen"), is that the depth is now readable: a slot no longer holds a
+ * percentage, it holds an *ability*. "I am wearing the cloak that burns what
+ * hits me" is a thing a player can say; "I am wearing 40% instead of 20%" was
+ * not.
+ *
+ * The table stays keyed by item id and flat, exactly like `ARMOUR` and
+ * `WEAPON_DAMAGE` before it: a new piece is a row here, and nothing else.
+ */
+export type WornSlot = "armour" | "back" | "trinket";
+
+/** Order is the order the character sheet lists them in. */
+export const WORN_SLOTS: WornSlot[] = ["armour", "back", "trinket"];
+
+export const SLOT_NAMES: Record<WornSlot, string> = {
+  armour: "Armour",
+  back: "Back",
+  trinket: "Trinket",
+};
+
+export interface WornDef {
+  slot: WornSlot;
+  /** Fraction of incoming damage absorbed, 0..1. Armour only. */
+  reduction?: number;
+  /**
+   * Fraction of a landed hit paid back to whoever landed it.
+   *
+   * Applied to the damage that actually got through, not to what was swung —
+   * so armour and Vigour reduce what you reflect as well as what you take.
+   * That is the honest reading of "it burns what touches you".
+   */
+  thorns?: number;
+  /** Multiplier on the bow's draw time. Lower is faster. */
+  drawScale?: number;
+  /**
+   * How far a gathering swing reaches past the node actually struck, hitting
+   * others of the same kind. 0 or absent means only the aimed node.
+   */
+  gatherReach?: number;
+  /** One line for the character sheet. Says what it does, not what it is. */
+  blurb: string;
+}
+
+export const WORN: Record<string, WornDef> = {
+  // The two that already existed, moved across unchanged.
+  hide_armour: { slot: "armour", reduction: 0.2, blurb: "Takes a fifth off every hit" },
+  iron_armour: { slot: "armour", reduction: 0.4, blurb: "Takes a bit under half off every hit" },
+
+  // The rare tier. Found, never crafted — see `data/loot.ts`.
+  ember_cloak: {
+    slot: "back",
+    thorns: 0.6,
+    blurb: "Whatever hits you takes most of it back",
+  },
+  quickdraw_ring: {
+    slot: "trinket",
+    drawScale: 0.45,
+    blurb: "Draws a bow in well under half the time",
+  },
+  gatherers_charm: {
+    slot: "trinket",
+    gatherReach: 4.5,
+    blurb: "One swing works every node of that kind nearby",
+  },
+};
+
+export function slotFor(itemId: string): WornSlot | null {
+  return WORN[itemId]?.slot ?? null;
+}
+
+/** Whether this item is worn rather than held. Replaces `isArmour`. */
+export function isWearable(itemId: string): boolean {
+  return itemId in WORN;
+}
+
+export function wornInSlot(state: GameState, slot: WornSlot): string | null {
+  return state.worn?.[slot] ?? null;
+}
+
+/** Whether this exact piece is on the body right now. */
+export function hasWorn(state: GameState, itemId: string): boolean {
+  const slot = slotFor(itemId);
+  return slot !== null && wornInSlot(state, slot) === itemId;
+}
+
+/**
+ * The definition of whatever is worn in a slot, or null.
+ *
+ * Every ability below reads through this rather than checking for its own item
+ * id by name — so a second cloak with a different `thorns` value is a row in
+ * the table and not a branch in the combat code.
+ */
+export function defInSlot(state: GameState, slot: WornSlot): WornDef | null {
+  const id = wornInSlot(state, slot);
+  return id ? (WORN[id] ?? null) : null;
+}
+
+/** Everyone starts with empty hands and an empty back. */
+export function initialWorn(): Record<WornSlot, string | null> {
+  return { armour: null, back: null, trinket: null };
+}
+
+// ---------------------------------------------------------------------------
+// What the worn pieces are worth
+// ---------------------------------------------------------------------------
+//
+// Same shape as `data/stats.ts`: one `(state) => number` per effect, read at
+// the single chokepoint that already decides that number. A multiplier spread
+// across call sites is a multiplier one of them will forget.
+
+/**
+ * How much of a hit the armour slot absorbs, or 0 when nothing is worn.
+ *
+ * This used to live in `data/armour.ts` beside an `ARMOUR` table holding the
+ * same two rows this file now holds. Keeping both would have been two tables
+ * describing one thing that happened to agree — the same shape of bug as the
+ * loot hook that silently dropped Fortune's scale, and just as invisible.
+ */
+export function reductionFor(state: GameState): number {
+  return defInSlot(state, "armour")?.reduction ?? 0;
+}
+
+/** Fraction of a landed hit reflected back at whoever landed it. */
+export function thornsFraction(state: GameState): number {
+  return defInSlot(state, "back")?.thorns ?? 0;
+}
+
+/** Bow draw time, as a multiplier. Lower is faster. */
+export function drawScale(state: GameState): number {
+  return defInSlot(state, "trinket")?.drawScale ?? 1;
+}
+
+/**
+ * How far a gathering swing spreads to nodes of the same kind, in world units.
+ * Zero means the aimed node and nothing else, which is the default behaviour.
+ */
+export function gatherReach(state: GameState): number {
+  return defInSlot(state, "trinket")?.gatherReach ?? 0;
+}

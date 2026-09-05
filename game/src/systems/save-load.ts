@@ -5,6 +5,7 @@ import { events } from "../utils/events";
 import { raidStartAfter } from "./day-night";
 import { START_LEVEL } from "../data/levels";
 import { STAT_IDS, initialStats } from "../data/stats";
+import { WORN_SLOTS, initialWorn } from "../data/worn";
 import { recomputeMaxHealth } from "./progression";
 
 const STORAGE_KEY = "romestead-save-v1";
@@ -132,8 +133,25 @@ function backfillDefaults(state: GameState): void {
   recomputeMaxHealth(state);
   state.player.health = Math.min(state.player.health, state.player.maxHealth);
 
-  // Nothing was worn before there was anything to wear.
-  if (typeof state.armour !== "string") state.armour = null;
+  // Worn gear. This was a single `armour: string | null` field, so a save from
+  // before this migration carries the old shape and has to be moved across
+  // rather than discarded — losing the iron armour someone spent an afternoon
+  // forging is not an acceptable cost of adding two slots.
+  const legacy = (state as unknown as { armour?: unknown }).armour;
+  if (!state.worn || typeof state.worn !== "object") state.worn = initialWorn();
+  // Per slot, not on the record as a whole — the lesson `raid.count` taught
+  // above: a whole-object guard passes a save that has the record but lacks a
+  // slot added later, and then `state.worn[slot]` is undefined rather than null.
+  for (const slot of WORN_SLOTS) {
+    if (typeof state.worn[slot] !== "string") state.worn[slot] = null;
+  }
+  if (typeof legacy === "string" && !state.worn.armour) {
+    state.worn.armour = legacy;
+  }
+  // Deleted rather than left alongside: two fields describing what is on the
+  // body is how they drift apart, and the next reader has no way to tell which
+  // one is true.
+  delete (state as unknown as { armour?: unknown }).armour;
 
   // A save written before the hotbar existed comes back with none. Fill it
   // from what they are already carrying rather than handing them an empty bar

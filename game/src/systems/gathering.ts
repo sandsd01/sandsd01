@@ -4,6 +4,7 @@ import type { Target } from "./targeting";
 import { addItem } from "./inventory";
 import { heldToolSpeed, heldYieldBonus, TOOL_KIND_NAMES, type ToolKind } from "../data/tools";
 import { bonusYieldChance, gatherSpeedScale } from "../data/stats";
+import { gatherReach } from "../data/worn";
 import { indefinite } from "../utils/text";
 import { events } from "../utils/events";
 
@@ -95,11 +96,42 @@ export function canGather(state: GameState, node: ResourceNode | null): boolean 
   return !kind || heldToolSpeed(state, kind) !== null;
 }
 
+/**
+ * Nodes a single swing also works, given what is on the trinket slot.
+ *
+ * Same kind only, and within the charm's reach of the node actually struck —
+ * not of the player. Swinging at a tree and coming away with stone would read
+ * as a bug however generous it was, and measuring from the struck node is what
+ * makes "that clump of trees" the unit rather than "everything around me".
+ *
+ * Returns an empty list when nothing is worn, which is the ordinary case and
+ * the reason this costs nothing when it does not apply.
+ */
+export function neighboursFor(
+  state: GameState,
+  node: ResourceNode,
+  candidates: ResourceNode[],
+): ResourceNode[] {
+  const reach = gatherReach(state);
+  if (reach <= 0) return [];
+  return candidates.filter(
+    (other) =>
+      other !== node &&
+      !other.depleted &&
+      other.config.kind === node.config.kind &&
+      Math.hypot(
+        other.object.position.x - node.object.position.x,
+        other.object.position.z - node.object.position.z,
+      ) <= reach,
+  );
+}
+
 export function tryGather(
   state: GameState,
   node: ResourceNode | null,
   nowMs: number,
   rand: () => number,
+  neighbours: ResourceNode[] = [],
 ): void {
   if (!node) return;
 
@@ -116,7 +148,8 @@ export function tryGather(
   // quietly improving berry picking.
   // The tool's bonus needs the right tool; Craft's does not, for the same
   // reason as the timing above.
-  const result = node.hit(nowMs, rand, (kind ? heldYieldBonus(state, kind) : 0) + bonusYieldChance(state));
+  const yieldChance = (kind ? heldYieldBonus(state, kind) : 0) + bonusYieldChance(state);
+  const result = node.hit(nowMs, rand, yieldChance);
   if (!result) return;
   addItem(state, result.itemId, result.qty);
   if (result.bonus) addItem(state, result.bonus.itemId, result.bonus.qty);
@@ -126,4 +159,28 @@ export function tryGather(
     kind: node.config.kind,
     finalHit: result.finalHit,
   });
+
+  // The charm's extra nodes, each taking a full swing of its own. They roll
+  // their own yield rather than copying the first node's: two trees felled
+  // together should pay what two trees pay, and sharing one roll would make
+  // the charm a way to get the same wood from more nodes.
+  //
+  // Guarded by the same tool check, not just the aimed node's — the kinds are
+  // identical by construction, so this is belt and braces rather than a real
+  // second case, and it stays correct if `neighboursFor` ever loosens.
+  for (const other of neighbours) {
+    if (other.depleted) continue;
+    const otherKind = REQUIRED_TOOL[other.config.kind];
+    if (otherKind && heldToolSpeed(state, otherKind) === null) continue;
+    const extra = other.hit(nowMs, rand, yieldChance);
+    if (!extra) continue;
+    addItem(state, extra.itemId, extra.qty);
+    if (extra.bonus) addItem(state, extra.bonus.itemId, extra.bonus.qty);
+    events.emit("resource-gathered", {
+      itemId: extra.itemId,
+      qty: extra.qty,
+      kind: other.config.kind,
+      finalHit: extra.finalHit,
+    });
+  }
 }

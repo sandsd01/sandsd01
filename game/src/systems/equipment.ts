@@ -1,6 +1,6 @@
 import type { GameState } from "../state/game-state";
 import { addItem, getQty, hasQty, removeItem } from "./inventory";
-import { isArmour } from "../data/armour";
+import { isWearable, slotFor, wornInSlot, type WornSlot } from "../data/worn";
 import { events } from "../utils/events";
 
 export const HOTBAR_SIZE = 8;
@@ -38,9 +38,11 @@ export function cycleSlot(state: GameState, direction: number): void {
  * which is busywork the genre has long since stopped asking for.
  */
 export function autoAssign(state: GameState, itemId: string): boolean {
-  // Armour is worn, never held: a quick slot holding it would do nothing at
-  // all when selected, while taking a slot from something that does.
-  if (isArmour(itemId)) return false;
+  // Worn gear is worn, never held: a quick slot holding it would do nothing at
+  // all when selected, while taking a slot from something that does. This
+  // covers the cloak and the trinkets as well as armour, because it asks the
+  // one table that knows what a slot is.
+  if (isWearable(itemId)) return false;
   if (state.hotbar.includes(itemId)) return false;
   const free = state.hotbar.indexOf(null);
   if (free === -1) return false;
@@ -79,23 +81,27 @@ export function assignToSlot(state: GameState, index: number, itemId: string | n
  *
  * Returns false when the item is not armour or is not carried.
  */
-export function wearArmour(state: GameState, itemId: string): boolean {
-  if (!isArmour(itemId) || !hasQty(state, itemId, 1)) return false;
-  takeOffArmour(state);
+export function wearItem(state: GameState, itemId: string): boolean {
+  const slot = slotFor(itemId);
+  if (slot === null || !hasQty(state, itemId, 1)) return false;
+  // Only the slot this piece competes for. Taking off *everything* was correct
+  // while there was one slot and is the obvious way to get this wrong now:
+  // putting on a ring would have stripped your armour.
+  takeOff(state, slot);
   removeItem(state, itemId, 1);
-  state.armour = itemId;
+  state.worn[slot] = itemId;
   pruneHotbar(state);
-  events.emit("armour-changed", { itemId });
+  events.emit("worn-changed", { slot, itemId });
   return true;
 }
 
-/** Takes off whatever is worn and puts it back in the bag. */
-export function takeOffArmour(state: GameState): string | null {
-  const worn = state.armour;
+/** Takes off whatever is in one slot and puts it back in the bag. */
+export function takeOff(state: GameState, slot: WornSlot): string | null {
+  const worn = wornInSlot(state, slot);
   if (!worn) return null;
-  state.armour = null;
+  state.worn[slot] = null;
   addItem(state, worn, 1);
-  events.emit("armour-changed", { itemId: null });
+  events.emit("worn-changed", { slot, itemId: null });
   return worn;
 }
 

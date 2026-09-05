@@ -1,7 +1,7 @@
 import type { GameState } from "../state/game-state";
 import { getQty } from "../systems/inventory";
 import { getItem } from "../data/items";
-import { ARMOUR } from "../data/armour";
+import { WORN, wornInSlot } from "../data/worn";
 import { events } from "../utils/events";
 import { colorToCss, el } from "./dom";
 import { keyLabel, type Action, type Bindings } from "../state/keybindings";
@@ -251,7 +251,7 @@ export class Hud {
     this.renderResources(state);
 
     this.renderArmour(state);
-    events.on("armour-changed", () => this.renderArmour(state));
+    events.on("worn-changed", () => this.renderArmour(state));
     events.on("player-health-changed", () => this.renderHealth(state));
     events.on("player-stamina-changed", () => this.renderStamina(state));
     events.on("player-exp-changed", () => this.renderLevel(state));
@@ -276,15 +276,22 @@ export class Hud {
     events.on("player-respawned", () => this.deathOverlay.classList.remove("visible"));
   }
 
-  /** What is being worn, if anything. Hidden entirely when nothing is. */
+  /**
+   * What is protecting you, if anything. Hidden entirely when nothing is.
+   *
+   * Still the armour slot alone, deliberately: the back and trinket slots grant
+   * abilities rather than a number, and there is nothing about them a bar-side
+   * chip could usefully say. They live on the character sheet, and this corner
+   * is already carrying three bars and a level after the last change.
+   */
   private renderArmour(state: GameState): void {
-    const worn = state.armour;
+    const worn = wornInSlot(state, "armour");
     if (!worn) {
       this.armourChip.hidden = true;
       this.armourChip.textContent = "";
       return;
     }
-    const pct = Math.round((ARMOUR[worn]?.reduction ?? 0) * 100);
+    const pct = Math.round((WORN[worn]?.reduction ?? 0) * 100);
     this.armourChip.hidden = false;
     this.armourChip.textContent = `${getItem(worn).name} · -${pct}% damage`;
   }

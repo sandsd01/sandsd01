@@ -40,6 +40,7 @@ import {
   gatherTimeFor,
   getInteractionPrompt,
   nearestNode,
+  neighboursFor,
   tryGather,
 } from "./systems/gathering";
 import { Targeting, type Target } from "./systems/targeting";
@@ -56,8 +57,8 @@ import {
   equippedItemId,
   pruneHotbar,
   selectSlot,
-  takeOffArmour,
-  wearArmour,
+  takeOff,
+  wearItem,
 } from "./systems/equipment";
 import {
   canCraft,
@@ -71,11 +72,12 @@ import { FarmingSystem } from "./systems/farming";
 import { EnemyManager } from "./systems/enemy-ai";
 import { RaidSystem } from "./systems/raid";
 import { TrapSystem } from "./systems/traps";
-import { PlayerCombat } from "./systems/combat";
+import { cleaveShape, PlayerCombat } from "./systems/combat";
+import type { ResourceNode } from "./world/resource-node";
 import { DayNightSystem, DAY_LENGTH_MS } from "./systems/day-night";
 import { saveGame, loadGame } from "./systems/save-load";
 import { deposit, withdraw } from "./systems/containers";
-import { arrowDamage, BOW_ID, heldDamage } from "./data/tools";
+import { arrowDamage, BOW_ID, drawTimeFor, heldCleaves, heldDamage } from "./data/tools";
 
 import { createInitialState, type GameState } from "./state/game-state";
 import { mulberry32 } from "./utils/rng";
@@ -85,6 +87,14 @@ import { rollLoot } from "./data/loot";
 import { allocateStat, expForKill, grantExp } from "./systems/progression";
 import { expToNext } from "./data/levels";
 import { rareDropScale, speedScale, type StatId } from "./data/stats";
+import {
+  WORN,
+  WORN_SLOTS,
+  gatherReach,
+  thornsFraction,
+  wornInSlot,
+  type WornSlot,
+} from "./data/worn";
 import { loadSettings } from "./state/settings";
 import { keyLabel, loadBindings, saveBindings } from "./state/keybindings";
 
@@ -235,6 +245,17 @@ const regions = new RegionManager(scene, surfaceRegion);
 /** The nodes of wherever the player is standing. */
 function activeNodes() {
   return regions.active.nodes;
+}
+
+/**
+ * The extra nodes one swing also works, given the trinket slot.
+ *
+ * One helper because there are three places a swing can start — the held
+ * button, the gather key, and the debug hook — and three copies of "and also
+ * these nodes" is three chances for one of them to quietly not have the charm.
+ */
+function charmNeighbours(node: ResourceNode | null) {
+  return node ? neighboursFor(state, node, activeNodes()) : [];
 }
 
 // Buildings are the only thing in the game the player can stand *on*; the
@@ -654,8 +675,9 @@ function demolishAimed(placedId: string): void {
 }
 
 // Drawing a bow is slower than a sword swing, which is the trade for reaching
-// past the end of one.
-const DRAW_MS = 700;
+// past the end of one. How much slower is `drawTimeFor` in data/tools.ts, so a
+// trinket can quicken it — the constant used to be read here and nowhere else,
+// which made the bow's rhythm the one number nothing could modify.
 let lastShotMs = -Infinity;
 
 /**
@@ -667,7 +689,7 @@ let lastShotMs = -Infinity;
  */
 function tryShoot(): boolean {
   if (equippedItemId(state) !== BOW_ID) return false;
-  if (currentNowMs - lastShotMs < DRAW_MS) return true;
+  if (currentNowMs - lastShotMs < drawTimeFor(state)) return true;
   if (!hasQty(state, "arrow", 1)) {
     events.emit("notification", { message: `Out of ${getItem("arrow").name}s` });
     lastShotMs = currentNowMs;
@@ -723,7 +745,7 @@ function updatePrimaryAction(dtSeconds: number): void {
     // The swing length depends on the tool in hand, so an iron axe visibly
     // fills the ring faster than a plain one.
     if (gatherProgressMs >= gatherTimeFor(state, node)) {
-      tryGather(state, node, currentNowMs, runtimeRand);
+      tryGather(state, node, currentNowMs, runtimeRand, charmNeighbours(node));
       gatherProgressMs = 0;
       // Straight into the next swing, so holding the button reads as a
       // continuous action rather than a stutter between hits.
@@ -984,8 +1006,28 @@ const loop = new GameLoop((dt) => {
       dt,
       currentNowMs,
       feet,
-      (damage) => {
+      (damage, attacker) => {
+        const before = state.player.health;
         damagePlayer(state, damage);
+        // Thorns pay back what actually *landed*, not what was swung: armour
+        // and Vigour cut the reflection along with the wound, which is the
+        // honest reading of a cloak that burns whatever touches you.
+        //
+        // Applied here rather than inside `damagePlayer` on purpose. That
+        // function is also how a fall hurts you (and how the debug hook does),
+        // and neither has an attacker — giving it one would force every caller
+        // to invent a lie. This is the one call site that genuinely knows.
+        const taken = before - state.player.health;
+        const thorns = thornsFraction(state);
+        if (taken > 0 && thorns > 0 && !attacker.dying) {
+          const back = Math.max(1, Math.round(taken * thorns));
+          const dead = attacker.takeDamage(back, currentNowMs);
+          events.emit("enemy-hit", { id: attacker.id, damage: back });
+          // Through the manager, exactly as a sword swing does — a kill that
+          // skipped this would pay no loot and no experience, and the cloak
+          // would quietly be worse than hitting things.
+          if (dead) enemyManager.removeEnemy(attacker.id, currentNowMs);
+        }
         scheduleRespawnIfDead();
       },
       // The same list the player was resolved against a few lines up, so
@@ -1064,7 +1106,7 @@ const loop = new GameLoop((dt) => {
     : farmingSystem.nearestPlot(feet.x, feet.z);
   if (input.wasActionPressed("gather") && canAct) {
     player.triggerSwing(currentNowMs);
-    tryGather(state, keyNode, currentNowMs, runtimeRand);
+    tryGather(state, keyNode, currentNowMs, runtimeRand, charmNeighbours(keyNode));
   }
   if (input.wasActionPressed("farm") && canAct) {
     farmingSystem.tryInteract(keyPlot, selectedSeedItemId, currentNowMs);
@@ -1194,6 +1236,8 @@ declare global {
       getCameraDistance: () => number;
       getCameraYaw: () => number;
       setCameraYaw: (yaw: number) => void;
+      setPlayerYaw: (yaw: number) => void;
+      attackOnce: () => boolean;
       getAimPoint: () => { x: number; z: number };
       isFirstPerson: () => boolean;
       isPlayerVisible: () => boolean;
@@ -1238,9 +1282,20 @@ declare global {
       getGatherTimeFor: (kind: string) => number;
       getMoveSpeedScale: () => number;
       isAuraPlaying: () => boolean;
-      getArmour: () => string | null;
-      wearArmour: (itemId: string) => boolean;
-      takeOffArmour: () => string | null;
+      getWorn: () => Record<string, string | null>;
+      wearItem: (itemId: string) => boolean;
+      takeOffSlot: (slot: string) => string | null;
+      getWornDef: (itemId: string) => {
+        slot: string;
+        reduction: number;
+        thorns: number;
+        drawScale: number;
+        gatherReach: number;
+        blurb: string;
+      } | null;
+      getDrawTime: () => number;
+      getCharmReach: () => number;
+      getCleaveReach: () => { range: number; arcDegrees: number } | null;
       hurtPlayer: (amount: number) => void;
       setRaidCount: (count: number) => void;
       getRaidState: () => {
@@ -1419,7 +1474,7 @@ window.__gameDebug = {
     const node = activeNodes().find((n) => n.id === nodeId);
     if (!node || node.depleted) return null;
     const before = state.inventory.map((slot) => ({ ...slot }));
-    tryGather(state, node, clock.now(), runtimeRand);
+    tryGather(state, node, clock.now(), runtimeRand, charmNeighbours(node));
     // Summed across slots, not read off the first one. An item can occupy
     // several stacks (stackSize caps each at 99), so `find` reports whichever
     // slot happens to come first and misses an addition that landed in a
@@ -1479,6 +1534,23 @@ window.__gameDebug = {
   getCameraPitch: () => camera.pitch,
   getCameraDistance: () => camera.distance,
   getCameraYaw: () => camera.yaw,
+  // The *body's* facing, not the camera's. A wide swing goes where the
+  // character is turned, which is what `player.yaw` holds and what movement
+  // sets — `setCameraYaw` moves the head and would leave the sweep pointing
+  // somewhere else entirely.
+  setPlayerYaw: (yaw) => {
+    // The mesh catches up on the next frame's own sync; nothing here needs to
+    // reach into the controller's private state to make that happen sooner.
+    state.player.yaw = yaw;
+  },
+  // One real swing down the real path — the same call the left mouse button
+  // makes, cooldown and all. Returns whether the cooldown let it through, so a
+  // caller can tell "it swung and missed" from "it never swung".
+  attackOnce: () => {
+    if (!playerCombat.canAttack(state, currentNowMs)) return false;
+    playerCombat.tryAttack(state, enemyManager, target, currentNowMs);
+    return true;
+  },
   setCameraYaw: (yaw) => {
     camera.yaw = yaw;
   },
@@ -1616,9 +1688,34 @@ window.__gameDebug = {
   getGatherTimeFor: (kind) => gatherTimeFor(state, { config: { kind } } as never),
   getMoveSpeedScale: () => speedScale(state),
   isAuraPlaying: () => levelAura.isPlaying(),
-  getArmour: () => state.armour,
-  wearArmour: (itemId) => wearArmour(state, itemId),
-  takeOffArmour: () => takeOffArmour(state),
+  getWorn: () => {
+    const out: Record<string, string | null> = {};
+    for (const slot of WORN_SLOTS) out[slot] = wornInSlot(state, slot);
+    return out;
+  },
+  wearItem: (itemId) => wearItem(state, itemId),
+  takeOffSlot: (slot) => takeOff(state, slot as WornSlot),
+  // The table as data, so a suite comparing what a piece does reads the game's
+  // own numbers rather than restating them and going stale on the first tune.
+  getWornDef: (itemId) => {
+    const def = WORN[itemId];
+    if (!def) return null;
+    return {
+      slot: def.slot,
+      reduction: def.reduction ?? 0,
+      thorns: def.thorns ?? 0,
+      drawScale: def.drawScale ?? 1,
+      gatherReach: def.gatherReach ?? 0,
+      blurb: def.blurb,
+    };
+  },
+  // Live, so a check can measure the trinket's effect on the bow rather than
+  // timing two shots through a game clock that does not run at wall speed.
+  getDrawTime: () => drawTimeFor(state),
+  // What the charm currently reaches, and null when nothing is worn — the
+  // paired negative half of the Gatherer's Charm checks.
+  getCharmReach: () => gatherReach(state),
+  getCleaveReach: () => (heldCleaves(state) ? cleaveShape() : null),
   // The real damage path, so the armour reduction under test is the one the
   // game applies — not a second copy of the arithmetic living in the suite.
   hurtPlayer: (amount) => damagePlayer(state, amount),

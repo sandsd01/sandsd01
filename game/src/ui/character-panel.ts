@@ -2,6 +2,9 @@ import type { GameState } from "../state/game-state";
 import { STATS, STAT_IDS, type StatId } from "../data/stats";
 import { expToNext } from "../data/levels";
 import { allocateStat } from "../systems/progression";
+import { takeOff } from "../systems/equipment";
+import { SLOT_NAMES, WORN, WORN_SLOTS, wornInSlot, type WornSlot } from "../data/worn";
+import { getItem } from "../data/items";
 import {
   attackSpeedScale,
   bonusMaxHealth,
@@ -22,6 +25,22 @@ import { icon, type IconName } from "./icons";
 // where the picture has stopped carrying information — the mistake this
 // project has now made three times, and the reason `uicheck` reads rendered
 // path geometry rather than trusting the names.
+/**
+ * One glyph per slot, none shared with the stats below or the resource chips.
+ * `shield` is the armour slot's rather than Vigour's for the same reason the
+ * chip row cannot reuse a glyph: two rows drawing the same picture is two rows
+ * whose picture has stopped carrying information.
+ */
+const SLOT_ICONS: Record<WornSlot, IconName> = {
+  armour: "shirt",
+  back: "feather",
+  // Not `gem` — that is the iron-ore chip's, and the check that reads rendered
+  // path geometry exists because this project has picked a duplicate glyph
+  // three times before. A ring of orbit is also the plainest picture of "a
+  // small thing you wear that changes how you work".
+  trinket: "orbit",
+};
+
 const STAT_ICONS: Record<StatId, IconName> = {
   might: "bicepsFlexed",
   vigour: "shield",
@@ -47,14 +66,14 @@ function effectLines(state: GameState, id: StatId): string[] {
       return [`+${bonusMaxHealth(state)} max health`, `${pct(vigourReduction(state))} damage resisted`];
     case "swiftness":
       return [
-        `${pct(speedScale(state) - 1)} move speed`,
-        `${pct(1 / attackSpeedScale(state) - 1)} attack speed`,
-        `${pct(staminaRegenScale(state) - 1)} stamina regen`,
+        `${pct(speedScale(state) - 1)} speed`,
+        `${pct(1 / attackSpeedScale(state) - 1)} attack rate`,
+        `${pct(staminaRegenScale(state) - 1)} stamina`,
       ];
     case "craft":
       return [
         `${pct(1 / gatherSpeedScale(state) - 1)} gather speed`,
-        `${pct(bonusYieldChance(state))} bonus yield chance`,
+        `${pct(bonusYieldChance(state))} extra yield`,
       ];
     case "fortune":
       return [`${pct(rareDropScale(state) - 1)} drop chance`];
@@ -66,6 +85,7 @@ export class CharacterPanel {
   private readonly summary: HTMLDivElement;
   private readonly pointsLabel: HTMLDivElement;
   private readonly list: HTMLDivElement;
+  private readonly worn: HTMLDivElement;
   private readonly hint: HTMLParagraphElement;
   private visible = false;
 
@@ -74,20 +94,40 @@ export class CharacterPanel {
     private readonly state: GameState,
     private readonly closeKeyLabel: () => string,
   ) {
-    this.panel = el("div", "panel");
+    // Wide, and two columns. Three worn slots stacked on top of five stat rows
+    // does not fit a 720p screen — measured, not guessed: the last stat row
+    // ended 162px below the panel's own bottom edge. Side by side they do fit,
+    // and `panel-wide` is the width the barrel already established for a panel
+    // that needs two lists.
+    this.panel = el("div", "panel panel-wide");
     this.panel.appendChild(el("h2", undefined, "Character"));
 
+    // Level and the bar span both columns: it is the one line about the whole
+    // character rather than about either half of it.
     this.summary = el("div", "character-summary");
     this.panel.appendChild(this.summary);
 
-    // Its own line above the list rather than a number tucked into a corner:
-    // an unspent point is the one thing on this screen that is asking to be
-    // acted on, and it should be the first thing read.
-    this.pointsLabel = el("div", "character-points");
-    this.panel.appendChild(this.pointsLabel);
+    const columns = el("div", "character-columns");
 
+    // What is on the body. It answers "what am I" before "what am I spending",
+    // and it is the half of this screen that changes when something drops
+    // rather than when a level lands.
+    const gear = el("div", "character-column");
+    gear.appendChild(el("h3", "character-column-title", "Worn"));
+    this.worn = el("div", "character-worn");
+    gear.appendChild(this.worn);
+
+    const stats = el("div", "character-column");
+    stats.appendChild(el("h3", "character-column-title", "Stats"));
+    // Above its own column rather than the whole panel: an unspent point is an
+    // instruction about the list directly beneath it.
+    this.pointsLabel = el("div", "character-points");
+    stats.appendChild(this.pointsLabel);
     this.list = el("div", "character-stats");
-    this.panel.appendChild(this.list);
+    stats.appendChild(this.list);
+
+    columns.append(gear, stats);
+    this.panel.appendChild(columns);
 
     this.hint = el("p", "panel-hint", "");
     this.panel.appendChild(this.hint);
@@ -98,6 +138,12 @@ export class CharacterPanel {
     events.on("player-levelled-up", () => this.render());
     events.on("player-exp-changed", () => this.render());
     events.on("stats-changed", () => this.render());
+    events.on("worn-changed", () => this.render());
+    // A piece picked up while the sheet is open should appear in the bag count
+    // behind it — and taking one off puts it back, which is an inventory change.
+    events.on("inventory-changed", () => {
+      if (this.visible) this.render();
+    });
 
     this.render();
   }
@@ -145,6 +191,37 @@ export class CharacterPanel {
         ? `${points} point${points === 1 ? "" : "s"} to spend`
         : "No points to spend — kill things.";
     this.pointsLabel.classList.toggle("has-points", points > 0);
+
+    clear(this.worn);
+    for (const slot of WORN_SLOTS) {
+      const id = wornInSlot(state, slot);
+      const row = el("div", "character-worn-slot");
+      if (!id) row.classList.add("empty");
+      row.append(icon(SLOT_ICONS[slot], "icon character-worn-icon"));
+
+      const text = el("div", "character-worn-text");
+      text.append(el("div", "character-worn-label", SLOT_NAMES[slot]));
+      // An empty slot says so in words. A row that was simply blank reads as a
+      // rendering fault rather than as an invitation.
+      text.append(
+        el("div", "character-worn-name", id ? getItem(id).name : "Empty"),
+      );
+      if (id) {
+        text.append(el("div", "character-worn-effect", WORN[id]?.blurb ?? ""));
+      }
+      row.append(text);
+
+      if (id) {
+        const off = el("button", "character-worn-off", "Take off");
+        off.type = "button";
+        off.setAttribute("aria-label", `Take off ${getItem(id).name}`);
+        // Through `takeOff`, which is the one place a slot is emptied — it puts
+        // the piece back in the bag and emits what this panel redraws from.
+        off.addEventListener("click", () => takeOff(state, slot));
+        row.append(off);
+      }
+      this.worn.appendChild(row);
+    }
 
     clear(this.list);
     for (const id of STAT_IDS) {

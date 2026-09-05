@@ -1,6 +1,6 @@
 import type { GameState } from "../state/game-state";
 import { events } from "../utils/events";
-import { reductionFor } from "../data/armour";
+import { reductionFor } from "../data/worn";
 import { vigourReduction } from "../data/stats";
 
 /**
