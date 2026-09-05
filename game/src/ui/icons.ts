@@ -2,10 +2,14 @@
 // import, so only the handful used here reaches the bundle rather than the
 // whole set. Every lucide glyph draws with stroke="currentColor", which is why
 // a chip can tint its icon by setting `color` and nothing else.
+import anvil from "lucide-static/icons/anvil.svg?raw";
 import axe from "lucide-static/icons/axe.svg?raw";
+import bicepsFlexed from "lucide-static/icons/biceps-flexed.svg?raw";
 import bone from "lucide-static/icons/bone.svg?raw";
 import brickWall from "lucide-static/icons/brick-wall.svg?raw";
+import chevronsUp from "lucide-static/icons/chevrons-up.svg?raw";
 import cloud from "lucide-static/icons/cloud.svg?raw";
+import clover from "lucide-static/icons/clover.svg?raw";
 import crosshair from "lucide-static/icons/crosshair.svg?raw";
 import fence from "lucide-static/icons/fence.svg?raw";
 import flame from "lucide-static/icons/flame.svg?raw";
@@ -20,6 +24,7 @@ import moon from "lucide-static/icons/moon.svg?raw";
 import mountain from "lucide-static/icons/mountain.svg?raw";
 import navigation from "lucide-static/icons/navigation.svg?raw";
 import pickaxe from "lucide-static/icons/pickaxe.svg?raw";
+import shield from "lucide-static/icons/shield.svg?raw";
 import shovel from "lucide-static/icons/shovel.svg?raw";
 import sparkles from "lucide-static/icons/sparkles.svg?raw";
 import sprout from "lucide-static/icons/sprout.svg?raw";
@@ -29,13 +34,18 @@ import sunrise from "lucide-static/icons/sunrise.svg?raw";
 import sword from "lucide-static/icons/sword.svg?raw";
 import swords from "lucide-static/icons/swords.svg?raw";
 import trees from "lucide-static/icons/trees.svg?raw";
+import wind from "lucide-static/icons/wind.svg?raw";
 import wheat from "lucide-static/icons/wheat.svg?raw";
 
 const SOURCES = {
+  anvil,
   axe,
+  bicepsFlexed,
+  chevronsUp,
   bone,
   brickWall,
   cloud,
+  clover,
   crosshair,
   fence,
   flame,
@@ -50,6 +60,7 @@ const SOURCES = {
   mountain,
   navigation,
   pickaxe,
+  shield,
   shovel,
   sparkles,
   sprout,
@@ -60,6 +71,7 @@ const SOURCES = {
   swords,
   trees,
   wheat,
+  wind,
 } as const;
 
 export type IconName = keyof typeof SOURCES;

@@ -75,18 +75,23 @@ import { PlayerCombat } from "./systems/combat";
 import { DayNightSystem, DAY_LENGTH_MS } from "./systems/day-night";
 import { saveGame, loadGame } from "./systems/save-load";
 import { deposit, withdraw } from "./systems/containers";
-import { ARROW_DAMAGE, BOW_ID, heldDamage } from "./data/tools";
+import { arrowDamage, BOW_ID, heldDamage } from "./data/tools";
 
 import { createInitialState, type GameState } from "./state/game-state";
 import { mulberry32 } from "./utils/rng";
 import { DroppedItems } from "./world/dropped-item";
 import { Projectiles } from "./world/projectile";
 import { rollLoot } from "./data/loot";
+import { allocateStat, expForKill, grantExp } from "./systems/progression";
+import { expToNext } from "./data/levels";
+import { rareDropScale, speedScale, type StatId } from "./data/stats";
 import { loadSettings } from "./state/settings";
 import { keyLabel, loadBindings, saveBindings } from "./state/keybindings";
 
 import { Hud, type CrosshairState } from "./ui/hud";
 import { InventoryPanel } from "./ui/inventory-panel";
+import { CharacterPanel } from "./ui/character-panel";
+import { LevelAura } from "./world/level-aura";
 import { CraftingPanel } from "./ui/crafting-panel";
 import { BuildingPanel } from "./ui/building-panel";
 import { ContainerPanel } from "./ui/container-panel";
@@ -170,7 +175,14 @@ for (const node of resourceNodes) {
  * `state`, so it has to be collected at the moment of saving — routing every
  * save through here is what stops one of the three call sites forgetting to.
  */
+/**
+ * Set once the player has asked for a new game, so the periodic save and the
+ * one on the way out cannot put the world they just erased straight back.
+ */
+let savingSuspended = false;
+
 function persist(): void {
+  if (savingSuspended) return;
   const nodes: GameState["nodes"] = {};
   for (const node of resourceNodes) {
     const saved = node.serialise();
@@ -249,7 +261,14 @@ const droppedItems = new DroppedItems(scene, regions);
 const projectiles = new Projectiles(scene, regions);
 
 events.on("enemy-killed", ({ enemyId, x, z }) => {
-  droppedItems.spawnAll(rollLoot(enemyId, runtimeRand), x, z, currentNowMs);
+  droppedItems.spawnAll(rollLoot(enemyId, runtimeRand, rareDropScale(state)), x, z, currentNowMs);
+  // Experience rides on the same event as the loot, which is the point of
+  // hanging it here rather than inside the combat code: the two things a kill
+  // pays out arrive together, from the one place that can say something died.
+  // Enemies that fall out of the world, or are cleared when the player changes
+  // region, deliberately never emit this — nobody killed them, and neither the
+  // loot nor the level should say otherwise.
+  grantExp(state, expForKill(enemyId));
 });
 
 events.on("item-picked-up", ({ itemId, qty }) => {
@@ -269,6 +288,13 @@ const playerCombat = new PlayerCombat();
 const targeting = new Targeting();
 const targetOutline = new TargetOutline();
 scene.add(targetOutline.object);
+
+// The level-up flourish. Straight into the scene rather than into a region
+// group: it belongs to the player, not to a place, and it should still play if
+// they happen to level on the last frame before a portal.
+const levelAura = new LevelAura();
+scene.add(levelAura.object);
+events.on("player-levelled-up", () => levelAura.trigger(currentNowMs));
 let target: Target = targeting.getTarget();
 
 const hud = new Hud(uiRoot, state);
@@ -302,6 +328,7 @@ const inventoryPanel = new InventoryPanel(
     selectedSeedItemId = id;
   },
   () => selectedSeedItemId,
+  () => keyLabel(bindings.inventory[0] ?? "Tab"),
 );
 // Station checks run against wherever the player is standing. Movement is
 // blocked while a menu is open, so the answer can't go stale mid-panel.
@@ -318,8 +345,16 @@ const settingsPanel = new SettingsPanel(uiRoot, settings, bindings, input, () =>
   input.setBindings(bindings);
   itemHotbar.setBindings(bindings);
   hud.setKeybinds(bindings);
+}, () => {
+  // The reload below fires `beforeunload`, which saves — so the wipe has to
+  // switch saving off before it goes, or the old world is written back over
+  // the empty slot on the way out.
+  savingSuspended = true;
 });
 hud.setKeybinds(bindings);
+const characterPanel = new CharacterPanel(uiRoot, state, () =>
+  keyLabel(bindings.character[0] ?? "KeyK"),
+);
 const containerPanel = new ContainerPanel(uiRoot, state);
 const minimap = new Minimap(uiRoot);
 
@@ -345,6 +380,7 @@ const panels: TogglablePanel[] = [
   craftingPanel,
   buildingPanel,
   inventoryPanel,
+  characterPanel,
   settingsPanel,
   containerPanel,
 ];
@@ -699,7 +735,7 @@ function updatePrimaryAction(dtSeconds: number): void {
   resetGather();
   // Nothing to gather: swing. The swing plays whether or not it connects —
   // a miss should look like a miss, not like a dead button.
-  if (playerCombat.canAttack(currentNowMs)) {
+  if (playerCombat.canAttack(state, currentNowMs)) {
     player.triggerSwing(currentNowMs);
     playerCombat.tryAttack(state, enemyManager, target, currentNowMs);
   }
@@ -890,6 +926,8 @@ const loop = new GameLoop((dt) => {
   // being aimed at — the placement ghost was hidden behind their own head.
   camera.update(feet.clone().add(new THREE.Vector3(0, EYE_HEIGHT, 0)), [regions.active.ground]);
 
+  levelAura.update(currentNowMs, feet.x, feet.y, feet.z);
+
   for (const node of activeNodes()) node.update(currentNowMs);
   farmingSystem.update(currentNowMs);
   droppedItems.update(currentNowMs, state, feet.x, feet.z);
@@ -901,8 +939,9 @@ const loop = new GameLoop((dt) => {
     if (hit.enemy) {
       // The same path a sword swing takes, rather than a second way to hurt
       // something: one place decides what a killed enemy does.
-      const dead = hit.enemy.takeDamage(ARROW_DAMAGE, currentNowMs);
-      events.emit("enemy-hit", { id: hit.enemy.id, damage: ARROW_DAMAGE });
+      const damage = arrowDamage(state);
+      const dead = hit.enemy.takeDamage(damage, currentNowMs);
+      events.emit("enemy-hit", { id: hit.enemy.id, damage });
       if (dead) enemyManager.removeEnemy(hit.enemy.id, currentNowMs);
     } else {
       // A spent arrow is just loot on the floor — the pickup, the despawn and
@@ -1033,6 +1072,7 @@ const loop = new GameLoop((dt) => {
   if (input.wasActionPressed("crafting")) togglePanel(craftingPanel);
   if (input.wasActionPressed("building")) togglePanel(buildingPanel);
   if (input.wasActionPressed("inventory")) togglePanel(inventoryPanel);
+  if (input.wasActionPressed("character")) togglePanel(characterPanel);
   // Options backs out of whatever is open, and opens the Options screen when
   // nothing is — the pause-menu convention players arrive with.
   if (input.wasActionPressed("options")) {
@@ -1181,6 +1221,21 @@ declare global {
         height: number;
         cost: { itemId: string; qty: number }[];
       } | null;
+      getLevel: () => {
+        level: number;
+        exp: number;
+        toNext: number;
+        statPoints: number;
+        stats: Record<string, number>;
+        maxHealth: number;
+      };
+      grantExp: (amount: number) => void;
+      allocateStat: (id: string) => boolean;
+      getEnemyExp: (enemyId: string) => number;
+      getArrowDamage: () => number;
+      getGatherTimeFor: (kind: string) => number;
+      getMoveSpeedScale: () => number;
+      isAuraPlaying: () => boolean;
       getArmour: () => string | null;
       wearArmour: (itemId: string) => boolean;
       takeOffArmour: () => string | null;
@@ -1339,7 +1394,11 @@ window.__gameDebug = {
   getDroppedItems: () => droppedItems.list(),
   // Rolls a table without needing an enemy to die, so a test can average over
   // hundreds of rolls — a probabilistic table tells you nothing from one kill.
-  rollLootFor: (enemyId) => rollLoot(enemyId, runtimeRand),
+  // The same call the kill path makes, Fortune and all. It used to omit the
+  // scale, which made it a *second* implementation of looting that happened to
+  // agree with the first — so a suite measuring drop rates through this hook
+  // reported that Fortune did nothing while the game was applying it correctly.
+  rollLootFor: (enemyId) => rollLoot(enemyId, runtimeRand, rareDropScale(state)),
   spawnDropAt: (itemId, qty, x, z) => droppedItems.spawn(itemId, qty, x, z, clock.now(), 0),
   // One swing's worth, through the real gathering path so the tool in hand and
   // the yield roll both count — measuring per-hit yield by holding the mouse
@@ -1521,6 +1580,26 @@ window.__gameDebug = {
       cost: def.cost.map((c) => ({ ...c })),
     };
   },
+  // The live figures, read from the same functions the game reads at the
+  // chokepoints — a suite that restated the arithmetic would pass against a
+  // build where the wiring had been pulled out.
+  getLevel: () => ({
+    level: state.player.level,
+    exp: state.player.exp,
+    toNext: expToNext(state.player.level),
+    statPoints: state.statPoints,
+    stats: { ...state.stats },
+    maxHealth: state.player.maxHealth,
+  }),
+  grantExp: (amount) => grantExp(state, amount),
+  allocateStat: (id) => allocateStat(state, id as StatId),
+  getEnemyExp: (enemyId) => expForKill(enemyId),
+  getArrowDamage: () => arrowDamage(state),
+  // Not the constant: the number a swing at this kind of node actually takes,
+  // tool and stat and all.
+  getGatherTimeFor: (kind) => gatherTimeFor(state, { config: { kind } } as never),
+  getMoveSpeedScale: () => speedScale(state),
+  isAuraPlaying: () => levelAura.isPlaying(),
   getArmour: () => state.armour,
   wearArmour: (itemId) => wearArmour(state, itemId),
   takeOffArmour: () => takeOffArmour(state),

@@ -1,6 +1,8 @@
 import { hashStringToSeed } from "../utils/rng";
 import { DAY_LENGTH_MS, raidStartAfter } from "../systems/day-night";
 import type { RegionId } from "../world/region";
+import { BASE_MAX_HEALTH, START_LEVEL } from "../data/levels";
+import { initialStats, type StatId } from "../data/stats";
 
 export interface InventorySlot {
   itemId: string;
@@ -75,6 +77,16 @@ export interface PlayerState {
   maxHealth: number;
   stamina: number;
   maxStamina: number;
+  /**
+   * Base level and progress toward the next.
+   *
+   * Numbers, and on `player` rather than at the top level, entirely on
+   * purpose: `backfillDefaults` walks every numeric field of `player` and
+   * fills in whatever a save is missing, so these two cost no migration code
+   * at all. See `systems/save-load.ts`.
+   */
+  level: number;
+  exp: number;
 }
 
 // A single plain, JSON-serializable object that every gameplay system reads
@@ -124,6 +136,17 @@ export interface GameState {
   nodes: Record<string, NodeSaveState>;
   /** The raid schedule. See `RaidState`. */
   raid: RaidState;
+  /**
+   * Points earned by levelling and not yet spent.
+   *
+   * Top-level rather than on `player` because it is not a fact about the body
+   * — and, practically, because the generic numeric backfill would then set it
+   * to its *starting* value on every old save, which for an unspent balance is
+   * exactly wrong. It gets its own guard instead.
+   */
+  statPoints: number;
+  /** Where those points went. See `data/stats.ts`. */
+  stats: Record<StatId, number>;
   /**
    * Which place the player is standing in.
    *
@@ -191,7 +214,18 @@ export function createInitialState(seedInput: string | number = "romestead"): Ga
   return {
     seed,
     elapsedMs,
-    player: { x: 0, y: 0, z: 8, yaw: 0, health: 100, maxHealth: 100, stamina: 100, maxStamina: 100 },
+    player: {
+      x: 0,
+      y: 0,
+      z: 8,
+      yaw: 0,
+      health: BASE_MAX_HEALTH,
+      maxHealth: BASE_MAX_HEALTH,
+      stamina: 100,
+      maxStamina: 100,
+      level: START_LEVEL,
+      exp: 0,
+    },
     inventory: [
       { itemId: "axe", qty: 1 },
       { itemId: "pickaxe", qty: 1 },
@@ -216,6 +250,8 @@ export function createInitialState(seedInput: string | number = "romestead"): Ga
     discovered: [],
     armour: null,
     raid: { nextRaidAtMs: raidStartAfter(elapsedMs), active: false, wave: 0, endsAtMs: 0, count: 0 },
+    statPoints: 0,
+    stats: initialStats(),
     region: "surface",
     regionReturn: null,
   };

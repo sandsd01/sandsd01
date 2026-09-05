@@ -97,7 +97,9 @@ export class FarmingSystem {
     if (!plot) return null;
     if (plot.cropId === null) {
       if (!selectedSeedItemId) return "Select a seed to plant here";
-      return `Right-click to plant ${selectedSeedItemId}`;
+      // The item's name, not its id: this prompt has been reading
+      // "Right-click to plant wheat_seed" at the player since farming shipped.
+      return `Right-click to plant ${getItem(selectedSeedItemId).name}`;
     }
     if (this.isReadyToHarvest(plot, nowMs)) return "Right-click to harvest";
     return "Growing...";

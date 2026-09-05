@@ -133,6 +133,65 @@ body {
   opacity: 0.35;
 }
 
+/* --- Status: level and experience ---
+
+   The third bar. Thinner than stamina and gold rather than green or red,
+   because it is the only one of the three that never goes down and so should
+   never be the thing the eye lands on first in a fight. */
+
+.hud-level {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.hud-level-icon {
+  width: 13px;
+  height: 13px;
+  color: var(--gold);
+  flex: 0 0 auto;
+}
+
+.hud-level-label {
+  font-size: 12px;
+  letter-spacing: 0.03em;
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
+  flex: 0 0 auto;
+  min-width: 34px;
+}
+
+.hud-exp-bar-bg {
+  flex: 1 1 auto;
+  height: 5px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(0, 0, 0, 0.5);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.hud-exp-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #8a6a1f, var(--gold));
+  border-radius: 999px;
+  transition: width 0.25s ease;
+}
+
+/* A pill with a number in it, not a coloured bar. An unspent point is an
+   instruction, and an instruction has to survive being unable to see gold. */
+.hud-level-pip {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 3px 5px;
+  border-radius: 999px;
+  background: var(--gold);
+  color: #241d0e;
+  font-variant-numeric: tabular-nums;
+}
+
 /* What is being worn, under the two bars it affects. Text and a number, so it
    reads without relying on the colour. */
 .hud-armour {
@@ -821,6 +880,140 @@ body {
   box-shadow: 0 0 0 1px #cfe8a0;
 }
 
+/* --- Character panel ---
+
+   Level, the bar, and five rows that each say what the point actually buys.
+   The + button is 44px because this is a panel operated with a mouse in a
+   hurry, and because every other interactive target in this project is. */
+
+.character-summary {
+  margin-bottom: 10px;
+}
+
+.character-level {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-family: var(--font-display);
+  font-size: 18px;
+  color: var(--gold);
+  margin-bottom: 6px;
+}
+
+.character-level-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.character-exp-bar-bg {
+  width: 100%;
+  height: 10px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(0, 0, 0, 0.5);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.character-exp-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #8a6a1f, var(--gold));
+  border-radius: 999px;
+  transition: width 0.25s ease;
+}
+
+/* Pushed to the end of the level line, so the bar keeps its own row. */
+.character-exp-text {
+  margin-left: auto;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.character-points {
+  font-size: 13px;
+  color: var(--ink-dim);
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px dashed var(--edge);
+  margin-bottom: 10px;
+}
+
+/* Solid rather than dashed, and the text goes bright: two changes, so the
+   "you have something to spend" state is not carried by colour alone. */
+.character-points.has-points {
+  color: var(--ink);
+  font-weight: 600;
+  border-style: solid;
+  border-color: var(--gold);
+  background: rgba(216, 180, 90, 0.12);
+}
+
+.character-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.character-stat {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--edge);
+}
+
+.character-stat-icon {
+  width: 22px;
+  height: 22px;
+  color: var(--gold);
+  flex: 0 0 auto;
+}
+
+.character-stat-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.character-stat-name {
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.character-stat-effect {
+  margin-top: 1px;
+  font-size: 12px;
+  color: var(--gold);
+  font-variant-numeric: tabular-nums;
+}
+
+.character-stat-add {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  border: 1px solid var(--edge-strong);
+  background: rgba(216, 180, 90, 0.14);
+  color: var(--ink);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  font-family: var(--font-ui);
+}
+
+.character-stat-add:hover:not(:disabled) {
+  background: rgba(216, 180, 90, 0.28);
+  border-color: var(--gold);
+}
+
+.character-stat-add:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
 .panel-hint {
   margin: 14px 0 0;
   padding-top: 10px;
@@ -1065,6 +1258,19 @@ body {
   font: inherit;
   font-size: 12px;
   cursor: pointer;
+}
+
+/* Starting over. Not red until it is armed: a permanently red button beside
+   "reset controls" reads as a warning about the wrong thing. */
+.panel .panel-danger {
+  margin-top: 8px;
+}
+
+.panel .panel-danger.armed {
+  border-color: var(--danger);
+  background: rgba(210, 69, 47, 0.18);
+  color: var(--ink);
+  font-weight: 600;
 }
 
 .panel .panel-reset:hover {

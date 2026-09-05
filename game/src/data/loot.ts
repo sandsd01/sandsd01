@@ -40,13 +40,22 @@ export const LOOT_TABLES: Record<string, LootEntry[]> = {
   ],
 };
 
-/** Rolls one enemy's table. May return an empty array — dying empty-handed. */
-export function rollLoot(enemyId: string, rand: () => number): LootRoll[] {
+/**
+ * Rolls one enemy's table. May return an empty array — dying empty-handed.
+ *
+ * `dropScale` is Fortune's whole effect, passed in as a number rather than
+ * read from the state here so this module stays what it is: a table and the
+ * dice. It multiplies each row's chance and clamps at certain, which means it
+ * pays out most where there is most room — a row that already drops nine times
+ * in ten has almost nothing left to give, and the rare rows are where the
+ * points go.
+ */
+export function rollLoot(enemyId: string, rand: () => number, dropScale = 1): LootRoll[] {
   const table = LOOT_TABLES[enemyId];
   if (!table) return [];
   const drops: LootRoll[] = [];
   for (const entry of table) {
-    if (!chance(rand, entry.chance)) continue;
+    if (!chance(rand, Math.min(1, entry.chance * dropScale))) continue;
     drops.push({ itemId: entry.itemId, qty: randomInt(rand, entry.min, entry.max) });
   }
   return drops;

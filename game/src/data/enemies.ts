@@ -8,6 +8,15 @@ export interface EnemyDef {
   attackRange: number;
   attackCooldownMs: number;
   color: number;
+  /**
+   * Experience for the kill.
+   *
+   * Here rather than derived from `maxHealth` because the two are not the same
+   * question: a brute is twice the health and rather more than twice the
+   * fight, since it also hits harder and outlasts a health bar the zombie
+   * never threatens.
+   */
+  exp: number;
 }
 
 export const ENEMIES: Record<string, EnemyDef> = {
@@ -21,6 +30,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
     attackRange: 1.4,
     attackCooldownMs: 1000,
     color: 0x4a6b3a,
+    exp: 8,
   },
   brute: {
     id: "brute",
@@ -32,6 +42,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
     attackRange: 1.6,
     attackCooldownMs: 1200,
     color: 0x6b3a3a,
+    exp: 20,
   },
 };
 

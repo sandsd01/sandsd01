@@ -16,6 +16,7 @@ export type Action =
   | "crafting"
   | "building"
   | "inventory"
+  | "character"
   | "options"
   | "toggleView"
   | "hotbar1"
@@ -53,6 +54,7 @@ export const ACTIONS: Action[] = [
   "crafting",
   "building",
   "inventory",
+  "character",
   "options",
 ];
 
@@ -72,6 +74,7 @@ export const ACTION_LABELS: Record<Action, string> = {
   crafting: "Crafting menu",
   building: "Build menu",
   inventory: "Inventory",
+  character: "Character",
   options: "Options",
   hotbar1: "Hotbar slot 1",
   hotbar2: "Hotbar slot 2",
@@ -107,6 +110,9 @@ export const DEFAULT_BINDINGS: Bindings = {
   toggleView: ["F5", "KeyV"],
   crafting: ["KeyC"],
   building: ["KeyB"],
+  // K, the character-sheet key this genre settles on, with P as the second
+  // slot. C, B, I and Tab are all already spoken for.
+  character: ["KeyK", "KeyP"],
   inventory: ["Tab", "KeyI"],
   options: ["Escape"],
   hotbar1: ["Digit1"],

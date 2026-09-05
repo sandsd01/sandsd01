@@ -2,6 +2,7 @@ import type { GameState } from "../state/game-state";
 import type { EnemyManager } from "./enemy-ai";
 import type { Target } from "./targeting";
 import { heldDamage } from "../data/tools";
+import { attackSpeedScale } from "../data/stats";
 import { events } from "../utils/events";
 
 const ATTACK_RANGE = 2.2;
@@ -15,9 +16,10 @@ export class PlayerCombat {
 
   // Whether the cooldown has elapsed, so the caller can hold the button down
   // and have the swing land at the weapon's own rhythm rather than the frame
-  // rate's.
-  canAttack(nowMs: number): boolean {
-    return nowMs - this.lastAttackMs >= ATTACK_COOLDOWN_MS;
+  // rate's — a rhythm Swiftness is allowed to quicken, which is why this needs
+  // the state as well as the clock.
+  canAttack(state: GameState, nowMs: number): boolean {
+    return nowMs - this.lastAttackMs >= ATTACK_COOLDOWN_MS * attackSpeedScale(state);
   }
 
   tryAttack(
@@ -26,7 +28,7 @@ export class PlayerCombat {
     target: Target,
     nowMs: number,
   ): void {
-    if (!this.canAttack(nowMs)) return;
+    if (!this.canAttack(state, nowMs)) return;
     this.lastAttackMs = nowMs;
     events.emit("player-attack", {});
 

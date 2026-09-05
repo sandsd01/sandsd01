@@ -3,6 +3,7 @@ import type { ResourceNode } from "../world/resource-node";
 import type { Target } from "./targeting";
 import { addItem } from "./inventory";
 import { heldToolSpeed, heldYieldBonus, TOOL_KIND_NAMES, type ToolKind } from "../data/tools";
+import { bonusYieldChance, gatherSpeedScale } from "../data/stats";
 import { indefinite } from "../utils/text";
 import { events } from "../utils/events";
 
@@ -61,11 +62,15 @@ export function nearestNode(nodes: ResourceNode[], x: number, z: number): Resour
 // carrying. Better tools are the whole payoff of the iron tier, and the
 // progress ring reads the difference for free.
 export function gatherTimeFor(state: GameState, node: ResourceNode | null): number {
-  if (!node) return GATHER_TIME_MS;
+  // Craft applies to every node, tool or not: it is a fact about the person
+  // swinging, and a stat that quietly did nothing at a berry bush would be a
+  // stat the panel lies about.
+  const craft = gatherSpeedScale(state);
+  if (!node) return GATHER_TIME_MS * craft;
   const kind = REQUIRED_TOOL[node.config.kind];
-  if (!kind) return GATHER_TIME_MS;
+  if (!kind) return GATHER_TIME_MS * craft;
   const speed = heldToolSpeed(state, kind);
-  return GATHER_TIME_MS * (speed ?? 1);
+  return GATHER_TIME_MS * (speed ?? 1) * craft;
 }
 
 // A short prompt for the aimed node ("Hold left click to chop"), or null when
@@ -109,7 +114,9 @@ export function tryGather(
   // A better tool pays out more, not just sooner. Nodes that need no tool at
   // all (berries, clay) get no bonus, which is what keeps a pickaxe from
   // quietly improving berry picking.
-  const result = node.hit(nowMs, rand, kind ? heldYieldBonus(state, kind) : 0);
+  // The tool's bonus needs the right tool; Craft's does not, for the same
+  // reason as the timing above.
+  const result = node.hit(nowMs, rand, (kind ? heldYieldBonus(state, kind) : 0) + bonusYieldChance(state));
   if (!result) return;
   addItem(state, result.itemId, result.qty);
   if (result.bonus) addItem(state, result.bonus.itemId, result.bonus.qty);
