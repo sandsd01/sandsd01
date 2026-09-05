@@ -23,3 +23,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Screenshots the Playwright check suites write with a relative path, so they
+# land in whatever directory the runner happened to start in. Anchored to this
+# directory on purpose: the real texture assets live under public/ and must
+# stay tracked.
+/*.png
