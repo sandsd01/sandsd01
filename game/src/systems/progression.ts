@@ -80,16 +80,25 @@ export function grantExp(state: GameState, amount: number): void {
     // it. It is what makes a level land in the middle of a fight rather than
     // in a menu afterwards, and it is the reason the aura is worth watching
     // for: it means you survived the next thirty seconds.
-    state.player.health = state.player.maxHealth;
-    state.player.stamina = state.player.maxStamina;
-    events.emit("player-health-changed", {
-      current: state.player.health,
-      max: state.player.maxHealth,
-    });
-    events.emit("player-stamina-changed", {
-      current: state.player.stamina,
-      max: state.player.maxStamina,
-    });
+    //
+    // Not while dead, though. An arrow already in flight can land after the
+    // player has fallen, and healing them here would clear `isPlayerDead`
+    // while the two-second respawn is already pending — so they would stand
+    // back up and then, a moment later, be yanked home by a respawn that no
+    // longer applies to them. Death is resolved by the death path or not at
+    // all; the level itself still counts.
+    if (state.player.health > 0) {
+      state.player.health = state.player.maxHealth;
+      state.player.stamina = state.player.maxStamina;
+      events.emit("player-health-changed", {
+        current: state.player.health,
+        max: state.player.maxHealth,
+      });
+      events.emit("player-stamina-changed", {
+        current: state.player.stamina,
+        max: state.player.maxStamina,
+      });
+    }
     events.emit("player-levelled-up", { level: state.player.level, points: state.statPoints });
   }
 

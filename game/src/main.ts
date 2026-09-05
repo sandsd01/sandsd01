@@ -1169,6 +1169,8 @@ declare global {
       isPointerLocked: () => boolean;
       getResourceNodes: () => { id: string; kind: string; x: number; z: number; depleted: boolean }[];
       getTimeOfDay: () => number;
+      getElapsedMs: () => number;
+      getPlantPrompt: (seedItemId: string) => string | null;
       setTimeOfDayFraction: (fraction: number) => void;
       advanceClockMs: (ms: number) => void;
       depleteNode: (nodeId: string) => { hits: number; depleted: boolean } | null;
@@ -1375,6 +1377,16 @@ window.__gameDebug = {
       depleted: n.depleted,
     })),
   getTimeOfDay: () => dayNight.getTimeOfDay(currentNowMs),
+  // The clock the raid schedule is written against, so a test can wind to just
+  // before an appointment rather than guess at an interval.
+  getElapsedMs: () => currentNowMs,
+  // The real prompt for a real plot, not a formatted string built here: the bug
+  // this covers was the prompt printing a raw item id, which a second copy of
+  // the wording would not have caught.
+  getPlantPrompt: (seedItemId) => {
+    const plot = farmingSystem.nearestPlot(state.player.x, state.player.z);
+    return farmingSystem.getPrompt(plot, seedItemId, currentNowMs);
+  },
   setTimeOfDayFraction: (fraction) => clock.setElapsed(DAY_LENGTH_MS * fraction),
   // Push the world clock forward without waiting it out. Respawn timers run on
   // this clock, so a test can check one without a 35-second sleep.
@@ -1596,7 +1608,11 @@ window.__gameDebug = {
   getEnemyExp: (enemyId) => expForKill(enemyId),
   getArrowDamage: () => arrowDamage(state),
   // Not the constant: the number a swing at this kind of node actually takes,
-  // tool and stat and all.
+  // tool and stat and all. A stand-in node rather than a real one because the
+  // answer depends only on `config.kind` and the caller should not have to find
+  // a live, undepleted node of the right sort in whichever region it happens to
+  // be standing in — if `gatherTimeFor` ever reads more of a node than its
+  // kind, this shim has to grow with it.
   getGatherTimeFor: (kind) => gatherTimeFor(state, { config: { kind } } as never),
   getMoveSpeedScale: () => speedScale(state),
   isAuraPlaying: () => levelAura.isPlaying(),
