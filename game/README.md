@@ -573,6 +573,69 @@ Three things in here were found in screenshots and by nothing else:
 Hiding the overworld is measured, not assumed: 938 draw calls and 236k
 triangles on the surface, 188 and 49k inside the cave, on the same world.
 
+## Up the tree
+
+There is a third place, and getting to it is the same walk-into-a-ring as the
+cave. What is new is what happens at the edge.
+
+**The tree is the first thing this game ever built to be looked at from the
+homestead.** It stands about a hundred units out, forty-six of trunk and a
+canopy on top of that, in pale weathered bark against a forest of mid greens
+on warm brown. Size alone did not do it: the first pass was eighty units away
+and read, in the screenshot, as an ordinary trunk that happened to be nearer.
+The Bleached Giant hit exactly this problem and answered it the same way — the
+silhouette stays a tree, but plainly not one of *these* trees.
+
+**The island has an edge you can walk off**, and that is the one genuinely new
+mechanic in either dungeon. It rests on a single line in `updateVertical`:
+
+```ts
+if (this.state.player.y - groundY > STEP_DOWN) { this.grounded = false; ... }
+```
+
+Without it, `player.y = groundY` teleports a grounded body down whatever drop
+appears under it. That was invisible while the only surface in the game was
+terrain, which never falls away faster than you can walk. It is the same bug at
+the rim of a floating island and at the side of a rampart, and this is the one
+line that answers both. Falling past `SKY_FALL_LIMIT` costs 35 health and puts
+you back at the foot of the tree — the drop is a mistake anyone makes once, and
+dying to it would cost the trip as well.
+
+**The rampart** is what `cloud_iron` buys: the first vertical thing in the game.
+A *tower* was the obvious shape and does not work — the grid is one unit a cell,
+a jump clears 1.11 units (`JUMP_SPEED²/2·GRAVITY`), and pieces do not stack, so
+a platform high enough to matter would have needed a climbing mode this game
+does not have. A ramp needs none: you walk up it exactly as you walk up a hill,
+because a grounded body already follows its floor.
+
+Three things had to be true for it to work, and each is an existing rule made
+to do slightly more:
+
+- **`getCollidables` now answers differently for the player and for the
+  raiders.** Everything else in that list is shared on purpose, so neither side
+  gets a world the other cannot see. A rampart is the exception and the reason
+  it exists: you walk up it and they cannot.
+- **It is solid per cell, by how big the step up is.** That is the
+  `WALKABLE_HEIGHT` rule that already stops a foundation being a wall, measured
+  from the feet instead of from the ground. Without the per-cell part, walking
+  into the tall end from below snapped the body 2.4 units up the side — the
+  exact mirror of the drop `STEP_DOWN` exists to stop.
+- **Enemy reach became a cylinder rather than a circle.** It was
+  `hypot(dx, dz) <= attackRange` with height ignored entirely, which was fine
+  while every fight happened on the same ground and wrong the moment the player
+  could stand on something. A zombie at the foot of a rampart would have gone
+  on hitting them two and a half units above its own head.
+
+So the bow finally has a job the walls could not already do.
+
+Two things in here were found only in screenshots. The island was first built
+as a square `PlaneGeometry` with everything off it pushed down to a floor,
+which put a seventy-eight-unit dark skirt across the whole horizon — reading as
+"the ground goes on, darkly" exactly where the answer had to be "there is
+nothing there". And its first lighting ran fog from 40 to 170 over a
+sixty-unit island, washing the whole place to near-white so the drop past the
+rim read as haze rather than as height.
+
 ## Raid night
 
 Every third night, something comes for you. Before this the day/night cycle was
@@ -749,6 +812,12 @@ the real damage path so a reduction under test is the one the game applies.
 For gates, bows and traps: `toggleDoor(id)` / `getDoorState(id)`,
 `shootArrow()` (the real firing path, draw cooldown and quiver check included)
 and `getArrowsInFlight()`.
+
+`getPortalSites()` lists every way out of the overworld — the three cave mouths
+and the one tree — with where each puts you on the way back. Note that
+`probeMoveTo` resolves against the **player's** collidable list: the two now
+differ, and a probe run against the raiders' world would report the player
+unable to walk onto something they can in fact walk onto.
 
 For regions: `getRegion()` reports the active region's id, name, half-extent,
 live node count and portals (each with its `armed` flag); `getCaveMouths()`

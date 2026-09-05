@@ -43,6 +43,12 @@ export interface Region {
   /** How the place is lit. `null` on the surface, which the day/night cycle
    * owns instead. */
   ambience: RegionAmbience | null;
+  /**
+   * The height below which a body has left this place, or null where there is
+   * no edge to fall off. The overworld and the cave are walled; a floating
+   * island is not, and falling off it is the point of it.
+   */
+  fallLimit: number | null;
   /** Enemy kinds that belong here, and how thickly. */
   enemies: { kinds: string[]; maxAlive: number; intervalMs: number } | null;
   /** Called when the player leaves, so a resetting region can drop its own

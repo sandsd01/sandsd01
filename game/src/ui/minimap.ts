@@ -29,6 +29,7 @@ const NODE_COLORS: Record<string, string> = {
   iron_vein: "#c87a44",
   ancient_stone: "#c9c3dc",
   glow_crystal: "#63d9ff",
+  cloud_iron: "#bcd8e8",
 };
 
 // North-up, player-centred. North-up rather than rotating the whole map with

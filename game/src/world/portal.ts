@@ -31,6 +31,20 @@ export interface Portal {
   armed: boolean;
 }
 
+/**
+ * A way into somewhere, and where walking back out of it puts you.
+ *
+ * Both the cave mouths and the giant tree produce these, so `main.ts` keeps
+ * one list rather than one per kind of destination — which is what stops the
+ * "which way did they come in" bookkeeping being written twice.
+ */
+export interface PortalSite {
+  portal: Portal;
+  /** Where the player lands on returning — well clear of the portal itself. */
+  returnX: number;
+  returnZ: number;
+}
+
 /** How far the player must get from a portal before it will fire. */
 const ARM_DISTANCE = 6;
 

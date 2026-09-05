@@ -133,8 +133,12 @@ export class Enemy {
       this.aiState = "chase";
     }
 
+    // Reach is a cylinder, not a circle — see REACH_HEIGHT.
+    const above = playerPos.y - this.object.position.y;
+    const withinReach = dist <= this.def.attackRange && above <= REACH_HEIGHT;
+
     if (this.aiState === "chase") {
-      if (dist <= this.def.attackRange) {
+      if (withinReach) {
         this.aiState = "attack";
       } else if (dist > this.aggroRadius * 1.5) {
         this.aiState = "idle";
@@ -167,7 +171,10 @@ export class Enemy {
     }
 
     if (this.aiState === "attack") {
-      if (dist > this.def.attackRange * 1.3) {
+      // Backing out on height as well as distance, so a player who climbs a
+      // rampart while a raider is mid-swing is let go rather than held in a
+      // state that can never land a hit.
+      if (dist > this.def.attackRange * 1.3 || above > REACH_HEIGHT) {
         this.aiState = "chase";
       } else if (nowMs - this.lastAttackMs >= this.def.attackCooldownMs) {
         this.lastAttackMs = nowMs;
@@ -275,6 +282,18 @@ export function dangerAt(x: number, z: number): number {
 }
 // A wave lands close enough to reach the player before the night is over, and
 // far enough out that nothing materialises in the middle of the yard.
+/**
+ * How far above its own feet a raider can still reach the player.
+ *
+ * Reach used to be a circle: `hypot(dx, dz) <= attackRange`, with height
+ * ignored entirely. That was invisible while every fight happened on the same
+ * ground, and wrong the moment the player could stand on something — a zombie
+ * at the foot of a rampart would have gone on hitting them two and a half
+ * units above its own head. High enough to still catch someone on a low step
+ * or a foundation, low enough that a rampart is worth building.
+ */
+const REACH_HEIGHT = 1.6;
+
 const WAVE_RADIUS_MIN = 26;
 const WAVE_RADIUS_MAX = 38;
 
@@ -302,6 +321,9 @@ export class EnemyManager {
    * seventy units underground.
    */
   private dungeon: DungeonSpawnRules | null = null;
+  /** Below this, a body has fallen out of the world. Null where there is no
+   * edge to fall off — the overworld and the cave. */
+  private fallLimit: number | null = null;
 
   constructor(
     private readonly scene: THREE.Scene,
@@ -448,8 +470,9 @@ export class EnemyManager {
    * Switches the spawner between the overworld's rules and a dungeon's, or
    * back. Passing null restores the overworld.
    */
-  setDungeonRules(rules: DungeonSpawnRules | null, nowMs: number): void {
+  setDungeonRules(rules: DungeonSpawnRules | null, nowMs: number, fallLimit: number | null = null): void {
     this.dungeon = rules;
+    this.fallLimit = fallLimit;
     // The clock restarts from *now*, not from never.
     //
     // `-Infinity` looks like the same idea and is not: it makes the next spawn
@@ -507,6 +530,15 @@ export class EnemyManager {
     }
 
     for (let i = this.enemies.length - 1; i >= 0; i--) {
+      // Anything that has left the world is gone, not dead: no loot, no
+      // "enemy-killed", because nobody killed it. Only somewhere with an edge
+      // to fall off sets a limit at all.
+      if (this.fallLimit !== null && this.enemies[i].object.position.y < this.fallLimit) {
+        this.scene.remove(this.enemies[i].object);
+        this.raidIds.delete(this.enemies[i].id);
+        this.enemies.splice(i, 1);
+        continue;
+      }
       if (this.enemies[i].isDeathAnimDone(nowMs)) {
         this.scene.remove(this.enemies[i].object);
         this.raidIds.delete(this.enemies[i].id);

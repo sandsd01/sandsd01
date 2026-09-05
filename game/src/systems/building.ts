@@ -51,6 +51,16 @@ const W = GRID_CELL_SIZE * 0.95;
  */
 const MAX_BUILDING_LIGHTS = 8;
 
+/**
+ * How far up the player will walk without jumping.
+ *
+ * The same idea as `WALKABLE_HEIGHT` — which is why a foundation is not a wall
+ * — but measured from the feet rather than from the ground, so it can answer
+ * "can I get onto this from where I am standing" for a surface that is a
+ * different height at each end.
+ */
+const STEP_UP = 1;
+
 // A box per building was readable but lifeless. These keep the same footprint
 // and height the placement grid and collision assume, and spend their detail
 // on the silhouette: posts and rails on walls, a framed soil bed on a plot.
@@ -143,6 +153,61 @@ function buildBuildingGeometry(def: BuildingDef): THREE.BufferGeometry {
     parts.push(
       placed(paint(new THREE.BoxGeometry(W * 0.98, 0.17, W * 0.62), seam), 0, h - 0.085, 0),
     );
+    return merge(parts);
+  }
+
+  if (def.standable) {
+    // Built as steps rather than as a wedge: a smooth slope of one flat-shaded
+    // colour has no edges for the light to catch, and the whole point of this
+    // piece is that a player can see at a glance it is something to walk up.
+    // The surface the player actually stands on is `rampHeightAt` — this only
+    // has to agree with it, which it does by sampling the same function.
+    const stone = def.color;
+    const trim = 0x6a6478;
+    const parts: THREE.BufferGeometry[] = [];
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minZ = Infinity;
+    let maxZ = -Infinity;
+    for (const cell of def.footprintCells) {
+      minX = Math.min(minX, cell.x);
+      maxX = Math.max(maxX, cell.x);
+      minZ = Math.min(minZ, cell.z);
+      maxZ = Math.max(maxZ, cell.z);
+    }
+    const cells = maxX - minX + 1;
+    const widthCells = maxZ - minZ + 1;
+    const wide = widthCells * GRID_CELL_SIZE;
+    // Geometry is centred on the footprint (see spawnMesh), so the near end
+    // sits at -cells/2 and `along` runs from 0 there.
+    const STEPS = 14;
+    for (let i = 0; i < STEPS; i++) {
+      const along = ((i + 0.5) / STEPS) * cells;
+      const top = rampHeightAt(def, along);
+      const run = cells / STEPS;
+      parts.push(
+        placed(
+          paint(new THREE.BoxGeometry(run, Math.max(top, 0.12), wide * 0.98), stone),
+          along - cells / 2,
+          Math.max(top, 0.12) / 2,
+          0,
+        ),
+      );
+    }
+    // A parapet along both long edges of the level part — something to stand
+    // behind, and the silhouette that says "this is a firing step".
+    const flatFrom = RAMP_CELLS;
+    const flatRun = Math.max(0.5, cells - flatFrom);
+    for (const dz of [-1, 1]) {
+      parts.push(
+        placed(
+          paint(new THREE.BoxGeometry(flatRun, 0.5, 0.16), trim),
+          (flatFrom + flatRun / 2) - cells / 2,
+          def.height + 0.25,
+          (dz * wide) / 2 - dz * 0.08,
+        ),
+      );
+    }
     return merge(parts);
   }
 
@@ -956,7 +1021,7 @@ export class BuildingSystem {
    * foundation — a floor slab two tenths of a unit tall — stood in the
    * player's way like a wall.
    */
-  getCollidables(): Collidable[] {
+  getCollidables(forPlayer = false, feetY = 0): Collidable[] {
     // Nothing to walk into where nothing can be built: the pieces are still in
     // memory and still in the surface group, but that group is not in the
     // scene, and being stopped by a wall you cannot see is worse than any way
@@ -967,12 +1032,33 @@ export class BuildingSystem {
     for (const placed of this.state.placedBuildings) {
       const def = getBuilding(placed.buildingId);
       if (def.isPlot || def.height <= WALKABLE_HEIGHT) continue;
+      // The one place the player's world and the raiders' deliberately differ.
+      //
+      // Everything else here is shared on purpose, so neither side gets a
+      // world the other cannot see. A rampart is the exception and the reason
+      // it exists: the player walks up it, and the raiders cannot. Making it
+      // solid for both would leave the player barred from their own platform;
+      // making it open for both would let a zombie walk through the middle of
+      // it at ground level. For the player it is solid **per cell**, and only
+      // where the step up is too big — the `WALKABLE_HEIGHT` rule that already
+      // stops a foundation being a wall, made to depend on where the feet
+      // currently are. Without the per-cell part, walking into the tall end
+      // from the ground snapped the body 2.4 units up the side: the exact
+      // mirror of the drop `STEP_DOWN` exists to stop.
       // An open gate is a gap. This has to agree with `blocksAt` above, which
       // is what decides a neighbour's `openFaces`: leave one of the two out
       // and the walls beside a propped-open gate go back to having the
       // diagonal seam #46 closed.
       if (this.isOpenDoor(placed)) continue;
-      for (const offset of rotateFootprint(def.footprintCells, placed.rotation ?? 0)) {
+      const rotated = rotateFootprint(def.footprintCells, placed.rotation ?? 0);
+      for (let i = 0; i < rotated.length; i++) {
+        const offset = rotated[i];
+        if (forPlayer && def.standable) {
+          // `along` comes from the piece's own frame, not the rotated one —
+          // the ramp runs along +x before the placement turns it.
+          const along = def.footprintCells[i].x + 0.5;
+          if (rampHeightAt(def, along) <= feetY + STEP_UP) continue;
+        }
         const cx = placed.cellX + offset.x;
         const cz = placed.cellZ + offset.z;
         result.push({
@@ -993,4 +1079,82 @@ export class BuildingSystem {
     }
     return result;
   }
+
+  /**
+   * How high the standable piece under this point stands, or null for none.
+   *
+   * A rampart's surface ramps along its own long axis so it can be walked up,
+   * and levels off over the last stretch — that flat part is the bit worth
+   * standing on. Rotation is handled by asking the question in the piece's own
+   * frame rather than by rotating the ramp: the footprint is already rotated
+   * for occupancy, so the two would otherwise have to agree twice.
+   */
+  topAt(x: number, z: number): number | null {
+    if (!this.enabled) return null;
+    let best: number | null = null;
+    for (const placed of this.state.placedBuildings) {
+      const def = getBuilding(placed.buildingId);
+      if (!def.standable) continue;
+      const local = this.toLocalCell(placed, x, z);
+      if (!local) continue;
+      const top = this.baseHeightOf(placed) + rampHeightAt(def, local.along);
+      if (best === null || top > best) best = top;
+    }
+    return best;
+  }
+
+  /**
+   * Where a world point falls inside a placed piece, in cells along its own
+   * long axis — or null when the point is not on the piece at all.
+   */
+  private toLocalCell(placed: PlacedBuilding, x: number, z: number): { along: number } | null {
+    const def = getBuilding(placed.buildingId);
+    const yaw = ((placed.rotation ?? 0) * Math.PI) / 180;
+    // Undo the placement rotation, so the ramp only ever has to be described
+    // running along +x.
+    const dx = x - placed.cellX * GRID_CELL_SIZE;
+    const dz = z - placed.cellZ * GRID_CELL_SIZE;
+    const cos = Math.cos(-yaw);
+    const sin = Math.sin(-yaw);
+    const lx = dx * cos - dz * sin;
+    const lz = dx * sin + dz * cos;
+
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minZ = Infinity;
+    let maxZ = -Infinity;
+    for (const cell of def.footprintCells) {
+      minX = Math.min(minX, cell.x);
+      maxX = Math.max(maxX, cell.x);
+      minZ = Math.min(minZ, cell.z);
+      maxZ = Math.max(maxZ, cell.z);
+    }
+    const half = GRID_CELL_SIZE * 0.5;
+    if (lx < minX * GRID_CELL_SIZE - half || lx > maxX * GRID_CELL_SIZE + half) return null;
+    if (lz < minZ * GRID_CELL_SIZE - half || lz > maxZ * GRID_CELL_SIZE + half) return null;
+    return { along: (lx - (minX * GRID_CELL_SIZE - half)) / GRID_CELL_SIZE };
+  }
+
+  /** The terrain height the piece was built on, recorded when it was placed. */
+  private baseHeightOf(placed: PlacedBuilding): number {
+    return this.baseTransforms.get(placed.id)?.y ?? this.terrain.heightAt(
+      placed.cellX * GRID_CELL_SIZE,
+      placed.cellZ * GRID_CELL_SIZE,
+    );
+  }
+}
+
+/**
+ * A rampart's profile: climbing over `RAMP_CELLS`, level after it.
+ *
+ * Kept out of the class because it is a description of a shape, not a fact
+ * about the world — the placement code, the geometry builder and the check
+ * suite all need the same curve and none of them should be re-deriving it.
+ */
+export const RAMP_CELLS = 4;
+
+export function rampHeightAt(def: BuildingDef, alongCells: number): number {
+  if (!def.standable) return 0;
+  const t = Math.min(1, Math.max(0, alongCells / RAMP_CELLS));
+  return def.height * t;
 }

@@ -29,6 +29,8 @@ const TRACKED_ITEMS = [
   // The cave material, for the same reason: the count is what tells you
   // whether the next trip down is worth taking.
   "glow_crystal",
+  // And the sky's, for the same reason.
+  "cloud_iron",
 ];
 // Each tracked resource gets a glyph as well as a colour: the icon says what
 // it is, the tint only reinforces it.
@@ -56,6 +58,9 @@ const ITEM_ICONS: Record<string, IconName> = {
   // that no two chips share a glyph is there because this mistake has now been
   // made three times.
   glow_crystal: "sparkles",
+  // Not "gem", "sparkles" or "mountain" — all taken. The check that no two
+  // chips share a glyph exists because this has been got wrong three times.
+  cloud_iron: "cloud",
 };
 const ITEM_COLORS: Record<string, number> = {
   wood: 0x8b5a2b,
@@ -71,6 +76,7 @@ const ITEM_COLORS: Record<string, number> = {
   arrow: 0xcfc3a8,
   ancient_stone: 0x8d88a0,
   glow_crystal: 0x63d9ff,
+  cloud_iron: 0xbcd8e8,
 };
 
 const SVG_NS = "http://www.w3.org/2000/svg";

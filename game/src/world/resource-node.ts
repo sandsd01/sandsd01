@@ -10,7 +10,8 @@ export type ResourceNodeKind =
   | "clay_pit"
   | "iron_vein"
   | "ancient_stone"
-  | "glow_crystal";
+  | "glow_crystal"
+  | "cloud_iron";
 
 export interface ResourceNodeConfig {
   kind: ResourceNodeKind;
@@ -114,6 +115,17 @@ export const RESOURCE_NODE_CONFIGS: Record<ResourceNodeKind, ResourceNodeConfig>
     hitsToDeplete: 4,
     respawnMs: 30_000,
   },
+  // Only on the floating island. Slower to work than the crystal because the
+  // island is a smaller place with less on it — the trip is the cost, and a
+  // quick node would empty the island in a single visit.
+  cloud_iron: {
+    kind: "cloud_iron",
+    yieldItemId: "cloud_iron",
+    yield: { min: 1, max: 2 },
+    finalHitBonus: 2,
+    hitsToDeplete: 5,
+    respawnMs: 40_000,
+  },
 };
 
 // Every prop shares one flat-shaded material and carries its colour in vertex
@@ -125,6 +137,9 @@ const PROP_MATERIAL = new THREE.MeshStandardMaterial({
   roughness: 0.85,
   metalness: 0,
 });
+
+/** Pale metal, so it reads against both the island's rock and the sky. */
+const CLOUD_IRON_TINT = 0xcfe4f2;
 
 /** The one colour in the cave that is not grey. */
 const CRYSTAL_TINT = 0x63d9ff;
@@ -402,6 +417,32 @@ function buildGlowCrystalGeometry(rand: () => number): THREE.BufferGeometry {
   return merge(parts);
 }
 
+// Ore in a wind-scoured block. Flat planes and hard corners, because
+// everything else up here is soft — cloud, haze, a rounded island — and the
+// one thing worth mining should be the one thing with edges.
+function buildCloudIronGeometry(rand: () => number): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [];
+  const rock = varyColor(0x8f9bab, rand, 0.07);
+  const h = 0.9 + rand() * 0.5;
+  parts.push(
+    roughen(paint(new THREE.BoxGeometry(1.05, h, 0.95), rock), 0.12, rand),
+  );
+  // Bands of the metal itself, running through the block rather than sitting
+  // on it: a seam says "there is metal in here", a coating says "painted".
+  for (let i = 0; i < 3; i++) {
+    parts.push(
+      placed(
+        paint(new THREE.BoxGeometry(1.1, 0.055, 1.0), varyColor(CLOUD_IRON_TINT, rand, 0.06)),
+        0,
+        h * (0.2 + i * 0.28) - h / 2,
+        0,
+        { rotZ: (rand() * 2 - 1) * 0.06 },
+      ),
+    );
+  }
+  return merge(parts.map((g) => g.translate(0, h / 2, 0)));
+}
+
 const GEOMETRY_BUILDERS: Record<ResourceNodeKind, (rand: () => number) => THREE.BufferGeometry> = {
   tree: buildTreeGeometry,
   rock: buildRockGeometry,
@@ -410,6 +451,7 @@ const GEOMETRY_BUILDERS: Record<ResourceNodeKind, (rand: () => number) => THREE.
   iron_vein: buildIronVeinGeometry,
   ancient_stone: buildAncientStoneGeometry,
   glow_crystal: buildGlowCrystalGeometry,
+  cloud_iron: buildCloudIronGeometry,
 };
 
 // Which pack model stands in for each resource, where the pack has something

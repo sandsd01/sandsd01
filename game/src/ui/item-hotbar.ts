@@ -53,6 +53,7 @@ const ITEM_ICONS: Record<string, IconName> = {
   // side by side and tells the player nothing.
   ancient_stone: "landmark",
   glow_crystal: "sparkles",
+  cloud_iron: "cloud",
 };
 
 // The eight quick slots, holding what the player carries rather than what they
