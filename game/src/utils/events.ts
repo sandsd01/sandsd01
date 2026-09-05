@@ -38,6 +38,9 @@ export interface GameEvents {
   "enemy-spawned": { id: string };
   "enemy-hit": { id: string; damage: number };
   "enemy-killed": { id: string; enemyId: string; x: number; z: number };
+  "player-exp-changed": { level: number; exp: number; toNext: number };
+  "player-levelled-up": { level: number; points: number };
+  "stats-changed": { id: string; points: number };
   "item-crafted": { itemId: string; qty: number };
   "item-picked-up": { itemId: string; qty: number };
   "resource-gathered": { itemId: string; qty: number; kind: string; finalHit: boolean };

@@ -1,6 +1,7 @@
 import type { GameState } from "../state/game-state";
 import { events } from "../utils/events";
 import { reductionFor } from "../data/armour";
+import { vigourReduction } from "../data/stats";
 
 /**
  * The only way the player loses health, which is why armour is applied here
@@ -9,10 +10,13 @@ import { reductionFor } from "../data/armour";
  */
 export function damagePlayer(state: GameState, amount: number): void {
   if (state.player.health <= 0) return;
-  // Floored at 1. Armour that could take a hit down to nothing would end the
-  // game rather than deepen it — there has to be a cost to being surrounded
-  // however good the kit is.
-  const taken = Math.max(1, Math.round(amount * (1 - reductionFor(state))));
+  // Armour and Vigour stack multiplicatively rather than by adding their
+  // percentages: added, a good suit plus a heavy Vigour build reaches zero
+  // damage, and a game with no level cap would get there eventually. Multiplied,
+  // neither can ever finish the job — and the floor of 1 below means being
+  // surrounded always costs something however good the kit is.
+  const reduction = 1 - (1 - reductionFor(state)) * (1 - vigourReduction(state));
+  const taken = Math.max(1, Math.round(amount * (1 - reduction)));
   state.player.health = Math.max(0, state.player.health - taken);
   // The damage that actually landed, not what was swung: the red flash and
   // anything else listening would otherwise report a hit the player never took.

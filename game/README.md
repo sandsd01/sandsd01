@@ -116,6 +116,7 @@ there is no deploy-time configuration to keep in sync.
 - `G` (hold) — repair the damaged building you are aiming at
 - `Q` — cancel building placement
 - `C` — crafting, `B` — building menu, `Tab` or `I` — inventory (select seeds here)
+- `K` or `P` — character sheet: level, experience, and where to spend points
 - `Esc` — close the open menu, or open Options when nothing is open
 
 Click the canvas to lock the pointer for mouse-look.
@@ -636,6 +637,72 @@ nothing there". And its first lighting ran fog from 40 to 170 over a
 sixty-unit island, washing the whole place to near-white so the drop past the
 rim read as haze rather than as height.
 
+## Levels, and what a point buys
+
+A raid lands every eighteen minutes and, before this, **nothing at all happened
+in between**. Every fight in that gap cost health and time and paid in a
+quieter field. Levelling is the fast reward loop that gap was missing, and the
+raid schedule — which escalates with the nights survived and has no ceiling —
+is the counterweight that keeps it from trivialising the game: your power goes
+up, so does the pressure.
+
+- **Kills grant experience** (`EnemyDef.exp`: 8 for a zombie, 20 for a brute),
+  hung off the same `enemy-killed` event as the loot, so the two things a kill
+  pays out arrive together. An enemy that falls out of the world, or is swept
+  away when you change region, pays **nothing** — that event is deliberately
+  not emitted, because nobody killed those.
+- **A level hands over three points to spend plus four health outright.** The
+  automatic health matters: levelling has to feel like it did something to a
+  player who has not found the character sheet yet. And it **refills health and
+  stamina**, the way the genre this borrows from does — which is what makes a
+  level land in the middle of a fight rather than in a menu afterwards.
+- **Five stats, and every one of them multiplies a number the code already
+  funnels through.** Not six copied across: this game has no magic and no
+  criticals, so an INT and a LUK would have had nothing to attach to and would
+  read on the panel as stats that do nothing.
+
+| Stat | What it does | Where it attaches |
+| --- | --- | --- |
+| **Might** | +6% damage a point, in the hand and from the bow | `heldDamage`, `arrowDamage` |
+| **Vigour** | +6 max health, and up to 35% of every hit absorbed | `recomputeMaxHealth`, `damagePlayer` |
+| **Swiftness** | Faster on foot, faster to swing, faster to catch your breath | the move-speed line, `canAttack`, `regenStamina` |
+| **Craft** | Quicker at a node and more out of it | `gatherTimeFor`, the yield roll |
+| **Fortune** | The rare rows drop more often | `rollLoot`'s drop scale |
+
+Fortune is the one that pays in *content* rather than in numbers, and it is
+there to give a player hunting for gear somewhere to put their points.
+
+**The curve is measured, not guessed.** Killing everything the spawner produced
+over five game-minutes in each place gives **6.3 kills a minute near the
+homestead and 16.7 out on the frontier** — the supply, not the fighting, is
+what sets the pace, because at a mean spawn distance of sixty units even a
+sprint costs about eight seconds against a nine-second spawn interval. Near
+home that is roughly 50 exp a minute; on the frontier, with brutes common and
+the interval down to 3.5 seconds, three to four times that. `expToNext(n) =
+30 * n^1.1` (`src/data/levels.ts`) puts the first level at about 35 seconds and
+the tenth at seven and a half minutes of home hunting — and that gap between
+the two places is the point, because it means the curve can steepen without
+ever stalling: the answer to "this is taking a while" is somewhere to go.
+
+Arrow damage got a resolver (`arrowDamage`) in the process. `ARROW_DAMAGE` was
+read straight out of the constant at the one place arrows land, which made the
+bow the only weapon in the game that nothing could ever modify.
+
+`maxHealth` is now rebuilt from level and Vigour by `recomputeMaxHealth` rather
+than added to incrementally, including on load — it is a stored number with two
+independent contributors, and anything incremental would drift the first time a
+save was edited or the numbers retuned.
+
+**Levelling up puts a light under your feet**: three rings off the ground and a
+ring of beams rising through you, over about a second. It is built from
+primitives — this game has no particle system and one flourish is not a reason
+to start one — and it *glows* because the composer already carries an
+`UnrealBloomPass`. That pass thresholds at 1.7 in linear HDR sampled before
+tone mapping, so the colours in `src/world/level-aura.ts` are set above 1.0 in
+linear space on purpose. Set to an ordinary cyan they come out as flat
+translucent plastic; the difference was checked against a screenshot, not
+assumed.
+
 ## Raid night
 
 Every third night, something comes for you. Before this the day/night cycle was
@@ -708,7 +775,8 @@ Everything gameplay-relevant goes into one `localStorage` key
 and clock, the player, inventory, hotbar, placed buildings (with how battered
 each one is and whether a gate is standing open), crops, known recipes,
 container contents, the raid schedule and how many raids have been survived,
-what is being worn, and **how far each resource node has been worked**.
+what is being worn, **your level, experience, unspent points and where the
+spent ones went**, and **how far each resource node has been worked**.
 
 That last one is newer than the rest, and its absence used to be exploitable:
 nodes were re-scattered from the seed on every boot, so reloading the page
@@ -730,8 +798,20 @@ knowing if you touch this code:
   not recognise, so a save from a different seed degrades to "untouched" rather
   than throwing.
 
+`player.level` and `player.exp` cost no migration code at all: `backfillDefaults`
+walks every numeric field of `player` and fills in whatever a save is missing.
+`statPoints` and `stats` are not numbers on `player` and need their own guards —
+and `stats` needs a guard **per field**, not one on the whole record, which is
+the lesson `raid.count` taught: a whole-object check silently skips a save that
+has the record but lacks a field added later.
+
 Preferences (`romestead-settings-v1`, `romestead-keybindings-v1`) are stored
-outside the save on purpose, so they survive starting a new world.
+outside the save on purpose, so they survive starting a new world. **Options now
+has a "Start a new game" button** — `clearSave()` had existed since save/load
+shipped and nothing had ever called it, so the only way to begin a second
+character was to know what `localStorage` is. It arms on the first click and
+wipes on the second, and switches the periodic save off before reloading, or
+the world it just erased would be written straight back on the way out.
 
 Building moved off the number keys into the `B` panel when the hotbar became
 items. That does make laying several pieces slower than it was; if it grates,
@@ -808,6 +888,17 @@ survived, `setRaidCount(n)` jumps the difficulty dial (playing ten raids to see
 what raid ten looks like is twenty minutes of waiting per assertion),
 `getArmour()` / `wearArmour(id)` / `takeOffArmour()`, and `hurtPlayer(n)` runs
 the real damage path so a reduction under test is the one the game applies.
+
+For levelling: `getLevel()` (level, exp, what the next one costs, unspent
+points, where the spent ones went, and the resulting max health), `grantExp(n)`,
+`allocateStat(id)`, `getEnemyExp(enemyId)`, `getArrowDamage()`,
+`getGatherTimeFor(kind)`, `getMoveSpeedScale()` and `isAuraPlaying()`. Every one
+of those reads the same function the game reads at its chokepoint, on purpose:
+a suite that restated the arithmetic would pass against a build with the whole
+of the wiring pulled out. `rollLootFor` passes Fortune's scale for the same
+reason — it used to omit it, which made the hook a second implementation of
+looting that happened to agree with the first, and a suite measuring drop rates
+through it reported Fortune doing nothing while the game applied it correctly.
 
 For gates, bows and traps: `toggleDoor(id)` / `getDoorState(id)`,
 `shootArrow()` (the real firing path, draw cooldown and quiver check included)

@@ -6,6 +6,7 @@ import { events } from "../utils/events";
 import { colorToCss, el } from "./dom";
 import { keyLabel, type Action, type Bindings } from "../state/keybindings";
 import { icon, iconSvg, type IconName } from "./icons";
+import { expToNext } from "../data/levels";
 
 // The staples, plus the two things only the dead drop — a bar that never
 // showed loot would leave the player checking the inventory panel to find out
@@ -97,6 +98,9 @@ export class Hud {
   /** Last rendered count per tracked item, to spot a rise. */
   private readonly lastCounts = new Map<string, number>();
   private readonly healthFill: HTMLDivElement;
+  private readonly levelLabel: HTMLSpanElement;
+  private readonly expFill: HTMLDivElement;
+  private readonly pointsPip: HTMLSpanElement;
   private readonly armourChip: HTMLDivElement;
   private readonly staminaFill: HTMLDivElement;
   private readonly resourceRow: HTMLDivElement;
@@ -128,7 +132,27 @@ export class Hud {
     staminaBg.appendChild(this.staminaFill);
     healthWrap.appendChild(staminaBg);
 
-    // Under the two bars, because what it changes is how fast the top one
+    // The third bar, and deliberately the thinnest and last: health is what
+    // you are about to lose, stamina is what you are spending, and this is the
+    // only one of the three that never goes down. It sits with them rather
+    // than in a corner of its own because it is read in the same glance —
+    // "am I about to level" is a question asked mid-fight.
+    const levelRow = el("div", "hud-level");
+    const levelIcon = el("span", "hud-level-icon icon");
+    levelIcon.innerHTML = iconSvg("chevronsUp");
+    this.levelLabel = el("span", "hud-level-label", "Lv 1");
+    // A dot, not a colour change: an unspent point has to be noticeable to a
+    // player who cannot tell the bar has gone gold.
+    this.pointsPip = el("span", "hud-level-pip", "+");
+    this.pointsPip.hidden = true;
+    this.pointsPip.title = "Unspent stat points";
+    const expBg = el("div", "hud-exp-bar-bg");
+    this.expFill = el("div", "hud-exp-bar-fill");
+    expBg.appendChild(this.expFill);
+    levelRow.append(levelIcon, this.levelLabel, expBg, this.pointsPip);
+    healthWrap.appendChild(levelRow);
+
+    // Under the bars, because what it changes is how fast the top one
     // empties. Words and a number, never a colour on its own.
     this.armourChip = el("div", "hud-armour");
     this.armourChip.hidden = true;
@@ -223,14 +247,30 @@ export class Hud {
 
     this.renderHealth(state);
     this.renderStamina(state);
+    this.renderLevel(state);
     this.renderResources(state);
 
     this.renderArmour(state);
     events.on("armour-changed", () => this.renderArmour(state));
     events.on("player-health-changed", () => this.renderHealth(state));
     events.on("player-stamina-changed", () => this.renderStamina(state));
+    events.on("player-exp-changed", () => this.renderLevel(state));
+    events.on("stats-changed", () => this.renderLevel(state));
+    events.on("player-levelled-up", ({ level }) => {
+      this.renderLevel(state);
+      this.showToast(`Level ${level}`);
+    });
     events.on("inventory-changed", () => this.renderResources(state));
     events.on("notification", ({ message }) => this.showToast(message));
+    // `secondsAway` was computed by the raid system and thrown away — the horn
+    // sounded and nothing on screen said what it was for. A player who has not
+    // yet learned what that noise means has no way to find out.
+    events.on("raid-warning", ({ secondsAway }) => {
+      const mins = Math.round(secondsAway / 60);
+      this.showToast(
+        mins >= 2 ? `Raid in about ${mins} minutes — get behind a wall` : "Raid incoming — get behind a wall",
+      );
+    });
     events.on("player-damaged", () => this.flashDamage());
     events.on("player-died", () => this.deathOverlay.classList.add("visible"));
     events.on("player-respawned", () => this.deathOverlay.classList.remove("visible"));
@@ -247,6 +287,16 @@ export class Hud {
     const pct = Math.round((ARMOUR[worn]?.reduction ?? 0) * 100);
     this.armourChip.hidden = false;
     this.armourChip.textContent = `${getItem(worn).name} · -${pct}% damage`;
+  }
+
+  /** Level, progress to the next, and whether there is anything to spend. */
+  private renderLevel(state: GameState): void {
+    this.levelLabel.textContent = `Lv ${state.player.level}`;
+    const toNext = expToNext(state.player.level);
+    const pct = toNext > 0 ? Math.min(100, (state.player.exp / toNext) * 100) : 0;
+    this.expFill.style.width = `${pct}%`;
+    this.pointsPip.hidden = state.statPoints <= 0;
+    this.pointsPip.textContent = `+${state.statPoints}`;
   }
 
   private renderHealth(state: GameState): void {

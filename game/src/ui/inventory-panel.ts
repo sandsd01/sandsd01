@@ -9,6 +9,7 @@ import { el } from "./dom";
 export class InventoryPanel {
   private readonly panel: HTMLDivElement;
   private readonly list: HTMLDivElement;
+  private readonly hint: HTMLParagraphElement;
   private visible = false;
 
   constructor(
@@ -16,17 +17,17 @@ export class InventoryPanel {
     private readonly state: GameState,
     private readonly onSelectSeed: (itemId: string) => void,
     private getSelectedSeed: () => string | null,
+    private readonly closeKeyLabel: () => string = () => "Tab",
   ) {
     this.panel = el("div", "panel");
     this.panel.appendChild(el("h2", undefined, "Inventory"));
     this.list = el("div");
     this.panel.appendChild(this.list);
-    const hint = el(
-      "p",
-      "panel-hint",
-      "Click a seed to select it for planting, or eat food to heal. Press I to close.",
-    );
-    this.panel.appendChild(hint);
+    // Read from the live binding rather than written into the string: this
+    // line said "Press I to close" while the key on screen and in the Options
+    // list was Tab, and a rebind would have made it wrong all over again.
+    this.hint = el("p", "panel-hint", "");
+    this.panel.appendChild(this.hint);
     root.appendChild(this.panel);
 
     events.on("inventory-changed", () => {
@@ -79,6 +80,7 @@ export class InventoryPanel {
   }
 
   private render(): void {
+    this.hint.textContent = `Click a seed to select it for planting, or eat food to heal. Press ${this.closeKeyLabel()} to close.`;
     const selected = this.getSelectedSeed();
     const worn = this.wornRow();
     this.list.replaceChildren(

@@ -1,5 +1,6 @@
 import type { GameState } from "../state/game-state";
 import { equippedItemId } from "../systems/equipment";
+import { damageScale } from "./stats";
 
 // What a tool is for, and how fast it works. Kept as data next to the items
 // rather than as a string match in the gathering system, so a new tool tier is
@@ -57,8 +58,24 @@ export const ARROW_DAMAGE = 22;
 /** Damage for whatever is in hand — a weapon, a tool, or nothing. */
 export function heldDamage(state: GameState): number {
   const held = equippedItemId(state);
-  if (held === null) return UNARMED_DAMAGE;
-  return WEAPON_DAMAGE[held] ?? TOOLS[held]?.damage ?? UNARMED_DAMAGE;
+  const base = held === null ? UNARMED_DAMAGE : WEAPON_DAMAGE[held] ?? TOOLS[held]?.damage ?? UNARMED_DAMAGE;
+  // Might is applied here, at the one place that already answers "how hard did
+  // that hit", rather than at either of the two callers. Armour is done the
+  // same way in `damagePlayer`, and for the same reason: a multiplier spread
+  // across call sites is a multiplier that one of them will forget.
+  return Math.max(1, Math.round(base * damageScale(state)));
+}
+
+/**
+ * Damage an arrow does on impact.
+ *
+ * This function is the point. `ARROW_DAMAGE` was read straight out of the
+ * constant at the one place arrows land, which meant the bow was the only
+ * weapon in the game nothing could ever modify — no stat, and no future piece
+ * of gear. Now it has the same shape as the melee path.
+ */
+export function arrowDamage(state: GameState): number {
+  return Math.max(1, Math.round(ARROW_DAMAGE * damageScale(state)));
 }
 
 /**

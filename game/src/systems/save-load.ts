@@ -3,6 +3,9 @@ import { learnAllRecipes } from "./crafting";
 import { assignFromInventory, normaliseHotbar } from "./equipment";
 import { events } from "../utils/events";
 import { raidStartAfter } from "./day-night";
+import { START_LEVEL } from "../data/levels";
+import { STAT_IDS, initialStats } from "../data/stats";
+import { recomputeMaxHealth } from "./progression";
 
 const STORAGE_KEY = "romestead-save-v1";
 
@@ -102,6 +105,33 @@ function backfillDefaults(state: GameState): void {
     }
     state.region = "surface";
   }
+  // Levels. `player.level`/`player.exp` are numbers on `player`, so the generic
+  // loop above has already filled them — but it fills from `createInitialState`,
+  // which starts at level 1, and a save that predates levelling *should* start
+  // at level 1. That is the right answer by luck rather than by design, so it
+  // is worth saying: a level of 0 would break `expToNext`, and this is why it
+  // cannot happen.
+  if (!Number.isFinite(state.player.level) || state.player.level < START_LEVEL) {
+    state.player.level = START_LEVEL;
+  }
+  if (!Number.isFinite(state.player.exp) || state.player.exp < 0) state.player.exp = 0;
+
+  // These two are not numbers on `player`, so they need their own guards — and
+  // the inner one is the lesson `raid.count` taught at the bottom of this
+  // function: a whole-object check skips a save that has the record but lacks a
+  // field added later.
+  if (typeof state.statPoints !== "number") state.statPoints = 0;
+  if (!state.stats || typeof state.stats !== "object") state.stats = initialStats();
+  for (const id of STAT_IDS) {
+    if (typeof state.stats[id] !== "number") state.stats[id] = 0;
+  }
+  // `maxHealth` is stored, and now has two contributors that a stored number
+  // cannot be trusted to agree with — the level and Vigour. Rebuilt from both
+  // rather than believed, so a save written before either existed, or edited
+  // by hand, lands on the figure the character has actually earned.
+  recomputeMaxHealth(state);
+  state.player.health = Math.min(state.player.health, state.player.maxHealth);
+
   // Nothing was worn before there was anything to wear.
   if (typeof state.armour !== "string") state.armour = null;
 

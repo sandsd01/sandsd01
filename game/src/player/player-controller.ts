@@ -10,6 +10,7 @@ import { buildFigureGeometry, createFigureMaterial } from "../world/figures";
 import { HeldItem } from "../world/held-item";
 import { merge, paint, placed } from "../world/geometry";
 import { instantiate, type ModelLibrary } from "../world/models";
+import { speedScale, staminaRegenScale } from "../data/stats";
 
 const MOVE_SPEED = 5;
 const SPRINT_MULTIPLIER = 1.6;
@@ -359,7 +360,7 @@ export class PlayerController {
     const isMoving = move.lengthSq() > 0.0001;
     const sprinting = this.updateSprintState(dt, nowMs, input.isSprinting() && isMoving);
     this.sprintingNow = sprinting;
-    const speed = MOVE_SPEED * (sprinting ? SPRINT_MULTIPLIER : 1);
+    const speed = MOVE_SPEED * (sprinting ? SPRINT_MULTIPLIER : 1) * speedScale(this.state);
     let { x, z } = this.state.player;
     if (isMoving) {
       x += move.x * speed * dt;
@@ -410,7 +411,10 @@ export class PlayerController {
     const player = this.state.player;
     if (player.stamina >= player.maxStamina) return;
     if (nowMs - this.lastStaminaSpendMs < REGEN_DELAY_MS) return;
-    player.stamina = Math.min(player.maxStamina, player.stamina + REGEN_PER_SEC * dt);
+    player.stamina = Math.min(
+      player.maxStamina,
+      player.stamina + REGEN_PER_SEC * staminaRegenScale(this.state) * dt,
+    );
     events.emit("player-stamina-changed", { current: player.stamina, max: player.maxStamina });
   }
 
