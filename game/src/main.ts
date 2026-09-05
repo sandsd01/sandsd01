@@ -29,7 +29,9 @@ import { createLandmarks } from "./world/landmarks";
 import { createPointsOfInterest, updatePointsOfInterest } from "./world/pois";
 import { RegionManager, type Region, type RegionId } from "./world/region";
 import { portalSteppedInto, updatePortals } from "./world/portal";
-import { CAVE_ARRIVAL, createCaveMouths, createCaveRegion, type CaveMouth } from "./world/cave";
+import { CAVE_ARRIVAL, createCaveMouths, createCaveRegion } from "./world/cave";
+import { SKY_ARRIVAL, createGiantTree, createSkyRegion } from "./world/sky";
+import type { PortalSite } from "./world/portal";
 import { createComposer } from "./core/postprocessing";
 
 import {
@@ -188,8 +190,14 @@ const composer = createComposer(renderer, scene, camera.camera);
 const landmarks = createLandmarks(surfaceGroup, terrain, state.seed, models);
 const poiSites = createPointsOfInterest(state, landmarks, state.seed);
 
-// The ways down, and the portals standing in front of them.
-const caveMouths = createCaveMouths(surfaceGroup, terrain, state.seed, models, resourceNodes);
+// Every way out of the overworld, in one list: three cave mouths and the one
+// giant tree. They differ only in where they lead, and keeping them apart
+// would mean writing the "which one did they come in by" bookkeeping twice.
+const portalSites: PortalSite[] = [
+  ...createCaveMouths(surfaceGroup, terrain, state.seed, models, resourceNodes),
+];
+const giantTree = createGiantTree(surfaceGroup, terrain, state.seed, models, resourceNodes);
+if (giantTree) portalSites.push(giantTree);
 
 const surfaceRegion: Region = {
   id: "surface",
@@ -199,8 +207,10 @@ const surfaceRegion: Region = {
   ground: terrain.mesh,
   halfExtent: terrain.halfExtent,
   nodes: resourceNodes,
-  portals: caveMouths.map((mouth) => mouth.portal),
+  portals: portalSites.map((site) => site.portal),
   mapGround: null,
+  // The overworld is walled by `clampToWorld`; there is no edge to fall off.
+  fallLimit: null,
   // The overworld's light is the day/night cycle's, not a fixed setting.
   ambience: null,
   // Likewise its enemies: the ambient trickle and the raid schedule already
@@ -215,7 +225,12 @@ function activeNodes() {
   return regions.active.nodes;
 }
 
-const player = new PlayerController(state, regions, models);
+// Buildings are the only thing in the game the player can stand *on*; the
+// controller takes them as a surface provider so walking up a rampart needs
+// no special case anywhere in the movement code.
+const player = new PlayerController(state, regions, models, {
+  topAt: (x, z) => (regions.isSurface() ? buildingSystem.topAt(x, z) : null),
+});
 scene.add(player.object);
 
 // Buildings and crops go in the surface group rather than straight into the
@@ -349,6 +364,15 @@ function togglePanel(target: TogglablePanel): void {
 // Where the camera pivots and, in first person, where it sits.
 const EYE_HEIGHT = 1.85;
 
+/**
+ * What falling off the island costs.
+ *
+ * Enough to hurt and to make the rim worth respecting; not enough to kill from
+ * full health, because the drop is a mistake anyone makes once and death here
+ * would cost the trip as well as the health.
+ */
+const FALL_DAMAGE = 35;
+
 // Seeded from the clock rather than from zero, so the first frame's step is a
 // frame and not "the whole of the save's elapsed time".
 let currentNowMs = clock.now();
@@ -364,8 +388,8 @@ let currentNowMs = clock.now();
 const SURFACE_FOG_NEAR = (scene.fog as THREE.Fog).near;
 const SURFACE_FOG_FAR = (scene.fog as THREE.Fog).far;
 
-/** Which mouth the player went down, so walking back out returns them to it. */
-let usedMouth: CaveMouth | null = null;
+/** Which way the player went, so walking back out returns them to it. */
+let usedSite: PortalSite | null = null;
 
 /**
  * Puts the scene's lighting into whatever the region asks for, or hands it
@@ -412,20 +436,21 @@ function enterRegion(target: RegionId, arrival: { x: number; z: number }): void 
 
   if (target === "surface") {
     regions.enter(surfaceRegion);
-    enemyManager.setDungeonRules(null, currentNowMs);
+    enemyManager.setDungeonRules(null, currentNowMs, null);
     // A raid that was running when the player went under is still running, and
     // its field was emptied on the way in — so it picks up with a fresh wave,
     // exactly as it does after a reload.
     raid.resume(currentNowMs, arrival.x, arrival.z);
   } else {
-    // A seed that moves with the clock: the player chose a dungeon that
-    // resets, so two trips down the same hole are two different caves.
-    const cave = createCaveRegion((state.seed ^ 0x0dee9) + Math.floor(currentNowMs), models);
-    regions.enter(cave);
-    enemyManager.setDungeonRules(cave.enemies, currentNowMs);
-    // The raid is held rather than fought while they are down here, so the
-    // spawner has to be told the night is off — otherwise `raiding` stays true
-    // and suppresses the cave's own trickle, leaving an empty dungeon.
+    // A seed that moves with the clock: the player chose dungeons that reset,
+    // so two trips through the same portal are two different places.
+    const seed = (state.seed ^ 0x0dee9) + Math.floor(currentNowMs);
+    const region = target === "sky" ? createSkyRegion(seed, models) : createCaveRegion(seed, models);
+    regions.enter(region);
+    enemyManager.setDungeonRules(region.enemies, currentNowMs, region.fallLimit);
+    // The raid is held rather than fought while they are away, so the spawner
+    // has to be told the night is off — otherwise `raiding` stays true and
+    // suppresses the region's own trickle, leaving an empty dungeon.
     enemyManager.setRaiding(false);
   }
 
@@ -450,21 +475,21 @@ function updateRegionTransitions(): void {
   if (portal.target === "surface") {
     // The mouth they came down, or — if this session never saw them go down,
     // which a reload could do — whatever the save recorded.
-    const arrival = usedMouth
-      ? { x: usedMouth.returnX, z: usedMouth.returnZ }
+    const arrival = usedSite
+      ? { x: usedSite.returnX, z: usedSite.returnZ }
       : { x: state.regionReturn?.x ?? 0, z: state.regionReturn?.z ?? 0 };
     enterRegion("surface", arrival);
     return;
   }
 
-  usedMouth = caveMouths.find((mouth) => mouth.portal === portal) ?? null;
+  usedSite = portalSites.find((site) => site.portal === portal) ?? null;
   // Recorded before the move, so a player who quits underground is put back
   // here on their next load rather than at coordinates inside a cave that no
   // longer exists.
-  state.regionReturn = usedMouth
-    ? { x: usedMouth.returnX, z: usedMouth.returnZ }
+  state.regionReturn = usedSite
+    ? { x: usedSite.returnX, z: usedSite.returnZ }
     : { x: state.player.x, z: state.player.z };
-  enterRegion(portal.target, CAVE_ARRIVAL);
+  enterRegion(portal.target, portal.target === "sky" ? SKY_ARRIVAL : CAVE_ARRIVAL);
 }
 
 let respawnScheduled = false;
@@ -794,12 +819,15 @@ function buildingPrompt(placedId: string | null): string | null {
   return parts.length > 0 ? parts.join(" · ") : null;
 }
 
-function getCollidables(): Collidable[] {
+function getCollidables(forPlayer = false, feetY = 0): Collidable[] {
   const nodeCollidables: Collidable[] = activeNodes()
     .filter((n) => !n.depleted)
     .map((n) => ({ x: n.object.position.x, z: n.object.position.z, radius: 0.5 }));
   // `getCollidables` is empty off the surface — see BuildingSystem.setEnabled.
-  return [...nodeCollidables, ...buildingSystem.getCollidables()];
+  // `forPlayer` drops the pieces the player is meant to walk onto rather than
+  // into; the raiders still get them solid. That is the one place the two
+  // sides deliberately see different worlds — see the note in building.ts.
+  return [...nodeCollidables, ...buildingSystem.getCollidables(forPlayer, feetY)];
 }
 
 const loop = new GameLoop((dt) => {
@@ -828,8 +856,23 @@ const loop = new GameLoop((dt) => {
 
   const menuOpen = anyPanelOpen();
   if (!isPlayerDead(state) && !menuOpen) {
-    const collidables = getCollidables();
+    const collidables = getCollidables(true, state.player.y);
     player.update(dt, currentNowMs, input, camera, collidables);
+  }
+
+  // Fallen off the world. Only somewhere with an edge sets a limit at all,
+  // and the island is the only such place — the drop is the point of it, so
+  // it costs health rather than a life, and puts them back at the tree.
+  const fallLimit = regions.active.fallLimit;
+  if (fallLimit !== null && state.player.y < fallLimit && !isPlayerDead(state)) {
+    damagePlayer(state, FALL_DAMAGE);
+    events.emit("notification", { message: "You fell from The Reach" });
+    const back = usedSite ?? null;
+    enterRegion("surface", {
+      x: back?.returnX ?? state.regionReturn?.x ?? 0,
+      z: back?.returnZ ?? state.regionReturn?.z ?? 0,
+    });
+    scheduleRespawnIfDead();
   }
 
   // Resolved the instant the player has finished moving and before anything
@@ -1230,7 +1273,13 @@ declare global {
         nodeCount: number;
         portals: { id: string; target: string; x: number; z: number; armed: boolean }[];
       };
-      getCaveMouths: () => { x: number; z: number; returnX: number; returnZ: number }[];
+      getPortalSites: () => {
+        target: string;
+        x: number;
+        z: number;
+        returnX: number;
+        returnZ: number;
+      }[];
       /** Walks the player into a portal the way their own feet would. */
       enterPortal: (index: number) => string;
       /**
@@ -1414,7 +1463,16 @@ window.__gameDebug = {
     const stepX = (x - start.x) / steps;
     const stepZ = (z - start.z) / steps;
     for (let i = 0; i < steps; i++) {
-      const solved = resolveCollisions(cx + stepX, cz + stepZ, PLAYER_RADIUS, getCollidables());
+      // The player's own list, not the raiders'. They differ now — a rampart
+      // is a surface to one and a wall to the other — and a probe resolved
+      // against the raiders' world would report the player unable to walk onto
+      // something they can in fact walk onto.
+      const solved = resolveCollisions(
+        cx + stepX,
+        cz + stepZ,
+        PLAYER_RADIUS,
+        getCollidables(true, player.getFeetPosition().y),
+      );
       player.teleport(solved.x, solved.z);
       // Read the body back rather than trusting the running total. `teleport`
       // clamps to the world's edge, so at the boundary the two disagree — and
@@ -1606,8 +1664,14 @@ window.__gameDebug = {
       armed: p.armed,
     })),
   }),
-  getCaveMouths: () =>
-    caveMouths.map((m) => ({ x: m.portal.x, z: m.portal.z, returnX: m.returnX, returnZ: m.returnZ })),
+  getPortalSites: () =>
+    portalSites.map((s) => ({
+      target: s.portal.target,
+      x: s.portal.x,
+      z: s.portal.z,
+      returnX: s.returnX,
+      returnZ: s.returnZ,
+    })),
   // Teleports onto the portal and lets the ordinary per-frame check fire, so a
   // test exercises the real trigger — including the arming rule — rather than
   // a second, kinder way to change region that only tests have.

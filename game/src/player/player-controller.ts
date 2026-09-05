@@ -32,6 +32,17 @@ const SWING_DURATION_MS = 220;
 // Tuned so a jump clears roughly two thirds of the player's height and lands
 // in a little under half a second — the snappy, low-float arc this genre uses,
 // rather than a floaty moon-jump.
+/**
+ * How far the ground can drop under your feet before you are falling.
+ *
+ * Generous on purpose. The overworld's steepest hills fall about a unit per
+ * unit travelled, and a sprinting player covers 0.8 units in the loop's
+ * longest frame — so anything much under this would have the player
+ * "stepping off" a hillside. Anything a rampart or a floating island's edge
+ * drops is far past it.
+ */
+const STEP_DOWN = 1.5;
+
 const GRAVITY = 22;
 const JUMP_SPEED = 7;
 // Stamina: a full bar buys roughly five seconds of sprinting or six jumps, and
@@ -57,6 +68,17 @@ const CLIP_ATTACK = "attack-melee-right";
 const CLIP_DIE = "die";
 const CROSSFADE_SECONDS = 0.16;
 
+/**
+ * Anything the player can stand on that is not the ground itself.
+ *
+ * One method, because that is the whole of what the movement code needs to
+ * know: given a point, how high is the surface here, or null for open ground.
+ * `BuildingSystem` is the only implementer today.
+ */
+export interface Standables {
+  topAt(x: number, z: number): number | null;
+}
+
 export class PlayerController {
   readonly object: THREE.Group;
   /** Present only when falling back to the procedural figure. */
@@ -81,6 +103,8 @@ export class PlayerController {
     private readonly state: GameState,
     private readonly terrain: BoundedGround,
     models: ModelLibrary = {},
+    /** Surfaces built on top of the ground. Absent in tests that only walk. */
+    private readonly standables: Standables | null = null,
   ) {
     this.object = new THREE.Group();
     // The held item rides the character root, not a bone: the pack's rig has
@@ -284,13 +308,25 @@ export class PlayerController {
     return { x: this.state.player.x, z: this.state.player.z };
   }
 
+  /**
+   * The height of whatever is underfoot: the ground, or something standing on
+   * it. Taking the higher of the two is all "you can walk up a rampart" needs
+   * — walking *up* already worked, because a grounded body follows its floor;
+   * walking back off it is what `STEP_DOWN` above had to be taught.
+   */
+  private surfaceAt(x: number, z: number): number {
+    const ground = this.terrain.heightAt(x, z);
+    const top = this.standables?.topAt(x, z) ?? null;
+    return top !== null && top > ground ? top : ground;
+  }
+
   // Debug/testing-only teleport (see window.__gameDebug in main.ts) — not used
   // by normal gameplay input handling. Clamped like any other move: a debug
   // hook that could put the player somewhere the game cannot is a hook that
   // tests things the game will never do.
   teleport(x: number, z: number): void {
     const at = this.setGroundPosition(x, z);
-    this.state.player.y = this.terrain.heightAt(at.x, at.z);
+    this.state.player.y = this.surfaceAt(at.x, at.z);
     this.syncObjectFromState();
   }
 
@@ -333,7 +369,7 @@ export class PlayerController {
 
     const resolved = resolveCollisions(x, z, PLAYER_RADIUS, collidables);
     const at = this.setGroundPosition(resolved.x, resolved.z);
-    this.updateVertical(dt, nowMs, input, this.terrain.heightAt(at.x, at.z));
+    this.updateVertical(dt, nowMs, input, this.surfaceAt(at.x, at.z));
 
     this.regenStamina(dt, nowMs);
     this.syncObjectFromState();
@@ -395,10 +431,23 @@ export class PlayerController {
     }
 
     if (this.grounded) {
-      // Walking over uneven ground follows the surface directly; applying
-      // gravity here would leave the player permanently falling down slopes.
-      this.state.player.y = groundY;
-      return;
+      // Ground that has dropped away by more than a step is not ground you
+      // are standing on — it is a ledge you have just walked off.
+      //
+      // Without this, `player.y = groundY` teleports the body down the drop,
+      // whatever its size. That was invisible while the only surface was
+      // terrain, which never falls away faster than you can walk. It is the
+      // same bug at the edge of a floating island and at the side of a
+      // rampart, and this is the one line that answers both.
+      if (this.state.player.y - groundY > STEP_DOWN) {
+        this.grounded = false;
+        this.velocityY = 0;
+      } else {
+        // Walking over uneven ground follows the surface directly; applying
+        // gravity here would leave the player permanently falling down slopes.
+        this.state.player.y = groundY;
+        return;
+      }
     }
 
     this.velocityY -= GRAVITY * dt;

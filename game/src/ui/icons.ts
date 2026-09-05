@@ -5,6 +5,7 @@
 import axe from "lucide-static/icons/axe.svg?raw";
 import bone from "lucide-static/icons/bone.svg?raw";
 import brickWall from "lucide-static/icons/brick-wall.svg?raw";
+import cloud from "lucide-static/icons/cloud.svg?raw";
 import crosshair from "lucide-static/icons/crosshair.svg?raw";
 import fence from "lucide-static/icons/fence.svg?raw";
 import flame from "lucide-static/icons/flame.svg?raw";
@@ -34,6 +35,7 @@ const SOURCES = {
   axe,
   bone,
   brickWall,
+  cloud,
   crosshair,
   fence,
   flame,

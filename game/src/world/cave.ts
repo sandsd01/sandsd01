@@ -3,7 +3,7 @@ import { ValueNoise2D } from "./noise";
 import { mulberry32 } from "../utils/rng";
 import { merge, paint, placed, roughen, varyColor } from "./geometry";
 import { ResourceNode } from "./resource-node";
-import { createPortal, type Portal } from "./portal";
+import { createPortal, type PortalSite } from "./portal";
 import { disposeGroup, type Region } from "./region";
 import { getZone } from "./zones";
 import type { GroundSurface, Terrain } from "./terrain";
@@ -231,6 +231,8 @@ export function createCaveRegion(seed: number, models: ModelLibrary): Region {
     nodes,
     portals: [exit],
     mapGround: 0x3c3844,
+    // Walled on every side; there is nowhere in here to fall out of.
+    fallLimit: null,
     ambience: {
       // Close, cold and dark — and measured rather than guessed. The first
       // pass ran fog from 6 to 44 over a near-black floor at 0.55 hemisphere,
@@ -284,14 +286,6 @@ const PORTAL_OFFSET = 5;
 /** How far in front of *that* a returning player is put. See the note below. */
 const RETURN_CLEARANCE = 13;
 
-/** A way down, and where walking back out of it puts you. */
-export interface CaveMouth {
-  portal: Portal;
-  /** Where the player lands on returning — a few paces clear of the portal. */
-  returnX: number;
-  returnZ: number;
-}
-
 /**
  * Scatters the ways down across the overworld.
  *
@@ -307,9 +301,9 @@ export function createCaveMouths(
   models: ModelLibrary,
   /** The surface's nodes. Anything standing in a doorway is taken out of it. */
   nodes: ResourceNode[],
-): CaveMouth[] {
+): PortalSite[] {
   const rand = mulberry32(seed ^ 0x1caf3);
-  const mouths: CaveMouth[] = [];
+  const mouths: PortalSite[] = [];
   // The arch positions, kept separately: the spacing rule has to compare arch
   // against arch. Measuring a candidate arch against an existing *portal* —
   // which stands five units in front of its arch — quietly lets two caves sit

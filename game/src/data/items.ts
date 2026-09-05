@@ -113,6 +113,16 @@ export const ITEMS: Record<string, ItemDef> = {
     stackSize: 99,
     color: 0x63d9ff,
   },
+  // The sky's material. Same shape of thing as ancient stone and glow crystal:
+  // one place, one material, one piece of the homestead it buys — the pattern
+  // the game settled on when the player's own numbers stopped climbing.
+  cloud_iron: {
+    id: "cloud_iron",
+    name: "Cloud Iron",
+    category: "resource",
+    stackSize: 99,
+    color: 0xbcd8e8,
+  },
   bone_club: { id: "bone_club", name: "Bone Club", category: "tool", stackSize: 1, color: 0xdcd3b8 },
   broth: { id: "broth", name: "Broth", category: "crop", stackSize: 99, color: 0xb5793c, heals: 25 },
 };

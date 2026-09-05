@@ -37,6 +37,15 @@ export interface BuildingDef {
   /** true for anything that stores items (see systems/containers.ts) */
   isContainer?: boolean;
   /**
+   * A piece you walk **onto** rather than into.
+   *
+   * It is not a collider for the player at all — `BuildingSystem.topAt` gives
+   * its surface height instead, and a grounded body follows its floor, so
+   * walking up a ramp needs no new movement rule. Enemies still treat it as
+   * solid: a raised platform they cannot climb is the entire point of it.
+   */
+  standable?: boolean;
+  /**
    * A piece that lights the ground around it, and the shape of that light.
    * Stated as data because "does this thing glow" is content, not behaviour —
    * see BuildingSystem#spawnMesh, which is the only place that reads it.
@@ -258,6 +267,51 @@ export const BUILDINGS: Record<string, BuildingDef> = {
     // had the homestead lit like a radioactive spill. The tint belongs on the
     // crystal, not on everything the crystal shines at.
     light: { color: 0xdcecff, intensity: 10, distance: 22, height: 1.55 },
+    isPlot: false,
+  },
+  // Ground you can get above, and the first vertical thing in the game.
+  //
+  // A *tower* was the obvious shape and does not work: the grid is one unit a
+  // cell, a jump clears 1.11 units (JUMP_SPEED squared over twice GRAVITY),
+  // and pieces do not stack — so a platform high enough to matter would have
+  // needed a climbing mode the game does not have. A ramp needs none: you
+  // walk up it exactly as you walk up a hill. It also fits the fiction better
+  // than a tower does.
+  //
+  // 2.4 high, against an enemy reach of ENEMY_REACH_HEIGHT: standing up here
+  // puts you out of a raider's swing while your bow still reaches them, which
+  // is the first time in this game that the bow has had a job walls could not
+  // already do.
+  rampart: {
+    id: "rampart",
+    category: "structure",
+    name: "Rampart",
+    // Four cells of climb for 2.4 of rise, then two of standing room. Any
+    // steeper and it reads as a wall you are inexplicably walking up.
+    footprintCells: [
+      { x: 0, z: 0 },
+      { x: 0, z: 1 },
+      { x: 1, z: 0 },
+      { x: 1, z: 1 },
+      { x: 2, z: 0 },
+      { x: 2, z: 1 },
+      { x: 3, z: 0 },
+      { x: 3, z: 1 },
+      { x: 4, z: 0 },
+      { x: 4, z: 1 },
+      { x: 5, z: 0 },
+      { x: 5, z: 1 },
+    ],
+    cost: [
+      { itemId: "cloud_iron", qty: 3 },
+      { itemId: "brick", qty: 4 },
+    ],
+    height: 2.4,
+    // Sturdy, but it is a floor rather than a wall: raiders walk round it
+    // rather than through it, so it is rarely what they are hitting.
+    maxHealth: 260,
+    color: 0x8d8698,
+    standable: true,
     isPlot: false,
   },
   barrel: {
