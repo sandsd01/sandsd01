@@ -11,6 +11,7 @@ import chevronsUp from "lucide-static/icons/chevrons-up.svg?raw";
 import cloud from "lucide-static/icons/cloud.svg?raw";
 import clover from "lucide-static/icons/clover.svg?raw";
 import crosshair from "lucide-static/icons/crosshair.svg?raw";
+import feather from "lucide-static/icons/feather.svg?raw";
 import fence from "lucide-static/icons/fence.svg?raw";
 import flame from "lucide-static/icons/flame.svg?raw";
 import footprints from "lucide-static/icons/footprints.svg?raw";
@@ -23,8 +24,10 @@ import layers from "lucide-static/icons/layers.svg?raw";
 import moon from "lucide-static/icons/moon.svg?raw";
 import mountain from "lucide-static/icons/mountain.svg?raw";
 import navigation from "lucide-static/icons/navigation.svg?raw";
+import orbit from "lucide-static/icons/orbit.svg?raw";
 import pickaxe from "lucide-static/icons/pickaxe.svg?raw";
 import shield from "lucide-static/icons/shield.svg?raw";
+import shirt from "lucide-static/icons/shirt.svg?raw";
 import shovel from "lucide-static/icons/shovel.svg?raw";
 import sparkles from "lucide-static/icons/sparkles.svg?raw";
 import sprout from "lucide-static/icons/sprout.svg?raw";
@@ -47,6 +50,7 @@ const SOURCES = {
   cloud,
   clover,
   crosshair,
+  feather,
   fence,
   flame,
   footprints,
@@ -59,8 +63,10 @@ const SOURCES = {
   moon,
   mountain,
   navigation,
+  orbit,
   pickaxe,
   shield,
+  shirt,
   shovel,
   sparkles,
   sprout,

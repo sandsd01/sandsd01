@@ -1,6 +1,7 @@
 import type { GameState } from "../state/game-state";
 import { equippedItemId } from "../systems/equipment";
 import { damageScale } from "./stats";
+import { drawScale } from "./worn";
 
 // What a tool is for, and how fast it works. Kept as data next to the items
 // rather than as a string match in the gathering system, so a new tool tier is
@@ -39,7 +40,29 @@ export const WEAPON_DAMAGE: Record<string, number> = {
   bone_club: 18,
   sword: 25,
   iron_sword: 40,
+  // Above the iron sword, and it hits everything in front of you rather than
+  // the one thing aimed at — deliberately the top of the tier, because it
+  // cannot be crafted at any price and a found weapon that merely matched the
+  // forge would be a disappointment rather than a reward. The arc that makes
+  // it swing wide lives in `systems/combat.ts`.
+  stormcleave: 52,
 };
+
+/**
+ * Weapons that hit every enemy in an arc rather than only the aimed one.
+ *
+ * A set rather than a flag on each weapon, and here rather than in
+ * `systems/combat.ts`, for the same reason `WEAPON_DAMAGE` is here: what a
+ * weapon does is content, and a second cleaving weapon should be one more
+ * string, not another branch in the combat code.
+ */
+export const CLEAVE_WEAPONS = new Set<string>(["stormcleave"]);
+
+/** Whether what is in hand swings wide. */
+export function heldCleaves(state: GameState): boolean {
+  const held = equippedItemId(state);
+  return held !== null && CLEAVE_WEAPONS.has(held);
+}
 
 /** Bare hands. */
 export const UNARMED_DAMAGE = 6;
@@ -54,6 +77,21 @@ export const UNARMED_DAMAGE = 6;
 export const BOW_ID = "bow";
 /** Under a sword's 25 — reach is what you are paying for, not raw damage. */
 export const ARROW_DAMAGE = 22;
+
+/**
+ * How long the bow takes between shots.
+ *
+ * A resolver for the same reason `arrowDamage` is one: the constant was read
+ * straight out of `main.ts`, which meant the bow's rhythm was the one number
+ * in the game nothing could ever modify. Swiftness is deliberately *not* in
+ * here — it already quickens the melee swing, and letting it quicken the bow
+ * too would make one stat the answer to every weapon.
+ */
+export const DRAW_MS = 700;
+
+export function drawTimeFor(state: GameState): number {
+  return DRAW_MS * drawScale(state);
+}
 
 /** Damage for whatever is in hand — a weapon, a tool, or nothing. */
 export function heldDamage(state: GameState): number {

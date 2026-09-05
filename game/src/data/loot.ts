@@ -37,6 +37,30 @@ export const LOOT_TABLES: Record<string, LootEntry[]> = {
     { itemId: "hide", min: 1, max: 2, chance: 0.6 },
     // The reason to take on the harder one rather than walk away.
     { itemId: "iron_ore", min: 1, max: 2, chance: 0.3 },
+    // --- The rare tier -----------------------------------------------------
+    //
+    // Brutes only, and nothing else in the game drops these: a piece of gear
+    // that grants an ability has to come from somewhere a player can point at,
+    // and "the big ones" is the only such place this game has.
+    //
+    // The rates are measured, not guessed. Counting what the spawner actually
+    // produced: **2.3 brutes a minute near the homestead and about 13.5 out on
+    // the frontier**. The gap is smaller than the constants suggest —
+    // `BRUTE_SHARE_HOME` is zero, but `BRUTE_SHARE_ROUGH_BIOME` floors the mix
+    // at half wherever the spawn ring reaches into rocky or wetland ground, so
+    // a third of what walks into the yard is already a brute. The frontier is
+    // six times richer rather than infinitely richer, which is the right
+    // shape: somewhere better to hunt, not a wall.
+    //
+    // Against roughly nine brutes a minute of real frontier hunting, these put
+    // one *named* piece at ten to twenty minutes and the first of *any* of
+    // them at about three and a half — an early taste, then a long tail. The
+    // whole set is around half an hour, before Fortune, which multiplies all
+    // four (see `rollLoot` below).
+    { itemId: "stormcleave", min: 1, max: 1, chance: 0.006 },
+    { itemId: "ember_cloak", min: 1, max: 1, chance: 0.008 },
+    { itemId: "quickdraw_ring", min: 1, max: 1, chance: 0.01 },
+    { itemId: "gatherers_charm", min: 1, max: 1, chance: 0.01 },
   ],
 };
 

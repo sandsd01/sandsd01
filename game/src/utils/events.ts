@@ -52,7 +52,9 @@ export interface GameEvents {
   "door-toggled": { id: string; open: boolean };
   "arrow-fired": Record<string, never>;
   "trap-triggered": { id: string; enemyId: string };
-  "armour-changed": { itemId: string | null };
+  // Carries the slot as well as the item: with three of them, "something
+  // changed" is no longer enough for a listener that draws one row per slot.
+  "worn-changed": { slot: string; itemId: string | null };
   "raid-warning": { secondsAway: number };
   "raid-started": Record<string, never>;
   "raid-wave": { wave: number; count: number };

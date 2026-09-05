@@ -930,6 +930,113 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* Two columns: worn gear beside the stats. Stacked, the eight rows overflow a
+   720p screen by about 160px — this is the arrangement that fits. */
+.character-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  align-items: start;
+}
+
+.character-column {
+  min-width: 0;
+}
+
+.character-column-title {
+  margin: 0 0 7px;
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  font-weight: 600;
+}
+
+/* --- Character panel: what is on the body ---
+
+   Three fixed rows, one per slot, above the points. An empty slot keeps its
+   row and its glyph and says "Empty" in words: a row that simply vanished
+   would leave the player with no way to learn the slot exists, and one that
+   was merely blank would read as a rendering fault. */
+
+.character-worn {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 10px;
+}
+
+.character-worn-slot {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 9px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--edge);
+  min-height: 44px;
+}
+
+/* Dimmed and dashed — two changes, so "nothing here" survives not being able
+   to tell the outline apart by weight alone. */
+.character-worn-slot.empty {
+  border-style: dashed;
+  background: none;
+}
+
+.character-worn-slot.empty .character-worn-icon,
+.character-worn-slot.empty .character-worn-name {
+  opacity: 0.45;
+}
+
+.character-worn-icon {
+  width: 20px;
+  height: 20px;
+  color: var(--gold);
+  flex: 0 0 auto;
+}
+
+.character-worn-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.character-worn-label {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.character-worn-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.character-worn-effect {
+  font-size: 12px;
+  color: var(--gold);
+}
+
+.character-worn-off {
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--edge-strong);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.character-worn-off:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: var(--gold);
+}
+
 .character-points {
   font-size: 13px;
   color: var(--ink-dim);
@@ -958,16 +1065,16 @@ body {
 .character-stat {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 10px;
+  gap: 8px;
+  padding: 6px 8px;
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--edge);
 }
 
 .character-stat-icon {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   color: var(--gold);
   flex: 0 0 auto;
 }
@@ -1015,8 +1122,8 @@ body {
 }
 
 .panel-hint {
-  margin: 14px 0 0;
-  padding-top: 10px;
+  margin: 10px 0 0;
+  padding-top: 8px;
   border-top: 1px solid var(--edge);
   font-size: 12px;
   color: var(--ink-dim);

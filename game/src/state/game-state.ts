@@ -3,6 +3,7 @@ import { DAY_LENGTH_MS, raidStartAfter } from "../systems/day-night";
 import type { RegionId } from "../world/region";
 import { BASE_MAX_HEALTH, START_LEVEL } from "../data/levels";
 import { initialStats, type StatId } from "../data/stats";
+import { initialWorn, type WornSlot } from "../data/worn";
 
 export interface InventorySlot {
   itemId: string;
@@ -164,15 +165,20 @@ export interface GameState {
    */
   regionReturn: { x: number; z: number } | null;
   /**
-   * What is being worn, by item id, or null for nothing. One slot rather than
-   * head/chest/legs: three slots is three times the UI, the save and the
-   * balancing for depth the player cannot read off the screen anyway.
+   * What is on the body, by slot, or null for an empty slot.
    *
-   * Worn armour is **out of `inventory`** — taking it off puts it back. A
-   * piece that was both worn and in the bag could be spent while protecting
-   * you.
+   * This was a single `armour: string | null` field, and the comment here
+   * argued for keeping it that way: three slots being "three times the UI, the
+   * save and the balancing for depth the player cannot read off the screen".
+   * That was right while a slot held a percentage. It stopped being right when
+   * slots started holding *abilities* — "the cloak that burns what hits me" is
+   * something a player can read off the screen in a way that "40% instead of
+   * 20%" never was.
+   *
+   * Worn gear is **out of `inventory`** — taking it off puts it back. A piece
+   * that was both worn and in the bag could be spent while protecting you.
    */
-  armour: string | null;
+  worn: Record<WornSlot, string | null>;
   /**
    * Restock timers for the world's caches, keyed by the cache's placed-building
    * id. **Sparse on purpose**, like `nodes`: a cache with something still in it
@@ -248,7 +254,7 @@ export function createInitialState(seedInput: string | number = "romestead"): Ga
     nodes: {},
     pois: {},
     discovered: [],
-    armour: null,
+    worn: initialWorn(),
     raid: { nextRaidAtMs: raidStartAfter(elapsedMs), active: false, wave: 0, endsAtMs: 0, count: 0 },
     statPoints: 0,
     stats: initialStats(),

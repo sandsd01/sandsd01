@@ -73,6 +73,37 @@ export const ITEMS: Record<string, ItemDef> = {
     stackSize: 1,
     color: 0x9aa3ad,
   },
+  // The rare tier. No recipe anywhere — these are found, and `category: "tool"`
+  // follows the armour above rather than inventing a sixth category for four
+  // rows. What decides where a piece goes is `data/worn.ts`, not this.
+  stormcleave: {
+    id: "stormcleave",
+    name: "Stormcleave",
+    category: "tool",
+    stackSize: 1,
+    color: 0x7fd8e8,
+  },
+  ember_cloak: {
+    id: "ember_cloak",
+    name: "Ember Cloak",
+    category: "tool",
+    stackSize: 1,
+    color: 0xd2592f,
+  },
+  quickdraw_ring: {
+    id: "quickdraw_ring",
+    name: "Quickdraw Ring",
+    category: "tool",
+    stackSize: 1,
+    color: 0xc9a94a,
+  },
+  gatherers_charm: {
+    id: "gatherers_charm",
+    name: "Gatherer's Charm",
+    category: "tool",
+    stackSize: 1,
+    color: 0x86b361,
+  },
   bow: {
     id: "bow",
     name: "Bow",

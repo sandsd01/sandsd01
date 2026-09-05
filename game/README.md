@@ -497,9 +497,9 @@ Two things fall out of a fixed-length night:
 iron (-40%), applied in `damagePlayer` — the single place health is ever lost,
 so anything that hurts you later gets the reduction for free. Floored at 1 a
 hit: armour that could take a blow down to nothing would end the game rather
-than deepen it. It is worn in one slot, not head/chest/legs, and worn armour is
-**out of the bag** — a piece that was both worn and carried could be spent by a
-recipe while it was keeping you alive.
+than deepen it. Worn gear is **out of the bag** — a piece that was both worn
+and carried could be spent by a recipe while it was keeping you alive. It sits
+in one of three slots now; see **Found gear** below for why that changed.
 
 Gear tops out at two tiers and the raids do not, which means the player loses
 eventually. That is deliberate: what keeps scaling is the *base* — thicker
@@ -703,6 +703,67 @@ linear space on purpose. Set to an ordinary cyan they come out as flat
 translucent plastic; the difference was checked against a screenshot, not
 assumed.
 
+## Found gear, and the three slots it goes in
+
+Fortune — the stat that was meant to "pay in content" rather than in numbers —
+shipped with nothing to find: it multiplied a drop table of bone, hide and iron
+ore, which are crafting materials. These four pieces are what it looks for.
+
+**They cannot be crafted at any price.** There is no recipe for any of them
+anywhere, which is the whole point: the forge covers the tiers you can plan
+for, and this is the tier you go looking for.
+
+| Piece | Slot | What it does | Where it attaches |
+| --- | --- | --- | --- |
+| **Stormcleave** | held | 52 damage, and hits *everything* in a 140° arc in front of you | `systems/combat.ts#cleave` |
+| **Ember Cloak** | back | Whatever hits you takes 60% of it back | the enemy-attack callback in `main.ts` |
+| **Quickdraw Ring** | trinket | Draws a bow in 45% of the time | `drawTimeFor` in `data/tools.ts` |
+| **Gatherer's Charm** | trinket | One swing works every node of that kind within 4.5 units | `systems/gathering.ts#neighboursFor` |
+
+Two trinkets and one slot is a choice, not an oversight — the bow build and the
+gathering build want different things, and having to pick is the point.
+
+### Why three slots now
+
+`state.armour` was a single field, and the comment on it argued *for* that:
+"three slots is three times the UI, the save and the balancing for depth the
+player cannot read off the screen anyway." That was right while a slot held a
+percentage. It stopped being right when slots started holding abilities — "the
+cloak that burns what hits me" is something a player can read off the screen in
+a way that "40% instead of 20%" never was.
+
+`data/armour.ts` was **deleted** in the process rather than kept alongside
+`data/worn.ts`. Two tables describing the same two pieces of armour is how they
+drift apart, and it is the same shape of bug as the debug hook that silently
+dropped Fortune's drop scale — invisible, and agreeing with reality right up
+until it doesn't.
+
+### The rates are measured
+
+Counting what the spawner actually produced: **2.3 brutes a minute near the
+homestead and about 13.5 out on the frontier.** That gap is smaller than the
+constants suggest — `BRUTE_SHARE_HOME` is zero, but `BRUTE_SHARE_ROUGH_BIOME`
+floors the mix at half wherever the spawn ring reaches into rocky or wetland
+ground, so about a third of what walks into the yard is already a brute. The
+frontier is six times richer rather than infinitely richer, which is the right
+shape: somewhere better to hunt, not a wall.
+
+Against roughly nine brutes a minute of real frontier hunting, the rates
+(0.6–1%, brutes only) put the first piece of *anything* at about three and a
+half minutes and a *named* piece at eleven to eighteen — halved again by a
+heavy Fortune build. The whole set is around half an hour.
+
+### One thing that had to be widened
+
+Ember Cloak needed to know who hit you, and nothing did. `damagePlayer` takes
+`(state, amount)` and no source, and the `onAttackPlayer` callback discarded
+the attacker at three separate levels even though it was in scope at the point
+it fired. The callback was widened to carry it; `damagePlayer` was **not**,
+because it is also how a fall hurts you and how the debug hook does — giving it
+an attacker would force those callers to invent one. The reflection happens at
+the one call site that genuinely knows, and a reflected kill goes through
+`removeEnemy` like any other, so it still pays experience and loot.
+
 ## Raid night
 
 Every third night, something comes for you. Before this the day/night cycle was
@@ -775,8 +836,9 @@ Everything gameplay-relevant goes into one `localStorage` key
 and clock, the player, inventory, hotbar, placed buildings (with how battered
 each one is and whether a gate is standing open), crops, known recipes,
 container contents, the raid schedule and how many raids have been survived,
-what is being worn, **your level, experience, unspent points and where the
-spent ones went**, and **how far each resource node has been worked**.
+what is in each of the three worn slots, **your level, experience, unspent
+points and where the spent ones went**, and **how far each resource node has
+been worked**.
 
 That last one is newer than the rest, and its absence used to be exploitable:
 nodes were re-scattered from the seed on every boot, so reloading the page
@@ -797,6 +859,11 @@ knowing if you touch this code:
   the seed and happens exactly once per page load. Restoring skips ids it does
   not recognise, so a save from a different seed degrades to "untouched" rather
   than throwing.
+
+A save written before the three slots keeps its armour: `state.armour` is moved
+into `worn.armour` and then **deleted**, because two fields describing what is
+on the body is how they drift apart. The slots are guarded **per slot** rather
+than as a record, for the reason the next paragraph gives.
 
 `player.level` and `player.exp` cost no migration code at all: `backfillDefaults`
 walks every numeric field of `player` and fills in whatever a save is missing.
@@ -886,8 +953,16 @@ average over hundreds of rolls), `killNearestEnemy()`, `getAllRecipes()`,
 For progression: `getRaidState()` now carries the raid number and the count
 survived, `setRaidCount(n)` jumps the difficulty dial (playing ten raids to see
 what raid ten looks like is twenty minutes of waiting per assertion),
-`getArmour()` / `wearArmour(id)` / `takeOffArmour()`, and `hurtPlayer(n)` runs
-the real damage path so a reduction under test is the one the game applies.
+`hurtPlayer(n)` runs the real damage path so a reduction under test is the one
+the game applies.
+
+For worn gear and the found tier: `getWorn()`, `wearItem(id)`,
+`takeOffSlot(slot)`, `getWornDef(id)` (the table as data, so a suite reads the
+game's numbers rather than restating them), `getDrawTime()`, `getCharmReach()`,
+`getCleaveReach()`, plus `setPlayerYaw(yaw)` (the *body's* facing, which the
+wide swing goes by — `setCameraYaw` moves the head and would leave the sweep
+pointing elsewhere) and `attackOnce()`, one real swing down the same path the
+left mouse button takes.
 
 For levelling: `getLevel()` (level, exp, what the next one costs, unspent
 points, where the spent ones went, and the resulting max health), `grantExp(n)`,
