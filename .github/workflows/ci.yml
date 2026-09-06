@@ -78,6 +78,50 @@ jobs:
       # the directory exists.
       - run: npm run build
 
+  game-smoke:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: game
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: game/package-lock.json
+
+      - run: npm ci
+      - run: npm run build
+
+      # `game-build` proves the game compiles. It cannot prove the game runs:
+      # a bundle that throws on load builds perfectly. These four suites open
+      # the real thing in a real browser, and each one exits non-zero when it
+      # fails — unlike `buttoncheck`, `costcheck`, `fontcheck` and
+      # `shadowcheck`, which print measurements and always exit 0, so they
+      # would cost time here and gate nothing.
+      #
+      # Deliberately a subset. The full 28 take about half an hour, which is
+      # not a per-PR gate; game/README.md covers running them all.
+      - name: Install the browser
+        working-directory: game/checks
+        run: |
+          # The install is explicit rather than left to playwright's
+          # postinstall, which would otherwise fetch every browser it ships
+          # with when only chromium is driven here.
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Smoke the built game
+        working-directory: game/checks
+        env:
+          # A bundle that never boots fails the first suite in seconds; without
+          # this the three after it sit out their timeouts waiting for a game
+          # that is not coming.
+          CHECK_BAIL: "1"
+        run: node run.mjs smoke-check worldcheck edgecheck leftoverscheck
+
   docker-build:
     runs-on: ubuntu-latest
     steps:

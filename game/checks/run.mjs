@@ -7,6 +7,13 @@
  * running a suite against a stale bundle and believing the result.
  *
  * Exits non-zero if any suite does, so it can gate a commit.
+ *
+ * `CHECK_BAIL=1` stops at the first failure. A bundle that fails to boot at
+ * all fails `smoke-check` in about three seconds, but leaves the suites after
+ * it waiting out their full timeouts for a game that is never going to appear
+ * — seven minutes to learn what the first three seconds already said. CI sets
+ * it; running by hand does not, because there the whole picture is worth more
+ * than the time.
  */
 import { spawn } from "node:child_process";
 import { readdir } from "node:fs/promises";
@@ -85,6 +92,10 @@ for (const suite of suites) {
   });
   const seconds = Math.round((Date.now() - started) / 1000);
   results.push({ suite, code, seconds });
+  if (code !== 0 && process.env.CHECK_BAIL) {
+    console.log(`\n${suite} failed and CHECK_BAIL is set — skipping the rest.`);
+    break;
+  }
 }
 
 stopServer();
@@ -94,5 +105,9 @@ for (const { suite, code, seconds } of results) {
   console.log(`${code === 0 ? "pass" : "FAIL"}  ${suite.padEnd(20)} ${seconds}s`);
 }
 const failed = results.filter((r) => r.code !== 0);
-console.log(`\n${results.length - failed.length}/${results.length} suites passed`);
+const skipped = suites.length - results.length;
+console.log(
+  `\n${results.length - failed.length}/${suites.length} suites passed` +
+    (skipped ? ` (${skipped} not run — bailed after the first failure)` : ""),
+);
 process.exit(failed.length ? 1 : 0);
