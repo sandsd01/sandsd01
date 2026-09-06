@@ -55,6 +55,29 @@ jobs:
       - run: npm ci
       - run: npm run build
 
+  game-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: game
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: game/package-lock.json
+
+      - run: npm ci
+
+      # `npm run build` is `tsc -b && vite build`, so this is the type check as
+      # well as the bundle. It matters that it is one command: when `tsc` fails,
+      # `vite build` never runs and `dist/` is left holding the *previous*
+      # build — which looks like a success to anything that only checks whether
+      # the directory exists.
+      - run: npm run build
+
   docker-build:
     runs-on: ubuntu-latest
     steps:
