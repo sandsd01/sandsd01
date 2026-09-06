@@ -22,12 +22,29 @@ let nextEnemyId = 0;
 
 // Silhouette carries the threat read at a distance: the lanky, hunched zombie
 // and the squat, heavy brute are told apart by shape before colour.
-const ENEMY_FIGURES: Record<string, { height: number; build: number; hunch: number; palette: FigurePalette }> = {
+/**
+ * `tint` is a faint self-lit colour, not decoration.
+ *
+ * A screenshot of a real raid settled this: twenty-seven raiders on open
+ * ground all read as the same dark blue-grey blob, and nothing about the
+ * thrower said "thrower". The sun is often behind them at raid distance, so
+ * what the player sees is the shadowed side, and albedo alone does not
+ * survive that however bright the palette — the same thing the wings ran into
+ * (`world/wings.ts`), fixed the same way.
+ *
+ * Kept low: enough to carry the hue into shadow, not enough to make a zombie
+ * glow in the dark.
+ */
+const ENEMY_FIGURES: Record<
+  string,
+  { height: number; build: number; hunch: number; palette: FigurePalette; tint: number }
+> = {
   zombie: {
     height: 1.65,
     build: 0.9,
     hunch: 0.3,
     palette: { skin: 0x8fae6a, torso: 0x53663c, legs: 0x3d4633, accent: 0x2f3826 },
+    tint: 0x2c3a1e,
   },
   // Read at a glance, or the enemy may as well not be a different one: short,
   // wiry and standing straight, where the other two are heavy and hunched. The
@@ -38,18 +55,25 @@ const ENEMY_FIGURES: Record<string, { height: number; build: number; hunch: numb
     build: 0.62,
     hunch: 0.05,
     palette: { skin: 0x9a8fb5, torso: 0x6b5a8a, legs: 0x413561, accent: 0x2a2140 },
+    // The strongest of the three, and the coolest hue: the thrower is the one
+    // the player most needs to find in a crowd, because it is the one they
+    // have to walk to.
+    tint: 0x4a3a78,
   },
   brute: {
     height: 2.0,
     build: 1.45,
     hunch: 0.16,
     palette: { skin: 0xa8705a, torso: 0x7d4340, legs: 0x452b2c, accent: 0x33201f },
+    tint: 0x4a1d1a,
   },
 };
 
 function buildEnemyMesh(defId: string): THREE.Mesh {
   const figure = ENEMY_FIGURES[defId] ?? ENEMY_FIGURES.zombie;
   const material = createFigureMaterial();
+  material.emissive.setHex(figure.tint);
+  material.emissiveIntensity = 0.55;
   // Per-enemy material: the hit flash and death fade are material-level, so
   // enemies can't share one the way static props do.
   material.transparent = true;
@@ -60,6 +84,8 @@ function buildEnemyMesh(defId: string): THREE.Mesh {
 }
 
 export class Enemy {
+  /** The kind's self-lit colour, restored after each hit flash. */
+  private readonly tint: number;
   readonly id: string;
   readonly def: EnemyDef;
   readonly object: THREE.Mesh;
@@ -80,6 +106,7 @@ export class Enemy {
     this.id = `enemy-${nextEnemyId++}`;
     this.def = def;
     this.object = buildEnemyMesh(def.id);
+    this.tint = (ENEMY_FIGURES[def.id] ?? ENEMY_FIGURES.zombie).tint;
     this.object.position.set(x, y, z);
     this.health = def.maxHealth;
     this.aggroRadius = def.aggroRadius;
@@ -265,7 +292,10 @@ export class Enemy {
     // alone, especially mid-fight with several enemies on screen. Driven by
     // emissive rather than base colour, since the figure's colours live in
     // vertex data that a material tint would only multiply against.
-    this.material.emissive.setHex(nowMs < this.flashUntilMs ? 0xaaaaaa : 0x000000);
+    // Back to the kind's own tint rather than to black: this line ran every
+    // frame, so leaving it at 0x000000 would have quietly undone the tint one
+    // frame after the enemy spawned.
+    this.material.emissive.setHex(nowMs < this.flashUntilMs ? 0xaaaaaa : this.tint);
   }
 }
 
