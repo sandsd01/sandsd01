@@ -65,6 +65,46 @@ npm run build     # type-check + production build to dist/
 npm run preview   # preview the production build
 ```
 
+## Checking it
+
+There is no unit-test suite here. What there is instead is `checks/` — 28
+suites that drive the real game in a real browser and assert on what actually
+happened: enemies losing the right amount of health, a save surviving a
+reload, the ceiling a pair of wings stops you at.
+
+```bash
+cd game/checks
+npm install                     # playwright
+npx playwright install chromium # the browser it drives
+npm run checks                  # all 28, about 45 minutes
+npm run checks flightcheck      # or just one
+```
+
+The runner builds nothing: it serves `game/dist` as it finds it, so
+**`npm run build` in `game/` first** or you are testing the previous bundle.
+It starts and stops the preview server itself and exits non-zero if any suite
+does.
+
+`checks/` is a separate npm project from `game/` on purpose. Playwright's
+postinstall downloads several hundred megabytes of browsers, and the CI job
+that builds the game should not pay for that to compile TypeScript.
+
+Two habits these suites are built around, both of them learned the hard way
+and both of them worth keeping:
+
+- **Drive the real controls.** The debug hook `probeMoveTo` teleports, so a
+  check for anything physical — gravity, a flight ceiling, a fall — passes on
+  it without the physics ever running. The flight suite uses `page.keyboard`
+  for every movement for exactly this reason.
+- **Pair every claim with its opposite.** "Flying over a portal does not
+  teleport you" passes on a build where portals have stopped working
+  altogether; it only means something next to "and walking into one still
+  does". Most suites here are written in these pairs.
+
+And before trusting a new check: **break the thing it tests and watch it go
+red.** A check that has never failed has never been shown to be measuring
+anything.
+
 ## Deploying
 
 The game is deployed on Vercel from this repo, built straight from source —
