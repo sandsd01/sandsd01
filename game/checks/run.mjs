@@ -59,13 +59,20 @@ async function waitForServer(timeoutMs = 30000) {
 
 const suites = await chooseSuites();
 
+// `detached` puts the server in its own process group. `npx` spawns vite,
+// which spawns esbuild, and signalling only the npx wrapper leaves those two
+// running — CI reported them as orphans it had to terminate, and on a
+// developer's machine they would sit on the port until the next run failed to
+// bind to it with nothing visibly holding it.
 const server = run("npx", ["vite", "preview", "--port", String(PORT), "--strictPort"], {
   cwd: gameDir,
   quiet: true,
+  detached: true,
 });
 const stopServer = () => {
   try {
-    server.kill("SIGTERM");
+    // Negative pid signals the whole group, not just the wrapper.
+    process.kill(-server.pid, "SIGTERM");
   } catch {
     // already gone
   }
