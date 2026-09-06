@@ -29,3 +29,6 @@ dist-ssr
 # directory on purpose: the real texture assets live under public/ and must
 # stay tracked.
 /*.png
+# ...and the same for suites run from their own directory, which is where the
+# runner starts them so the output lands somewhere predictable.
+/checks/*.png
