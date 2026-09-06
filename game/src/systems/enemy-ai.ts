@@ -270,10 +270,28 @@ export class Enemy {
 }
 
 // The ambient trickle, and the ceiling a raid is allowed to fill instead.
+//
+// The raid ceiling was 18, and 18 was the reason late raids could not be
+// dangerous: the plan could ask for more, the player's health grew without
+// limit, and the number that could actually be in front of them did not. It
+// was the balance knob by accident.
+//
+// Raised to 40 after sweeping it. Frame rate did not move between 18 and 60
+// on the software renderer used for measurement — 1.85 fps against a quiet
+// baseline of 1.84 — and the renderer-independent numbers barely did either:
+// 42 more enemies cost 33 draw calls and 1,700 triangles, against a world
+// that draws 950 and 238,000 standing still. Enemies are not what this scene
+// spends its frame on.
+//
+// 40 rather than 60 because a ceiling should stay a safety valve rather than
+// become the tuning knob again: at 60 the wave plan only ever asked for 52,
+// so the plan is already the thing that decides, and the measurement was
+// taken on software rendering, which hides per-frame CPU cost that real
+// hardware at sixty frames a second would not.
 // These have to be separate numbers: a wave of six that ran into a cap of
 // eight (which counts the dying, too) would arrive as two.
 const MAX_ENEMIES = 8;
-const RAID_MAX_ENEMIES = 18;
+const RAID_MAX_ENEMIES = 40;
 /**
  * How often a wanderer turns up near the homestead, and how much faster that
  * gets out on the frontier.

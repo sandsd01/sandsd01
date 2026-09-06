@@ -48,11 +48,17 @@ export function wavesOn(n: number): number {
 /**
  * The most throwers one wave will ask for.
  *
- * A ceiling at all because `RAID_MAX_ENEMIES` is 18: past that the extra ones
- * are not spawned anyway, and a plan that asks for what it cannot have makes
- * the composition a lie.
+ * Was 10, chosen when the raid ceiling was 18 and anything past it would not
+ * have spawned. With the ceiling at 40 that reasoning is stale, and 10 had
+ * quietly become the binding constraint in its place: raids thirty and sixty
+ * fielded the same ten throwers while the player's health doubled between
+ * them, so night sixty was survivable standing still and night thirty was not.
+ *
+ * 18 keeps a wave inside the 40 with its melee core — the plan at night sixty
+ * asks for 25 walkers — so the ceiling stays a safety valve rather than
+ * silently trimming a composition the game promised.
  */
-const SLINGER_CAP = 10;
+const SLINGER_CAP = 18;
 
 export function waveOn(n: number, w: number): WavePlan {
   // Later waves within a raid are bigger, and later raids open bigger.
