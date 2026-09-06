@@ -40,6 +40,11 @@ export const WEAPON_DAMAGE: Record<string, number> = {
   bone_club: 18,
   sword: 25,
   iron_sword: 40,
+  // The top of what a forge can make, and deliberately still under the
+  // stormcleave below it. The rule the found tier is built on — a weapon you
+  // stumble across has to beat one you can simply decide to build — is worth
+  // more than giving the sky island a headline number.
+  skysteel_sword: 46,
   // Above the iron sword, and it hits everything in front of you rather than
   // the one thing aimed at — deliberately the top of the tier, because it
   // cannot be crafted at any price and a found weapon that merely matched the
