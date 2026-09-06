@@ -13,6 +13,13 @@ import { events } from "../utils/events";
 // A thing on the floor is the whole point.
 
 const PICKUP_RADIUS = 1.4;
+/**
+ * How far off the ground you can be and still scoop something up.
+ *
+ * Above a jump's apex, because walking over a drop while mid-hop has always
+ * picked it up and should keep doing so.
+ */
+const PICKUP_HEIGHT = 2.5;
 const DESPAWN_MS = 60_000;
 const BOB_HEIGHT = 0.12;
 const BOB_SPEED = 0.0028;
@@ -81,7 +88,13 @@ export class DroppedItems {
     for (const drop of drops) this.spawn(drop.itemId, drop.qty, x, z, nowMs);
   }
 
-  update(nowMs: number, state: GameState, playerX: number, playerZ: number): void {
+  update(
+    nowMs: number,
+    state: GameState,
+    playerX: number,
+    playerZ: number,
+    playerHeightAboveGround = 0,
+  ): void {
     for (let i = this.items.length - 1; i >= 0; i--) {
       const item = this.items[i];
       const age = nowMs - item.spawnedAtMs;
@@ -100,9 +113,13 @@ export class DroppedItems {
       const material = item.object.material as THREE.MeshStandardMaterial;
       material.opacity = remaining < FADE_MS ? Math.max(0.15, remaining / FADE_MS) : 1;
 
+      // Height counts. The radius was two-dimensional, which was fine while
+      // the only way to be above a drop was mid-jump — flight turns it into a
+      // vacuum cleaner that hoovers up a battlefield from altitude.
       const dx = item.object.position.x - playerX;
       const dz = item.object.position.z - playerZ;
-      if (dx * dx + dz * dz <= PICKUP_RADIUS * PICKUP_RADIUS) {
+      const withinReach = playerHeightAboveGround <= PICKUP_HEIGHT;
+      if (withinReach && dx * dx + dz * dz <= PICKUP_RADIUS * PICKUP_RADIUS) {
         addItem(state, item.itemId, item.qty);
         events.emit("item-picked-up", { itemId: item.itemId, qty: item.qty });
         this.remove(i);

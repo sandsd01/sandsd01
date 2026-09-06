@@ -719,9 +719,14 @@ for, and this is the tier you go looking for.
 | **Ember Cloak** | back | Whatever hits you takes 60% of it back | the enemy-attack callback in `main.ts` |
 | **Quickdraw Ring** | trinket | Draws a bow in 45% of the time | `drawTimeFor` in `data/tools.ts` |
 | **Gatherer's Charm** | trinket | One swing works every node of that kind within 4.5 units | `systems/gathering.ts#neighboursFor` |
+| **Divine Wings** | back | Flight. Double-tap jump to start; jump rises, sprint sinks | `player-controller.ts#updateFlight` |
 
 Two trinkets and one slot is a choice, not an oversight — the bow build and the
 gathering build want different things, and having to pick is the point.
+
+The wings and the cloak share the back slot for the same reason: reflecting what
+hits you is worth most to someone standing in the middle of a raid, and flight
+is worth most to someone who would rather not be. You cannot have both.
 
 ### Why three slots now
 
@@ -763,6 +768,74 @@ because it is also how a fall hurts you and how the debug hook does — giving i
 an attacker would force those callers to invent one. The reflection happens at
 the one call site that genuinely knows, and a reflected kill goes through
 `removeEnemy` like any other, so it still pays experience and loot.
+
+## Flying
+
+The wings are the rarest thing in the game — 0.4% from brutes, about
+twenty-eight minutes of frontier hunting, or fifteen with a heavy Fortune build.
+They are also the only item that changes how the game is *played* rather than
+how hard you hit, which is why they are that rare.
+
+Controls follow the creative-mode idiom players already have in their hands:
+**double-tap jump** to toggle, **jump** to rise, **sprint** to sink, no gravity
+in between, and touching down ends it. Flight costs no stamina.
+
+- **The ceiling is forty units above the ground underfoot**, not above sea
+  level. Flying over a hill should carry you over it rather than into it, and a
+  fixed altitude would put the ceiling somewhere different depending on where
+  you took off.
+- **Sprint means "descend" while flying** and is deliberately excluded from
+  `updateSprintState`. Left in, holding it to come down would drain the bar and
+  then fire the exhausted sound all the way to the ground.
+- **Taking the wings off in mid-air drops you**, checked before anything else
+  in `updateVertical` so there is never a frame in which the player is flying
+  without the thing that lets them.
+- **Falling off the sky island no longer hurts a player wearing wings.** Anyone
+  wearing them could have flown, so the fall is a choice rather than a mistake.
+
+### What flight broke
+
+Two range checks in this game were two-dimensional, which was invisible while
+the only way to be above something was a jump:
+
+- **The portal trigger.** Flying over a cave mouth teleported you into it.
+- **The pickup radius.** Hovering over a battlefield hoovered it up.
+
+Both now go through a single `heightAboveGround()` helper — two copies of "y
+minus the ground" is one chance for them to disagree about what the ground is —
+and both keep a jump's worth of tolerance, because jumping through a portal or
+over a drop always worked and should keep working.
+
+Also fixed: the falling clip played for as long as the player stayed airborne,
+which is most of the time the wings are worn; and hovering at exactly ground
+level could re-fire the landing sound every frame.
+
+### Does this make raids free?
+
+Yes for you, no for the homestead — and that was measured, not assumed, because
+`REACH_HEIGHT` is 1.6 and anything above it is untouchable. Hovering at seven
+units over eleven raiders, **the player took no damage at all and a wall took
+fourteen**. Enemies attack whatever blocks them, so the night still costs walls.
+
+(The first run of that experiment said the opposite. It advanced the world clock
+to pass the time, and enemies walk on the frame's `dt` rather than on the clock
+— so nobody had moved, and it reported "raids are free" for entirely the wrong
+reason. Worth recording as the shape of mistake this codebase invites.)
+
+### Where the wings sit
+
+On the character root, not on a bone. The rig carries seven joints and none of
+them is a back; `world/held-item.ts` records the sweep of offsets that
+established this for the sword. The trade is more forgiving here — wings that do
+not counter-rotate with the torso read as stiff, where a sword that did it swung
+inside the body.
+
+Their size and colour came from a screenshot rather than arithmetic. At the
+first attempt they read as two dark stubs at shoulder height: the fix was
+roughly double the span, a fan that opens *upward* so it stands against the sky
+instead of vanishing into the character's own silhouette, and a faint emissive,
+because thin panels edge-on to the sun came out near-black however pale the
+albedo was.
 
 ## Raid night
 
@@ -959,7 +1032,10 @@ the game applies.
 For worn gear and the found tier: `getWorn()`, `wearItem(id)`,
 `takeOffSlot(slot)`, `getWornDef(id)` (the table as data, so a suite reads the
 game's numbers rather than restating them), `getDrawTime()`, `getCharmReach()`,
-`getCleaveReach()`, plus `setPlayerYaw(yaw)` (the *body's* facing, which the
+`getCleaveReach()`, `isFlying()`, `getFlightCeiling()`, `getHeightAboveGround()`
+(the number the ceiling, the portal trigger and the pickup radius all actually
+test against), `getWingsVisible()` (read off the mesh, so "on the character" is
+a different question from "in the save"), plus `setPlayerYaw(yaw)` (the *body's* facing, which the
 wide swing goes by — `setCameraYaw` moves the head and would leave the sweep
 pointing elsewhere) and `attackOnce()`, one real swing down the same path the
 left mouse button takes.

@@ -8,9 +8,11 @@ import { clampToExtent } from "../world/terrain";
 import { events } from "../utils/events";
 import { buildFigureGeometry, createFigureMaterial } from "../world/figures";
 import { HeldItem } from "../world/held-item";
+import { Wings } from "../world/wings";
 import { merge, paint, placed } from "../world/geometry";
 import { instantiate, type ModelLibrary } from "../world/models";
 import { speedScale, staminaRegenScale } from "../data/stats";
+import { canFly, flightCeiling } from "../data/worn";
 
 const MOVE_SPEED = 5;
 const SPRINT_MULTIPLIER = 1.6;
@@ -46,6 +48,25 @@ const STEP_DOWN = 1.5;
 
 const GRAVITY = 22;
 const JUMP_SPEED = 7;
+/**
+ * Flight, in the creative-mode idiom: double-tap jump to toggle, jump to rise,
+ * sprint to sink, and no gravity in between.
+ *
+ * `FLY_SPEED` is a little under a sprint so that going up never outruns going
+ * along — climbing should feel like part of the same movement, not a separate
+ * and faster one. The tap window is the usual double-click sort of interval:
+ * short enough that two deliberate jumps in a row do not trip it, long enough
+ * to hit on purpose.
+ */
+const FLY_SPEED = 7;
+const FLY_TAP_WINDOW_MS = 300;
+/**
+ * How close to the ground counts as having landed, and so as having stopped
+ * flying. A hair above the floor rather than exactly on it: settling to
+ * *exactly* groundY while still airborne is the state that fires the landing
+ * sound every frame.
+ */
+const FLY_LAND_EPSILON = 0.05;
 // Stamina: a full bar buys roughly five seconds of sprinting or six jumps, and
 // refills in about seven seconds once you stop. Long enough that sprinting is
 // a decision, short enough that it never strands you.
@@ -94,11 +115,16 @@ export class PlayerController {
   private swingStartMs = -Infinity;
   private velocityY = 0;
   private grounded = true;
+  /** In creative-style flight: no gravity, jump rises, sprint sinks. */
+  private flying = false;
+  /** When jump was last tapped, so a second tap inside the window toggles. */
+  private lastJumpTapMs = -Infinity;
   private lastStaminaSpendMs = -Infinity;
   private sprintLocked = false;
   private lastStepIndex = -1;
   private lastKnownNowMs = 0;
   private readonly heldItem = new HeldItem();
+  private readonly wings = new Wings();
 
   constructor(
     private readonly state: GameState,
@@ -111,6 +137,7 @@ export class PlayerController {
     // The held item rides the character root, not a bone: the pack's rig has
     // no hand. See world/held-item.ts for why that turned out to matter.
     this.heldItem.attachTo(this.object);
+    this.wings.attachTo(this.object);
 
     const character = models["character-archer"];
     if (character) {
@@ -159,6 +186,16 @@ export class PlayerController {
   }
 
   /** Puts an item in the character's hand, or empties it for null. */
+  /** Puts the wings on the character's back, or takes them off. */
+  setWingsVisible(visible: boolean): void {
+    this.wings.setVisible(visible);
+  }
+
+  /** Whether the wings are actually on the mesh, for tests. */
+  areWingsVisible(): boolean {
+    return this.wings.isVisible();
+  }
+
   setHeldItem(itemId: string | null): void {
     this.heldItem.show(itemId);
   }
@@ -270,7 +307,14 @@ export class PlayerController {
     this.mixer.update(dt);
     if (nowMs < this.oneShotUntilMs) return;
 
-    if (!this.grounded) {
+    if (this.flying) {
+      // Not `fall`. A player who is flying is not falling, and the falling
+      // clip played for as long as they stayed up — which is most of the time
+      // the wings are worn. `jump` is the rig's other airborne pose and reads
+      // as held rather than as plummeting; picked by looking at both in the
+      // browser, not by reading the clip names.
+      this.playClip(CLIP_JUMP);
+    } else if (!this.grounded) {
       this.playClip(this.velocityY > 0 ? CLIP_JUMP : CLIP_FALL);
     } else if (isMoving) {
       this.playClip(this.sprintingNow ? CLIP_SPRINT : CLIP_WALK);
@@ -358,7 +402,14 @@ export class PlayerController {
 
     this.lastKnownNowMs = nowMs;
     const isMoving = move.lengthSq() > 0.0001;
-    const sprinting = this.updateSprintState(dt, nowMs, input.isSprinting() && isMoving);
+    // Sprint is the "descend" key while flying, so it must not also be read as
+    // a sprint: left in, holding it to come down would drain the bar and, once
+    // the bar emptied, fire the exhausted sound on the way to the ground.
+    const sprinting = this.updateSprintState(
+      dt,
+      nowMs,
+      input.isSprinting() && isMoving && !this.flying,
+    );
     this.sprintingNow = sprinting;
     const speed = MOVE_SPEED * (sprinting ? SPRINT_MULTIPLIER : 1) * speedScale(this.state);
     let { x, z } = this.state.player;
@@ -378,6 +429,7 @@ export class PlayerController {
     // whether it also moves the mesh depends on which body is in use.
     this.updateBob(dt, isMoving && this.grounded);
     this.updateSwing(nowMs);
+    this.wings.update(nowMs, this.flying);
     this.updateAnimation(dt, nowMs, isMoving);
   }
 
@@ -422,6 +474,33 @@ export class PlayerController {
   // Only the visual/camera height moves: gathering, building and combat all
   // test x/z distance, so being mid-air never changes what you can reach.
   private updateVertical(dt: number, nowMs: number, input: InputManager, groundY: number): void {
+    // Wings taken off in mid-air drop you. Checked before anything else so
+    // there is no frame in which the player is flying without the thing that
+    // lets them — including after a load, where `flying` starts false anyway.
+    if (this.flying && !canFly(this.state)) this.flying = false;
+
+    if (input.wasActionPressed("jump") && canFly(this.state)) {
+      // Double-tap toggles, the way the creative mode this borrows from does
+      // it. Deliberately *before* the ordinary jump below, but not instead of
+      // it: the first tap still jumps, so a player who taps twice slowly gets
+      // two normal jumps rather than nothing.
+      if (nowMs - this.lastJumpTapMs <= FLY_TAP_WINDOW_MS) {
+        this.flying = !this.flying;
+        this.lastJumpTapMs = -Infinity;
+        if (this.flying) {
+          this.grounded = false;
+          this.velocityY = 0;
+        }
+      } else {
+        this.lastJumpTapMs = nowMs;
+      }
+    }
+
+    if (this.flying) {
+      this.updateFlight(dt, input, groundY);
+      return;
+    }
+
     if (this.grounded && input.wasActionPressed("jump")) {
       // A jump you can't pay for simply doesn't happen — no half-height hop.
       if (this.state.player.stamina >= JUMP_COST) {
@@ -464,6 +543,49 @@ export class PlayerController {
     } else {
       this.state.player.y = y;
     }
+  }
+
+  /**
+   * One frame of flight: no gravity, jump rises, sprint sinks.
+   *
+   * The ceiling is measured from the ground underfoot rather than from a fixed
+   * altitude, and that is the whole reason it is computed here from `groundY`
+   * rather than stored: flying over a hill should carry you over it, not into
+   * it, and a fixed altitude would put the ceiling somewhere different
+   * depending on where you took off.
+   */
+  private updateFlight(dt: number, input: InputManager, groundY: number): void {
+    const ceiling = groundY + flightCeiling(this.state);
+    let y = this.state.player.y;
+    if (input.isActionDown("jump")) y += FLY_SPEED * dt;
+    // Sprint means "down" while flying. It costs no stamina here — see
+    // `updateSprintState`, which is told not to treat it as a sprint at all.
+    if (input.isSprinting()) y -= FLY_SPEED * dt;
+
+    if (y <= groundY + FLY_LAND_EPSILON) {
+      // Touching down ends flight, as it does in the mode this borrows from.
+      // Going through the same landing path as a fall keeps `grounded`, the
+      // animation and the sound all in agreement — and the epsilon above is
+      // what stops a player hovering at exactly ground level from re-landing,
+      // and re-playing the landing sound, on every frame.
+      this.state.player.y = groundY;
+      this.velocityY = 0;
+      this.flying = false;
+      if (!this.grounded) {
+        this.grounded = true;
+        events.emit("player-landed", {});
+      }
+      return;
+    }
+
+    this.state.player.y = Math.min(y, ceiling);
+    this.velocityY = 0;
+    this.grounded = false;
+  }
+
+  /** Whether the player is currently flying, for the HUD and for tests. */
+  isFlying(): boolean {
+    return this.flying;
   }
 
   // Cosmetic head-bob while walking — offsets the body mesh only, never the

@@ -140,11 +140,26 @@ export function createPortal(
  * Both halves in one pass because they are the same question asked at two
  * distances, and splitting them is how the arming half gets forgotten.
  */
+/**
+ * How far off the ground you can be and still fall through a doorway.
+ *
+ * A little over a jump's apex: jumping into a portal has always worked and
+ * should keep working. Flying over one, at any real height, should not.
+ */
+const ENTRY_HEIGHT = 2.5;
+
 export function portalSteppedInto(
   portals: Portal[],
   playerX: number,
   playerZ: number,
+  playerHeightAboveGround = 0,
 ): Portal | null {
+  // A portal is a doorway, not a column of sky. The test was two-dimensional,
+  // which was invisible while the only way to be above one was a jump — flight
+  // makes it the difference between crossing a clearing and being teleported
+  // out of the world. Kept generous enough that a jump *through* a portal
+  // still works, because that always did.
+  if (playerHeightAboveGround > ENTRY_HEIGHT) return null;
   let entered: Portal | null = null;
   for (const portal of portals) {
     const distance = Math.hypot(portal.x - playerX, portal.z - playerZ);
