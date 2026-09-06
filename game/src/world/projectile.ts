@@ -55,7 +55,7 @@ interface Arrow {
  * cleanly through everything they were aimed at, and the miss would look like
  * bad aim rather than a bug.
  */
-function segmentHitsSphere(
+export function segmentHitsSphere(
   from: THREE.Vector3,
   to: THREE.Vector3,
   centre: THREE.Vector3,
@@ -77,7 +77,7 @@ function segmentHitsSphere(
 }
 
 /** The same idea against a building's box, on the x/z plane. */
-function segmentHitsBox(from: THREE.Vector3, to: THREE.Vector3, c: Collidable): boolean {
+export function segmentHitsBox(from: THREE.Vector3, to: THREE.Vector3, c: Collidable): boolean {
   const half = c.halfExtent ?? c.radius;
   // Sampled along the segment rather than solved: the boxes are one grid cell
   // across and the samples are far finer than that, and this keeps the test

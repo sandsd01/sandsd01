@@ -32,6 +32,13 @@ export const LOOT_TABLES: Record<string, LootEntry[]> = {
     { itemId: "bone", min: 1, max: 2, chance: 0.7 },
     { itemId: "hide", min: 1, max: 1, chance: 0.25 },
   ],
+  // Lighter than a zombie's: the slinger is a problem to solve, not a purse.
+  // Paying it well would make the answer "farm the throwers", when the answer
+  // is meant to be "deal with the throwers and get on with the night".
+  slinger: [
+    { itemId: "bone", min: 1, max: 1, chance: 0.5 },
+    { itemId: "hide", min: 1, max: 1, chance: 0.35 },
+  ],
   brute: [
     { itemId: "bone", min: 2, max: 3, chance: 0.9 },
     { itemId: "hide", min: 1, max: 2, chance: 0.6 },

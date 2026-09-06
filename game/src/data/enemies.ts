@@ -17,6 +17,15 @@ export interface EnemyDef {
    * never threatens.
    */
   exp: number;
+  /**
+   * How far out this enemy stops and shoots, instead of closing to melee.
+   * Absent means it walks in and swings, as everything did before.
+   *
+   * A separate field rather than a `ranged: true` flag because the number is
+   * the behaviour: it is the distance at which the enemy stops caring about
+   * getting closer, and there is no sensible default for it.
+   */
+  standoff?: number;
 }
 
 export const ENEMIES: Record<string, EnemyDef> = {
@@ -31,6 +40,32 @@ export const ENEMIES: Record<string, EnemyDef> = {
     attackCooldownMs: 1000,
     color: 0x4a6b3a,
     exp: 8,
+  },
+  /**
+   * The answer to standing still.
+   *
+   * Measured before it existed: at night 30 a level-36 player could stand in
+   * the open, press nothing at all, and finish the raid on 56% health — and at
+   * night 60 more comfortably still. Every enemy walked into arm's reach, so
+   * position was never a question the game asked.
+   *
+   * It is deliberately fragile — a third of a zombie's health — because the
+   * counterplay has to be *reachable*. A slinger you can kill in one or two
+   * swings once you close the distance rewards moving; one that also soaked
+   * damage would just be a wall that shoots.
+   */
+  slinger: {
+    id: "slinger",
+    name: "Slinger",
+    maxHealth: 22,
+    damage: 10,
+    moveSpeed: 2.4,
+    aggroRadius: 22,
+    attackRange: 12,
+    standoff: 10,
+    attackCooldownMs: 2200,
+    color: 0x6b5a8a,
+    exp: 14,
   },
   brute: {
     id: "brute",
