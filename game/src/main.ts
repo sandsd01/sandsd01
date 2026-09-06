@@ -85,7 +85,7 @@ import { DroppedItems } from "./world/dropped-item";
 import { Projectiles } from "./world/projectile";
 import { EnemyShots } from "./world/enemy-shot";
 import { rollLoot } from "./data/loot";
-import { allocateStat, expForKill, grantExp } from "./systems/progression";
+import { allocateStat, expForKill, grantExp, loseExpOnDeath } from "./systems/progression";
 import { expToNext } from "./data/levels";
 import { rareDropScale, speedScale, type StatId } from "./data/stats";
 import {
@@ -598,6 +598,17 @@ let respawnScheduled = false;
 function scheduleRespawnIfDead(): void {
   if (!isPlayerDead(state) || respawnScheduled) return;
   respawnScheduled = true;
+
+  // Inside the flag, not outside it. This function is called from several
+  // places every frame — the enemy callback, the fall path, and once
+  // unconditionally — so anything above the guard would charge the player for
+  // dying sixty times a second until the bar hit zero. The flag already means
+  // "this death has not been handled yet", which is exactly once per death.
+  const lost = loseExpOnDeath(state);
+  if (lost > 0) {
+    events.emit("notification", { message: `Lost ${lost} experience` });
+  }
+
   window.setTimeout(() => {
     respawnPlayer(state);
     respawnScheduled = false;

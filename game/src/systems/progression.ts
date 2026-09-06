@@ -109,6 +109,49 @@ export function grantExp(state: GameState, amount: number): void {
   });
 }
 
+/**
+ * What a death takes off the bar.
+ *
+ * A fifth of the level being worked on, rather than a flat number, because the
+ * curve has no ceiling: twenty exp is most of level one and invisible by level
+ * forty, so a constant would mean "harsh, then nothing". A fraction is the
+ * same small bite the whole way up.
+ */
+const DEATH_EXP_FRACTION = 0.2;
+
+/**
+ * Takes a little progress back when the player dies. Returns what was lost.
+ *
+ * Dying was free — `respawnPlayer` refills health and puts the player at the
+ * homestead, and nothing anywhere took anything. Free is understating it: the
+ * only other way to restore health is eating, so at level 36 a full bar is
+ * about fourteen loaves of bread, or one death. A player losing a fight was
+ * being *rewarded* for finishing it face down, and a fall from the sky island
+ * was the cheapest way home.
+ *
+ * **The level itself never moves.** Only progress inside the current one is at
+ * risk. Dropping a level would have to claw back the stat points it paid out,
+ * which are already spent by then and cannot be honestly unspent — and it
+ * would contradict the endless climb this whole system was asked for. Levels
+ * go up; the bar underneath them can go back down.
+ */
+export function loseExpOnDeath(state: GameState): number {
+  const loss = Math.round(expToNext(state.player.level) * DEATH_EXP_FRACTION);
+  const before = state.player.exp;
+  state.player.exp = Math.max(0, before - loss);
+  const lost = before - state.player.exp;
+
+  // The same shape `grantExp` emits, so the HUD bar moves on the way down as
+  // well as up. Without it the loss is real and invisible, which is the worst
+  // of both.
+  events.emit("player-exp-changed", {
+    level: state.player.level,
+    exp: state.player.exp,
+    toNext: expToNext(state.player.level),
+  });
+  return lost;
+}
+
 /** Spends one point. Returns whether it went anywhere. */
 export function allocateStat(state: GameState, id: StatId): boolean {
   if (state.statPoints <= 0) return false;
