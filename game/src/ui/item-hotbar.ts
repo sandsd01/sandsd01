@@ -54,6 +54,12 @@ const ITEM_ICONS: Record<string, IconName> = {
   ancient_stone: "landmark",
   glow_crystal: "sparkles",
   cloud_iron: "cloud",
+  // Same glyph as the ore it is smelted from, the way iron ore and iron ingot
+  // already share one: a material at two stages, not two materials.
+  skysteel_ingot: "cloud",
+  // And the tier convention the tools already follow — an iron sword and a
+  // wooden one wear the same sword.
+  skysteel_sword: "sword",
 };
 
 // The eight quick slots, holding what the player carries rather than what they

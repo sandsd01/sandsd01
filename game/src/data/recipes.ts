@@ -174,6 +174,50 @@ export const RECIPES: RecipeDef[] = [
     requiresStation: "workbench",
   },
   {
+    /**
+     * What the sky island is *for*.
+     *
+     * Cloud iron had exactly one use — three units towards a watchtower —
+     * against an island that pays 99 for a full clear and respawns its nodes
+     * every forty seconds. Climb the tree once, build the one tower, and the
+     * whole region was finished forever. Measured, not guessed: thirteen
+     * nodes up there, 99 units in a single sweep, a thirty-three to one
+     * mismatch with the only thing that wanted any.
+     *
+     * Four to one so the trip is felt at the forge rather than only at the
+     * anvil, and so the numbers below can be read as journeys rather than as
+     * arithmetic.
+     */
+    id: "skysteel_ingot",
+    name: "Skysteel Ingot",
+    inputs: [{ itemId: "cloud_iron", qty: 4 }],
+    output: { itemId: "skysteel_ingot", qty: 1 },
+    category: "materials",
+    requiresStation: "forge",
+  },
+  {
+    id: "skysteel_sword",
+    name: "Skysteel Sword",
+    inputs: [
+      { itemId: "skysteel_ingot", qty: 6 },
+      { itemId: "plank", qty: 1 },
+    ],
+    output: { itemId: "skysteel_sword", qty: 1 },
+    category: "weapons",
+    requiresStation: "anvil",
+  },
+  {
+    id: "skysteel_armour",
+    name: "Skysteel Armour",
+    inputs: [
+      { itemId: "skysteel_ingot", qty: 10 },
+      { itemId: "hide", qty: 4 },
+    ],
+    output: { itemId: "skysteel_armour", qty: 1 },
+    category: "tools",
+    requiresStation: "anvil",
+  },
+  {
     // And the first destination for iron that is not another tool.
     id: "iron_armour",
     name: "Iron Armour",

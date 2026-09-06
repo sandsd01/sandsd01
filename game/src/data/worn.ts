@@ -62,6 +62,11 @@ export const WORN: Record<string, WornDef> = {
   // The two that already existed, moved across unchanged.
   hide_armour: { slot: "armour", reduction: 0.2, blurb: "Takes a fifth off every hit" },
   iron_armour: { slot: "armour", reduction: 0.4, blurb: "Takes a bit under half off every hit" },
+  skysteel_armour: {
+    slot: "armour",
+    reduction: 0.5,
+    blurb: "Takes half off every hit",
+  },
 
   // The rare tier. Found, never crafted — see `data/loot.ts`.
   ember_cloak: {

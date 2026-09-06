@@ -154,6 +154,27 @@ export const ITEMS: Record<string, ItemDef> = {
   // The sky's material. Same shape of thing as ancient stone and glow crystal:
   // one place, one material, one piece of the homestead it buys — the pattern
   // the game settled on when the player's own numbers stopped climbing.
+  skysteel_ingot: {
+    id: "skysteel_ingot",
+    name: "Skysteel Ingot",
+    category: "resource",
+    stackSize: 99,
+    color: 0xa9c9dd,
+  },
+  skysteel_sword: {
+    id: "skysteel_sword",
+    name: "Skysteel Sword",
+    category: "tool",
+    stackSize: 1,
+    color: 0xbcd8e8,
+  },
+  skysteel_armour: {
+    id: "skysteel_armour",
+    name: "Skysteel Armour",
+    category: "tool",
+    stackSize: 1,
+    color: 0x9dbccf,
+  },
   cloud_iron: {
     id: "cloud_iron",
     name: "Cloud Iron",
