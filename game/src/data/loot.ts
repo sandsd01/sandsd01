@@ -61,6 +61,12 @@ export const LOOT_TABLES: Record<string, LootEntry[]> = {
     { itemId: "ember_cloak", min: 1, max: 1, chance: 0.008 },
     { itemId: "quickdraw_ring", min: 1, max: 1, chance: 0.01 },
     { itemId: "gatherers_charm", min: 1, max: 1, chance: 0.01 },
+    // The rarest thing in the game, because it is the one that changes how the
+    // game is *played* rather than how hard you hit. At the measured nine
+    // brutes a minute of frontier hunting that is around forty minutes, or
+    // twenty-odd with a heavy Fortune build — a thing you hear about before
+    // you own one.
+    { itemId: "divine_wings", min: 1, max: 1, chance: 0.004 },
   ],
 };
 

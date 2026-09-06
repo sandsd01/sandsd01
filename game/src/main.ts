@@ -90,6 +90,8 @@ import { rareDropScale, speedScale, type StatId } from "./data/stats";
 import {
   WORN,
   WORN_SLOTS,
+  canFly,
+  flightCeiling,
   gatherReach,
   thornsFraction,
   wornInSlot,
@@ -385,6 +387,14 @@ const minimap = new Minimap(uiRoot);
 function syncHeldItem(): void {
   player.setHeldItem(equippedItemId(state));
 }
+// The wings follow the back slot the same way the held item follows the hand:
+// off the event that changes it, rather than polled every frame.
+function syncWings(): void {
+  player.setWingsVisible(canFly(state));
+}
+events.on("worn-changed", syncWings);
+syncWings();
+
 events.on("equipped-changed", syncHeldItem);
 events.on("inventory-changed", syncHeldItem);
 syncHeldItem();
@@ -524,9 +534,28 @@ function enterRegion(target: RegionId, arrival: { x: number; z: number }): void 
   farmingSystem.setEnabled(onSurface);
 }
 
+/**
+ * How far the player's feet are above whatever is under them.
+ *
+ * One helper, because two separate places now need to tell "standing on it"
+ * from "flying over it", and two copies of the subtraction is one chance for
+ * them to disagree about what the ground is.
+ */
+function heightAboveGround(): number {
+  // `regions.heightAt` is the accessor that follows the player between the
+  // overworld, the cave and the island — reading one region's own surface
+  // would answer for the wrong place the moment they went through a portal.
+  return Math.max(0, state.player.y - regions.heightAt(state.player.x, state.player.z));
+}
+
 /** Steps through whichever portal the player has just walked into, if any. */
 function updateRegionTransitions(): void {
-  const portal = portalSteppedInto(regions.active.portals, state.player.x, state.player.z);
+  const portal = portalSteppedInto(
+    regions.active.portals,
+    state.player.x,
+    state.player.z,
+    heightAboveGround(),
+  );
   if (!portal) return;
 
   if (portal.target === "surface") {
@@ -923,8 +952,15 @@ const loop = new GameLoop((dt) => {
   // it costs health rather than a life, and puts them back at the tree.
   const fallLimit = regions.active.fallLimit;
   if (fallLimit !== null && state.player.y < fallLimit && !isPlayerDead(state)) {
-    damagePlayer(state, FALL_DAMAGE);
-    events.emit("notification", { message: "You fell from The Reach" });
+    // Wings mean the drop costs you the trip but not the health. Anyone
+    // wearing them could have flown, so the fall is a choice rather than a
+    // mistake — and being hurt by a fall you could trivially have avoided
+    // reads as the game not noticing what you are wearing.
+    const winged = canFly(state);
+    if (!winged) damagePlayer(state, FALL_DAMAGE);
+    events.emit("notification", {
+      message: winged ? "You glide back down from The Reach" : "You fell from The Reach",
+    });
     const back = usedSite ?? null;
     enterRegion("surface", {
       x: back?.returnX ?? state.regionReturn?.x ?? 0,
@@ -952,7 +988,7 @@ const loop = new GameLoop((dt) => {
 
   for (const node of activeNodes()) node.update(currentNowMs);
   farmingSystem.update(currentNowMs);
-  droppedItems.update(currentNowMs, state, feet.x, feet.z);
+  droppedItems.update(currentNowMs, state, feet.x, feet.z, heightAboveGround());
 
   // Arrows fly on regardless of panels and death: one already loosed is in the
   // air, and freezing it mid-flight behind an open inventory would be stranger
@@ -1295,6 +1331,10 @@ declare global {
       } | null;
       getDrawTime: () => number;
       getCharmReach: () => number;
+      isFlying: () => boolean;
+      getWingsVisible: () => boolean;
+      getFlightCeiling: () => number;
+      getHeightAboveGround: () => number;
       getCleaveReach: () => { range: number; arcDegrees: number } | null;
       hurtPlayer: (amount: number) => void;
       setRaidCount: (count: number) => void;
@@ -1715,6 +1755,18 @@ window.__gameDebug = {
   // What the charm currently reaches, and null when nothing is worn — the
   // paired negative half of the Gatherer's Charm checks.
   getCharmReach: () => gatherReach(state),
+  // Whether the player is *actually* in flight, from the controller itself —
+  // not "are they wearing wings", which is the question the paired negative
+  // half of every flight check has to be able to tell apart from this one.
+  isFlying: () => player.isFlying(),
+  // Read off the mesh rather than off the slot, so "the wings are on the
+  // character" is a different question from "the wings are in the save".
+  getWingsVisible: () => player.areWingsVisible(),
+  getFlightCeiling: () => flightCeiling(state),
+  // The number the ceiling, the portal trigger and the pickup radius all
+  // actually test against, so a check reads the game's own answer rather than
+  // recomputing "y minus terrain" and drifting from it on a rampart.
+  getHeightAboveGround: () => heightAboveGround(),
   getCleaveReach: () => (heldCleaves(state) ? cleaveShape() : null),
   // The real damage path, so the armour reduction under test is the one the
   // game applies — not a second copy of the arithmetic living in the suite.

@@ -104,6 +104,13 @@ export const ITEMS: Record<string, ItemDef> = {
     stackSize: 1,
     color: 0x86b361,
   },
+  divine_wings: {
+    id: "divine_wings",
+    name: "Divine Wings",
+    category: "tool",
+    stackSize: 1,
+    color: 0xf0e6c8,
+  },
   bow: {
     id: "bow",
     name: "Bow",

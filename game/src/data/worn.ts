@@ -45,6 +45,15 @@ export interface WornDef {
    * others of the same kind. 0 or absent means only the aimed node.
    */
   gatherReach?: number;
+  /**
+   * How far above the ground this lets the wearer fly, in world units. 0 or
+   * absent means no flight at all.
+   *
+   * A ceiling rather than a boolean because the number *is* the ability: what
+   * separates flight from a very good jump is how far up it goes, and a piece
+   * that flew half as high would be a row here rather than a second code path.
+   */
+  flightCeiling?: number;
   /** One line for the character sheet. Says what it does, not what it is. */
   blurb: string;
 }
@@ -69,6 +78,11 @@ export const WORN: Record<string, WornDef> = {
     slot: "trinket",
     gatherReach: 4.5,
     blurb: "One swing works every node of that kind nearby",
+  },
+  divine_wings: {
+    slot: "back",
+    flightCeiling: 40,
+    blurb: "Double-tap jump to fly. Space up, Shift down",
   },
 };
 
@@ -144,4 +158,21 @@ export function drawScale(state: GameState): number {
  */
 export function gatherReach(state: GameState): number {
   return defInSlot(state, "trinket")?.gatherReach ?? 0;
+}
+
+/**
+ * How far above the ground the player may fly, or 0 for not at all.
+ *
+ * Measured from the ground *underfoot* rather than from sea level, which the
+ * controller is what enforces — a fixed altitude would let you fly through a
+ * mountain by walking up to it, and would put the ceiling somewhere different
+ * depending on where you took off.
+ */
+export function flightCeiling(state: GameState): number {
+  return defInSlot(state, "back")?.flightCeiling ?? 0;
+}
+
+/** Whether the player can fly at all. */
+export function canFly(state: GameState): boolean {
+  return flightCeiling(state) > 0;
 }
