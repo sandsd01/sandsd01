@@ -70,7 +70,7 @@ import {
 import { BuildingSystem } from "./systems/building";
 import { FarmingSystem } from "./systems/farming";
 import { EnemyManager } from "./systems/enemy-ai";
-import { RaidSystem } from "./systems/raid";
+import { RaidSystem, waveOn } from "./systems/raid";
 import { TrapSystem } from "./systems/traps";
 import { cleaveShape, PlayerCombat } from "./systems/combat";
 import type { ResourceNode } from "./world/resource-node";
@@ -83,6 +83,7 @@ import { createInitialState, type GameState } from "./state/game-state";
 import { mulberry32 } from "./utils/rng";
 import { DroppedItems } from "./world/dropped-item";
 import { Projectiles } from "./world/projectile";
+import { EnemyShots } from "./world/enemy-shot";
 import { rollLoot } from "./data/loot";
 import { allocateStat, expForKill, grantExp } from "./systems/progression";
 import { expToNext } from "./data/levels";
@@ -281,7 +282,20 @@ const farmingSystem = new FarmingSystem(surfaceGroup, terrain, state);
 const droppedItems = new DroppedItems(scene, regions);
 // Arrows in flight. Not saved, same as the enemies they are aimed at and the
 // loot they turn into when they land.
+/**
+ * What a stone does to a wall it stops against.
+ *
+ * Less than it would have done to the player, deliberately: cover is supposed
+ * to be worth standing behind. But not nothing, so a fort is a thing that is
+ * spent and repaired rather than a permanent answer.
+ */
+const SHOT_BUILDING_DAMAGE = 4;
+
 const projectiles = new Projectiles(scene, regions);
+// Stones thrown *at* the player, as against arrows fired by them. Separate
+// systems because they test their flight against opposite things — see
+// `world/enemy-shot.ts`.
+const enemyShots = new EnemyShots(scene, regions);
 
 events.on("enemy-killed", ({ enemyId, x, z }) => {
   droppedItems.spawnAll(rollLoot(enemyId, runtimeRand, rareDropScale(state)), x, z, currentNowMs);
@@ -500,6 +514,7 @@ function enterRegion(target: RegionId, arrival: { x: number; z: number }): void 
   enemyManager.clearAll(currentNowMs);
   droppedItems.clear();
   projectiles.clear();
+  enemyShots.clear();
 
   if (target === "surface") {
     regions.enter(surfaceRegion);
@@ -1070,7 +1085,26 @@ const loop = new GameLoop((dt) => {
       // neither side gets a world the other cannot see.
       getCollidables(),
       attackBuildingAt,
+      // Lead the throw at the player's chest. Aimed where they are rather
+      // than where they are going: a stone you can outrun by moving is the
+      // entire point of the enemy that throws it.
+      // Aimed where the player is, not where they are going: a stone you can
+      // walk out from under is the entire point of the enemy that throws it.
+      // The arc itself is the shot system's to solve — see `fireAt`.
+      (from, damage) => enemyShots.fireAt(from, feet, damage, currentNowMs),
     );
+  }
+
+  // Stones land here rather than inside the shot system, for the reason the
+  // arrows do: `damagePlayer` is the one place health is lost, and buildings
+  // take damage through the same call a raider hammering a wall uses.
+  for (const shot of enemyShots.update(dt, currentNowMs, feet, getCollidables())) {
+    if (shot.playerDamage > 0) {
+      damagePlayer(state, shot.playerDamage);
+      scheduleRespawnIfDead();
+    } else if (shot.hitBuilding) {
+      attackBuildingAt(shot.x, shot.z, SHOT_BUILDING_DAMAGE);
+    }
   }
 
   // Also checked here, every frame, and deliberately outside the guard above.
@@ -1441,6 +1475,8 @@ declare global {
        * `portalSteppedInto` path rather than proving the layout instead.
        */
       setPortalArmed: (index: number, armed: boolean) => boolean;
+      getStonesInFlight: () => number;
+      getWavePlan: (night: number, wave: number) => { count: number; brutes: number; slingers: number };
     };
   }
 }
@@ -1793,6 +1829,11 @@ window.__gameDebug = {
   // and what is under test is the arrow, not the click.
   shootArrow: () => tryShoot(),
   getArrowsInFlight: () => projectiles.count(),
+  getStonesInFlight: () => enemyShots.count(),
+  // Reads the real table rather than restating the numbers, so a check cannot
+  // pass against a composition the game never actually spawns — the bug the
+  // Fortune-less `rollLootFor` hook was.
+  getWavePlan: (night: number, wave: number) => waveOn(night, wave),
   getDoorState: (placedId) => buildingSystem.doorStateOf(placedId),
   startRaid: () => raid.start(clock.now(), state.player.x, state.player.z),
   endRaid: () => raid.finish(clock.now()),

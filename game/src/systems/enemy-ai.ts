@@ -29,6 +29,16 @@ const ENEMY_FIGURES: Record<string, { height: number; build: number; hunch: numb
     hunch: 0.3,
     palette: { skin: 0x8fae6a, torso: 0x53663c, legs: 0x3d4633, accent: 0x2f3826 },
   },
+  // Read at a glance, or the enemy may as well not be a different one: short,
+  // wiry and standing straight, where the other two are heavy and hunched. The
+  // player has to be able to pick the thrower out of a crowd from across the
+  // clearing, which is the same distance it will be throwing from.
+  slinger: {
+    height: 1.5,
+    build: 0.62,
+    hunch: 0.05,
+    palette: { skin: 0x9a8fb5, torso: 0x6b5a8a, legs: 0x413561, accent: 0x2a2140 },
+  },
   brute: {
     height: 2.0,
     build: 1.45,
@@ -117,6 +127,7 @@ export class Enemy {
     onAttackPlayer: (damage: number, attacker: Enemy) => void,
     collidables: Collidable[] = [],
     onAttackBuilding: (x: number, z: number, damage: number) => boolean = () => false,
+    onShoot: (from: THREE.Vector3, damage: number, attacker: Enemy) => void = () => {},
   ): void {
     if (this.dying) {
       const t = Math.min(1, (nowMs - this.deathStartMs) / DEATH_ANIM_MS);
@@ -137,7 +148,56 @@ export class Enemy {
     const above = playerPos.y - this.object.position.y;
     const withinReach = dist <= this.def.attackRange && above <= REACH_HEIGHT;
 
-    if (this.aiState === "chase") {
+    // A thrower's business is the gap, not closing it: it walks in as far as
+    // its standoff and then holds. That is what turns position into the
+    // player's problem — the answers are to come to it, or to put something
+    // solid in the way.
+    //
+    // Structured as a branch around the melee logic rather than an early
+    // return, because the clamp-and-settle at the end of this method is the
+    // "whatever happened this frame, put the body where it belongs" step, and
+    // returning past it is exactly what the comment down there warns about.
+    const standoff = this.def.standoff;
+    if (standoff !== undefined) {
+      if (this.aiState !== "idle") {
+        if (dist <= this.def.attackRange && above <= REACH_HEIGHT) {
+          this.aiState = "attack";
+          if (nowMs - this.lastAttackMs >= this.def.attackCooldownMs) {
+            this.lastAttackMs = nowMs;
+            this.object.rotation.y = Math.atan2(dx, dz);
+            onShoot(this.object.position.clone(), this.def.damage, this);
+          }
+          // Still further out than it wants to be: close the rest while
+          // throwing, so it settles at its standoff instead of at the edge
+          // of its range.
+          if (dist > standoff && dist > 0) {
+            const step = this.def.moveSpeed * dt;
+            const solved = resolveCollisions(
+              this.object.position.x + (dx / dist) * step,
+              this.object.position.z + (dz / dist) * step,
+              ENEMY_RADIUS,
+              collidables,
+            );
+            this.object.position.x = solved.x;
+            this.object.position.z = solved.z;
+          }
+        } else if (dist > this.aggroRadius * 1.5) {
+          this.aiState = "idle";
+        } else if (dist > 0) {
+          this.aiState = "chase";
+          const step = this.def.moveSpeed * dt;
+          const solved = resolveCollisions(
+            this.object.position.x + (dx / dist) * step,
+            this.object.position.z + (dz / dist) * step,
+            ENEMY_RADIUS,
+            collidables,
+          );
+          this.object.position.x = solved.x;
+          this.object.position.z = solved.z;
+          this.object.rotation.y = Math.atan2(dx, dz);
+        }
+      }
+    } else if (this.aiState === "chase") {
       if (withinReach) {
         this.aiState = "attack";
       } else if (dist > this.aggroRadius * 1.5) {
@@ -170,7 +230,7 @@ export class Enemy {
       }
     }
 
-    if (this.aiState === "attack") {
+    if (this.def.standoff === undefined && this.aiState === "attack") {
       // Backing out on height as well as distance, so a player who climbs a
       // rampart while a raider is mid-swing is let go rather than held in a
       // state that can never land a hit.
@@ -429,7 +489,13 @@ export class EnemyManager {
    * homestead built out past the ridge would otherwise be raided by enemies
    * that spawn back at spawn and never arrive.
    */
-  spawnWave(count: number, brutes: number, aroundX: number, aroundZ: number): number {
+  spawnWave(
+    count: number,
+    brutes: number,
+    aroundX: number,
+    aroundZ: number,
+    slingers = 0,
+  ): number {
     let spawned = 0;
     for (let i = 0; i < count; i++) {
       if (this.enemies.length >= RAID_MAX_ENEMIES) break;
@@ -437,7 +503,9 @@ export class EnemyManager {
       // arrives from every side and a one-sided wall is not a whole answer.
       const angle = ((i + this.rand()) / count) * Math.PI * 2;
       const radius = WAVE_RADIUS_MIN + this.rand() * (WAVE_RADIUS_MAX - WAVE_RADIUS_MIN);
-      const def = getEnemy(i < brutes ? "brute" : "zombie");
+      // Brutes first, then throwers, then the rest walk. Ordered rather than
+      // random so a wave's composition is exactly what `waveOn` asked for.
+      const def = getEnemy(i < brutes ? "brute" : i < brutes + slingers ? "slinger" : "zombie");
       const enemy = this.spawnAt(
         def,
         clampToExtent(aroundX + Math.cos(angle) * radius, this.terrain.halfExtent, EDGE_MARGIN),
@@ -509,6 +577,7 @@ export class EnemyManager {
     onAttackPlayer: (damage: number, attacker: Enemy) => void,
     collidables: Collidable[] = [],
     onAttackBuilding: (x: number, z: number, damage: number) => boolean = () => false,
+    onShoot: (from: THREE.Vector3, damage: number, attacker: Enemy) => void = () => {},
   ): void {
     // The trickle is suspended for the night: left running it would spend the
     // raid ceiling on wanderers and thin out the waves themselves.
@@ -530,7 +599,16 @@ export class EnemyManager {
     }
 
     for (const enemy of this.enemies) {
-      enemy.update(dt, nowMs, playerPos, this.terrain, onAttackPlayer, collidables, onAttackBuilding);
+      enemy.update(
+        dt,
+        nowMs,
+        playerPos,
+        this.terrain,
+        onAttackPlayer,
+        collidables,
+        onAttackBuilding,
+        onShoot,
+      );
     }
 
     for (let i = this.enemies.length - 1; i >= 0; i--) {

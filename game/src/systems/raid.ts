@@ -15,6 +15,8 @@ const WARNING_LEAD_MS = 60_000;
 export interface WavePlan {
   count: number;
   brutes: number;
+  /** How many of the count are throwers rather than walkers. */
+  slingers: number;
 }
 
 /**
@@ -43,6 +45,15 @@ export function wavesOn(n: number): number {
  * the player about what it is showing them: a brute is a brute, and a harder
  * night is more of them.
  */
+/**
+ * The most throwers one wave will ask for.
+ *
+ * A ceiling at all because `RAID_MAX_ENEMIES` is 18: past that the extra ones
+ * are not spawned anyway, and a plan that asks for what it cannot have makes
+ * the composition a lie.
+ */
+const SLINGER_CAP = 10;
+
 export function waveOn(n: number, w: number): WavePlan {
   // Later waves within a raid are bigger, and later raids open bigger.
   const count = 3 + w + Math.floor((n - 1) / 3);
@@ -50,7 +61,25 @@ export function waveOn(n: number, w: number): WavePlan {
   // None at all in the first wave of the first raid; up to half a wave once
   // the player is deep in.
   const share = Math.min(0.5, 0.06 * (n - 1) + 0.12 * (w - 1));
-  return { count, brutes: Math.min(count, Math.round(count * share)) };
+  const brutes = Math.min(count, Math.round(count * share));
+
+  // Slingers are the escalation this rule always implied and never had, and
+  // they are *added* to the wave rather than taken out of it.
+  //
+  // That is the whole reason they exist. Melee is capped by geometry — only
+  // about five bodies fit around a player at arm's length — so raising the
+  // count has never raised the danger, which is why a level-36 player could
+  // stand still through the whole of raid thirty and finish on 56% health.
+  // A thrower has no such cap: every one of them can be shooting at once.
+  // Escalation therefore has to land on the kind that scales, and taking
+  // slingers out of `count` would have spent the increase on the kind that
+  // does not.
+  //
+  // They start at raid four. The opening nights are the only ones currently
+  // dangerous, and the thing that fixes the late game has no business making
+  // the early game worse.
+  const slingers = n < 4 ? 0 : Math.min(SLINGER_CAP, Math.round(0.45 * (n - 3)));
+  return { count: count + slingers, brutes, slingers };
 }
 
 export class RaidSystem {
@@ -229,7 +258,7 @@ export class RaidSystem {
     // built to that raid's toughest recipe rather than to none.
     const plan = waveOn(n, Math.min(this.state.raid.wave + 1, this.getTotalWaves()));
     const wanted = plan.count + this.backlog;
-    const spawned = this.enemies.spawnWave(wanted, plan.brutes, playerX, playerZ);
+    const spawned = this.enemies.spawnWave(wanted, plan.brutes, playerX, playerZ, plan.slingers);
     this.backlog = Math.max(0, wanted - spawned);
     this.state.raid.wave++;
     this.nextWaveAtMs = nowMs + intervalOn(n);
