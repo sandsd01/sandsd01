@@ -162,6 +162,56 @@ ok("a dead slinger pays experience",
   paid.table > 0 && (now.level > paid.level || now.exp > paid.exp),
   `lvl ${paid.level} exp ${paid.exp} -> lvl ${now.level} exp ${now.exp}, table says ${paid.table}`);
 
+// --- 6. the throw is announced before it arrives -------------------------
+// The counterplay this whole enemy is built on is moving out of the way, and
+// before the sling the stone simply appeared — at nine units it crosses in a
+// little over half a second. So the claim under test is not "there is a
+// spinning thing", it is "the spinning thing leads the stone".
+await boot();
+await page.evaluate(() => {
+  const d = window.__gameDebug;
+  d.teleportPlayer(0, 8);
+  d.clearEnemies();
+  const p = d.getPlayerPosition();
+  d.spawnEnemyAt("slinger", p.x, p.z - 9);
+});
+await page.waitForTimeout(1200);
+
+const trace = [];
+for (let i = 0; i < 120; i++) {
+  await page.waitForTimeout(100);
+  trace.push(await page.evaluate(() => ({
+    charge: window.__gameDebug.getSlingCharges()[0] ?? 0,
+    stones: window.__gameDebug.getStonesInFlight(),
+  })));
+}
+const everWound = Math.max(...trace.map((t) => t.charge));
+ok("the sling winds up at all", everWound > 0.7, `peak charge ${everWound.toFixed(2)}`);
+
+// The lead: for each moment a stone first appears, was the sling near full a
+// moment earlier? A tell that only fires *with* the throw is not a tell.
+let throwsSeen = 0, throwsLed = 0;
+for (let i = 3; i < trace.length; i++) {
+  if (trace[i].stones <= trace[i - 1].stones) continue;
+  throwsSeen++;
+  if (Math.max(trace[i - 3].charge, trace[i - 2].charge, trace[i - 1].charge) > 0.5) throwsLed++;
+}
+ok("and every throw was led by the wind-up", throwsSeen > 0 && throwsLed === throwsSeen,
+  `${throwsLed} of ${throwsSeen} throws announced`);
+
+// Paired: a melee kind has no sling to read, so the tell means "thrower".
+await boot();
+await page.evaluate(() => {
+  const d = window.__gameDebug;
+  d.teleportPlayer(0, 8); d.clearEnemies();
+  const p = d.getPlayerPosition();
+  d.spawnEnemyAt("zombie", p.x, p.z - 4);
+  d.spawnEnemyAt("brute", p.x + 2, p.z - 4);
+});
+await page.waitForTimeout(2500);
+const meleeSlings = await page.evaluate(() => window.__gameDebug.getSlingCharges().length);
+ok("and nothing that walks in carries one", meleeSlings === 0, `${meleeSlings} slings on melee kinds`);
+
 ok("no console/page errors", errors.length === 0, errors.slice(0, 3).join(" | "));
 console.log(`\n${results.filter((r) => r.pass).length}/${results.length} passed`);
 await browser.close();
