@@ -17,7 +17,7 @@ import { GameClock } from "./core/clock";
 import { InputManager } from "./input/input-manager";
 
 import { PlayerController, PLAYER_RADIUS } from "./player/player-controller";
-import { damagePlayer, isPlayerDead, respawnPlayer } from "./player/player-state";
+import { damagePlayer, isPlayerDead, respawnPlayer, healPlayer } from "./player/player-state";
 
 import { Terrain, WORLD_SIZE } from "./world/terrain";
 import { getZone } from "./world/zones";
@@ -1426,6 +1426,7 @@ declare global {
       getGatherTime: () => number;
       getHealth: () => { current: number; max: number };
       damagePlayer: (amount: number) => void;
+      healPlayer: (amount: number) => number;
       getKnownRecipes: () => string[];
       getAllRecipes: () => { id: string; name: string; category: string }[];
       getUnseenRecipes: () => string[];
@@ -1900,6 +1901,7 @@ window.__gameDebug = {
   // the DOM and none could check discovery, which has no DOM of its own.
   getHealth: () => ({ current: state.player.health, max: state.player.maxHealth }),
   damagePlayer: (amount) => damagePlayer(state, amount),
+  healPlayer: (amount) => healPlayer(state, amount),
   getKnownRecipes: () => listKnownRecipes(state).map((recipe) => recipe.id),
   // The recipe book as data, so a test can ask what a category contains
   // instead of hardcoding a list that every new recipe invalidates.

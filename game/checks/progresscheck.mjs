@@ -163,11 +163,18 @@ ok(
 
 // The concurrency cap is there to keep the frame rate honest and must hold
 // however far the schedule has escalated.
+//
+// It was 18, and 18 was quietly doing the balancing: the plan could ask for
+// more, the player's health grew without limit, and the number that could be
+// in front of them could not. Raised to 40 after sweeping the frame rate
+// across 18 to 60 and finding it flat. The check keeps its job — the cap is
+// respected — rather than restating a number that is now a tuning decision.
+const RAID_CAP = 40;
 const veryLate = await observeRaid(20);
 ok(
-  "the eighteen-enemy cap still holds at raid 20",
-  veryLate.peak <= 18,
-  `peak ${veryLate.peak} on the field (raid 1 peaked at ${early.peak})`,
+  "the concurrency cap still holds at raid 20",
+  veryLate.peak <= RAID_CAP,
+  `peak ${veryLate.peak} of ${RAID_CAP} on the field (raid 1 peaked at ${early.peak})`,
 );
 ok(
   "and raid 20 is still a heavier night than raid 1",
