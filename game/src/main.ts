@@ -1477,6 +1477,7 @@ declare global {
        */
       setPortalArmed: (index: number, armed: boolean) => boolean;
       getStonesInFlight: () => number;
+      getSlingCharges: () => number[];
       getWavePlan: (night: number, wave: number) => { count: number; brutes: number; slingers: number };
     };
   }
@@ -1831,6 +1832,10 @@ window.__gameDebug = {
   shootArrow: () => tryShoot(),
   getArrowsInFlight: () => projectiles.count(),
   getStonesInFlight: () => enemyShots.count(),
+  // The wind-up the player is shown, read back off the enemy that drew it.
+  getSlingCharges: () =>
+    enemyManager.getEnemies().filter((e) => e.def.standoff !== undefined)
+      .map((e) => e.drawnCharge()),
   // Reads the real table rather than restating the numbers, so a check cannot
   // pass against a composition the game never actually spawns — the bug the
   // Fortune-less `rollLootFor` hook was.

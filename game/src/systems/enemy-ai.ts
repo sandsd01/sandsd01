@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { getEnemy, type EnemyDef } from "../data/enemies";
 import type { BoundedGround } from "../world/terrain";
 import { getZone } from "../world/zones";
+import { Sling } from "../world/sling";
 import { clampToExtent } from "../world/terrain";
 import { mulberry32 } from "../utils/rng";
 import { events } from "../utils/events";
@@ -86,6 +87,9 @@ function buildEnemyMesh(defId: string): THREE.Mesh {
 export class Enemy {
   /** The kind's self-lit colour, restored after each hit flash. */
   private readonly tint: number;
+  /** Only on kinds that throw: the whirling stone that says so. */
+  private readonly sling: Sling | null;
+  private slingCharge = 0;
   readonly id: string;
   readonly def: EnemyDef;
   readonly object: THREE.Mesh;
@@ -107,6 +111,10 @@ export class Enemy {
     this.def = def;
     this.object = buildEnemyMesh(def.id);
     this.tint = (ENEMY_FIGURES[def.id] ?? ENEMY_FIGURES.zombie).tint;
+    // Driven off `standoff` rather than the id, so a second thrower gets the
+    // tell for free and cannot be added without one.
+    this.sling = def.standoff === undefined ? null : new Sling();
+    if (this.sling) this.object.add(this.sling.object);
     this.object.position.set(x, y, z);
     this.health = def.maxHealth;
     this.aggroRadius = def.aggroRadius;
@@ -117,6 +125,23 @@ export class Enemy {
   }
 
   // Returns true if this hit killed the enemy.
+  /**
+   * How far into its wind-up a thrower is, 0 to 1.
+   *
+   * One expression, used by the animation and read back by the checks, so a
+   * suite cannot pass against a number the player never sees.
+   */
+  chargeAt(nowMs: number): number {
+    if (this.sling === null || this.aiState !== "attack") return 0;
+    const untilThrow = this.def.attackCooldownMs - (nowMs - this.lastAttackMs);
+    return Math.max(0, Math.min(1, 1 - untilThrow / SLING_WINDUP_MS));
+  }
+
+  /** The last charge the sling was actually drawn with. For tests. */
+  drawnCharge(): number {
+    return this.slingCharge;
+  }
+
   takeDamage(amount: number, nowMs: number): boolean {
     this.health = Math.max(0, this.health - amount);
     this.flashUntilMs = nowMs + FLASH_MS;
@@ -296,6 +321,14 @@ export class Enemy {
     // frame, so leaving it at 0x000000 would have quietly undone the tint one
     // frame after the enemy spawned.
     this.material.emissive.setHex(nowMs < this.flashUntilMs ? 0xaaaaaa : this.tint);
+
+    // The wind-up is read off the same clock the throw is: a tell computed
+    // from its own timer would be free to drift out of step with the thing it
+    // is promising, which is worse than no tell at all.
+    if (this.sling) {
+      this.slingCharge = this.chargeAt(nowMs);
+      this.sling.update(dt, this.slingCharge);
+    }
   }
 }
 
@@ -320,6 +353,16 @@ export class Enemy {
 // hardware at sixty frames a second would not.
 // These have to be separate numbers: a wave of six that ran into a cap of
 // eight (which counts the dying, too) would arrive as two.
+/**
+ * How long before a throw the sling starts winding up.
+ *
+ * The stone crosses a slinger's nine-unit standoff in a little over half a
+ * second, so a warning shorter than that would arrive with the stone. This is
+ * comfortably longer, which is the point: the player is meant to have time to
+ * move, not to be told what already happened.
+ */
+const SLING_WINDUP_MS = 900;
+
 const MAX_ENEMIES = 8;
 const RAID_MAX_ENEMIES = 40;
 /**
