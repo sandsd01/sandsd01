@@ -91,7 +91,35 @@ await page.waitForFunction(() => window.__gameDebug.isPointerLocked(), null, { t
  * camera never moved at all, which is a genuine failure and is what the
  * caller reports.
  */
+/**
+ * Puts the pitch somewhere it can move in both directions before measuring.
+ *
+ * Third person clamps pitch to [-0.65, 1.1], and by the time this section
+ * runs the camera is sitting at the top of that range — so a downward gesture
+ * had nowhere to go and reported "the camera never moved", while the very same
+ * gesture with invert on moved freely and passed. One case failing and its
+ * mirror passing is what gave this away; it looked like a look bug and was a
+ * starting position.
+ *
+ * Pins to the bottom of the range first (any large upward movement will do,
+ * the clamp does the rest), then steps back down until there is room on both
+ * sides. Stepping rather than computing, because the conversion from mouse
+ * movement to radians runs through the player's sensitivity setting and this
+ * should not have to know it.
+ */
+async function centrePitch() {
+  await lookBy(page, 0, -600);
+  for (let i = 0; i < 25; i++) {
+    const pitch = await page.evaluate(() => window.__gameDebug.getCameraPitch());
+    if (pitch > -0.2) return pitch;
+    await lookBy(page, 0, 60, 4);
+    await page.waitForTimeout(120);
+  }
+  return page.evaluate(() => window.__gameDebug.getCameraPitch());
+}
+
 async function pitchDeltaForMouseDown() {
+  await centrePitch();
   const start = await page.evaluate(() => window.__gameDebug.getCameraPitch());
   await lookBy(page, 0, 96);
   try {
