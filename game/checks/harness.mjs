@@ -127,3 +127,27 @@ export async function pressButton(page, button = 2) {
   await pressDown(page, button);
   await pressUp(page, button);
 }
+
+/**
+ * Waits until the player is actually standing where they were sent.
+ *
+ * `teleportPlayer` sets the position, but everything downstream of it — the
+ * aim point, the map, the crosshair — is recomputed on the game's own frame,
+ * and a frame here can take most of a second. Reading straight after a fixed
+ * wait therefore returns the *previous* location, which is subtle: nothing
+ * errors, the numbers are all real, they just describe where the player used
+ * to be. It showed up as a placement landing at cell (undefined) from an aim
+ * a hundred units away from where the check thought it had put them.
+ *
+ * Returns whether it got there, so a caller can fail rather than carry on
+ * against a position that never happened.
+ */
+export async function waitForPlayerAt(page, x, z, tolerance = 0.5, timeoutMs = 30000) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < timeoutMs) {
+    const p = await page.evaluate(() => window.__gameDebug.getPlayerPosition());
+    if (Math.hypot(p.x - x, p.z - z) <= tolerance) return true;
+    await page.waitForTimeout(200);
+  }
+  return false;
+}

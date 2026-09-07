@@ -1,4 +1,4 @@
-import { chromium, LAUNCH, BASE_URL } from "./harness.mjs";
+import { chromium, LAUNCH, BASE_URL, waitForPlayerAt } from "./harness.mjs";
 
 // The minimap, and the HUD it shares a screen with.
 //
@@ -134,8 +134,18 @@ await page.waitForTimeout(2500);
 
   // And it follows the player, rather than being a label that was printed once.
   await probe(() => window.__gameDebug.teleportPlayer(-42, 77));
-  await page.waitForTimeout(1200);
-  const after = await probe(() => window.__gameDebug.getMinimapCoords());
+  await waitForPlayerAt(page, -42, 77);
+  // And then for the map to redraw with them there. The readout is written
+  // during the redraw, which happens at most every 120ms and on this renderer
+  // can be less often than once a second — so a fixed wait reads the label
+  // from before the move. In the batch run that reported "0, 8" -> "0, 8" and
+  // looked like a readout that never updates.
+  let after = null;
+  for (let i = 0; i < 60; i++) {
+    after = await probe(() => window.__gameDebug.getMinimapCoords());
+    if (typeof after === "string" && after.replace(/\s/g, "") === "-42,77") break;
+    await page.waitForTimeout(250);
+  }
   ok(
     "and it tracks where the player actually is",
     typeof after === "string" && after.replace(/\s/g, "") === "-42,77",

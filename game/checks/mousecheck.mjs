@@ -1,4 +1,4 @@
-import { chromium, LAUNCH, BASE_URL, lookBy, pressDown, pressUp, pressButton } from "./harness.mjs";
+import { chromium, LAUNCH, BASE_URL, lookBy, pressDown, pressUp, pressButton, waitForPlayerAt } from "./harness.mjs";
 import { selectBuilding } from "./buildselect.mjs";
 
 // Mouse-driven interaction: crosshair targeting, hold-to-gather, right-click
@@ -185,6 +185,18 @@ ok("a tree beyond reach is not a target", farTarget.kind !== "node", JSON.string
 // it aimed with. See pressButton in harness.mjs for the measurements. Aim is
 // read before the click and the piece must land there, which is only a fair
 // assertion now that pressing a button no longer moves the mouse.
+await page.evaluate(() => {
+  window.__gameDebug.grantItems({ wood: 40, stone: 40, plank: 20, clay: 20 });
+  window.__gameDebug.teleportPlayer(0, 0);
+});
+// Wait for the feet to actually be there rather than for a fixed 800ms. The
+// aim point is derived from them on the game's own frame, and a frame here can
+// take most of a second — so a fixed wait reads the position this section was
+// moved *away* from, which is how the batch run came to report a placement at
+// cell (undefined) from an aim a hundred units off.
+await waitForPlayerAt(page, 0, 0);
+await selectBuilding(page, waitFor, "Farm Plot", "farm_plot");
+
 // Face a known direction so the expected cell is unambiguous.
 const aimPoint = await turnAndSettleAim(0);
 // The world now seeds POI barrels of its own, so "any placed building" is no
