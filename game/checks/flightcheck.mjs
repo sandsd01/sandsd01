@@ -52,8 +52,20 @@ async function doubleTapJump() {
   await page.waitForTimeout(500);
 }
 
-/** Holds a key until `done` or the budget runs out. Returns whether it got there. */
-async function holdUntil(key, done, budgetMs = 40000) {
+/**
+ * Holds a key until a condition comes true, or the budget runs out.
+ *
+ * The budgets below are deliberately generous. This polls and returns the
+ * moment the condition holds, so a large budget costs nothing on the way
+ * through — it is only spent when something is actually wrong. What it buys
+ * is not being a frame-rate measurement in disguise: the climb to the ceiling
+ * failed at "reached 34.34 of 40" on a slow day, which is not a flight bug but
+ * a stopwatch running out three quarters of the way up. Under software
+ * rendering with no GPU the frame rate here moves by a factor of two or more
+ * between runs, so any budget tight enough to fail on a slow machine will
+ * eventually fail on a fast one too.
+ */
+async function holdUntil(key, done, budgetMs = 120000) {
   await page.keyboard.down(key);
   const t0 = Date.now();
   try {
@@ -98,7 +110,7 @@ await doubleTapJump();
 ok("double-tapping jump with wings starts flight", (await flying()) === true);
 
 // --- 3. it climbs, and it stops ------------------------------------------
-const climbed = await holdUntil("Space", async () => (await height()) >= ceiling - 0.5, 90000);
+const climbed = await holdUntil("Space", async () => (await height()) >= ceiling - 0.5, 300000);
 const atTop = await height();
 ok("holding jump climbs to the ceiling", climbed, `reached ${atTop.toFixed(2)} of ${ceiling}`);
 // The half that makes the climb mean something: it has to STOP.
@@ -112,7 +124,7 @@ ok("still flying up there", (await flying()) === true);
 
 // --- 4. sprint descends, and costs nothing -------------------------------
 const staminaBefore = await page.evaluate(() => window.__gameDebug.getStamina?.().current ?? null);
-const sank = await holdUntil("ShiftLeft", async () => (await height()) < pressed - 3, 40000);
+const sank = await holdUntil("ShiftLeft", async () => (await height()) < pressed - 3, 120000);
 const staminaAfter = await page.evaluate(() => window.__gameDebug.getStamina?.().current ?? null);
 ok("sprint sinks you while flying", sank, `${pressed.toFixed(2)} -> ${(await height()).toFixed(2)}`);
 // The regression the sprint/descend split exists to prevent.
@@ -121,13 +133,13 @@ ok("and descending costs no stamina",
   `${staminaBefore} -> ${staminaAfter}`);
 
 // --- 5. landing ends it ---------------------------------------------------
-const landed = await holdUntil("ShiftLeft", async () => (await height()) < 0.1, 90000);
+const landed = await holdUntil("ShiftLeft", async () => (await height()) < 0.1, 300000);
 ok("holding sprint brings you all the way down", landed, `${(await height()).toFixed(2)}`);
 ok("touching down ends flight by itself", (await flying()) === false);
 
 // --- 6. taking the wings off mid-air drops you ---------------------------
 await doubleTapJump();
-await holdUntil("Space", async () => (await height()) > 4, 90000);
+await holdUntil("Space", async () => (await height()) > 4, 300000);
 const airborne = await height();
 ok("back in the air for the next check", airborne > 4 && (await flying()), airborne.toFixed(2));
 await page.evaluate(() => window.__gameDebug.takeOffSlot("back"));
@@ -159,7 +171,7 @@ await page.evaluate((m) => {
 }, mouth);
 await page.waitForTimeout(700);
 await doubleTapJump();
-const climbedOver = await holdUntil("Space", async () => (await height()) > 5, 90000);
+const climbedOver = await holdUntil("Space", async () => (await height()) > 5, 300000);
 ok("airborne well clear of the portal", climbedOver && (await flying()),
   `height=${(await height()).toFixed(2)}`);
 
@@ -169,7 +181,7 @@ const crossed = await holdUntil("KeyW", async () =>
   page.evaluate((m) => {
     const p = window.__gameDebug.getPlayerPosition();
     return Math.hypot(p.x - m.x, p.z - m.z) < 1.5;
-  }, mouth), 90000);
+  }, mouth), 300000);
 const overhead = await page.evaluate((m) => {
   const p = window.__gameDebug.getPlayerPosition();
   return {
@@ -186,7 +198,7 @@ ok("flying over a portal does not take you through it", overhead.region === "sur
 // And the paired half: on foot it still works. Without this the check above
 // would pass on a build where portals had stopped working altogether.
 await page.evaluate(() => window.__gameDebug.takeOffSlot("back"));
-await holdUntil("ShiftLeft", async () => (await height()) < 0.2, 90000).catch(() => {});
+await holdUntil("ShiftLeft", async () => (await height()) < 0.2, 300000).catch(() => {});
 await page.waitForTimeout(3000);
 await page.evaluate((m) => {
   const len = Math.hypot(m.x, m.z) || 1;
@@ -211,7 +223,7 @@ const pickup = await page.evaluate(() => {
   return { before: (d.getInventory().find((s) => s.itemId === "bone") ?? { qty: 0 }).qty };
 });
 await doubleTapJump();
-await holdUntil("Space", async () => (await height()) > 4, 90000);
+await holdUntil("Space", async () => (await height()) > 4, 300000);
 // Only now, with the player already up: a drop spawned under their feet while
 // they were still standing there is collected on the next frame, and the check
 // would be measuring nothing.
@@ -230,7 +242,7 @@ ok("hovering over a drop does not hoover it up",
   `${inAir.onFloor} on the floor at height ${inAir.height.toFixed(2)}, bone=${inAir.bone}`);
 
 // Paired: back on the ground it is picked up as it always was.
-await holdUntil("ShiftLeft", async () => (await height()) < 0.2, 90000);
+await holdUntil("ShiftLeft", async () => (await height()) < 0.2, 300000);
 await page.waitForTimeout(2500);
 const onGround = await page.evaluate(() => ({
   onFloor: window.__gameDebug.getDroppedItems().length,

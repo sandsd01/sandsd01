@@ -14,6 +14,7 @@ import { merge, paint, placed } from "../world/geometry";
 import { instantiate, type ModelLibrary } from "../world/models";
 import { speedScale, staminaRegenScale } from "../data/stats";
 import { canFly, flightCeiling } from "../data/worn";
+import { isGodMode } from "../systems/godmode";
 
 const MOVE_SPEED = 5;
 const SPRINT_MULTIPLIER = 1.6;
@@ -475,6 +476,10 @@ export class PlayerController {
   }
 
   private spendStamina(amount: number, nowMs: number): void {
+    // Creative mode never tires. Returning before the timestamp is set as well
+    // as before the subtraction matters: recording an exertion would hold off
+    // regen for a cost that was never paid.
+    if (isGodMode(this.state)) return;
     const player = this.state.player;
     player.stamina = Math.max(0, player.stamina - amount);
     this.lastStaminaSpendMs = nowMs;

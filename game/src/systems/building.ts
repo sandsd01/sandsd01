@@ -11,6 +11,7 @@ import type { Collidable } from "../utils/collision";
 import { events } from "../utils/events";
 import { merge, paint, placed } from "../world/geometry";
 import { instantiate, type ModelLibrary, type ModelName } from "../world/models";
+import { isGodMode } from "./godmode";
 
 const VALID_COLOR = 0x4caf50;
 const INVALID_COLOR = 0xe53935;
@@ -594,13 +595,18 @@ export class BuildingSystem {
     const anchor = this.anchorCellFor(aim);
     if (!this.isPlacementValid(def, anchor)) return false;
 
-    for (const cost of def.cost) {
-      if (!hasQty(this.state, cost.itemId, cost.qty)) {
-        events.emit("notification", { message: `Not enough ${getItem(cost.itemId).name}` });
-        return false;
+    // Creative mode builds for free. The placement rules above still apply —
+    // occupancy and zone are about whether a piece *fits*, which creative mode
+    // has no business overruling; only the bill is waived.
+    if (!isGodMode(this.state)) {
+      for (const cost of def.cost) {
+        if (!hasQty(this.state, cost.itemId, cost.qty)) {
+          events.emit("notification", { message: `Not enough ${getItem(cost.itemId).name}` });
+          return false;
+        }
       }
+      for (const cost of def.cost) removeItem(this.state, cost.itemId, cost.qty);
     }
-    for (const cost of def.cost) removeItem(this.state, cost.itemId, cost.qty);
 
     const placed: PlacedBuilding = {
       id: `building-${this.nextInstanceId++}`,

@@ -36,3 +36,118 @@ export const LAUNCH = {
   executablePath: process.env.CHECK_CHROMIUM || undefined,
   args: ["--use-gl=swiftshader", "--enable-unsafe-swiftshader", "--no-sandbox"],
 };
+
+/**
+ * Turns the camera by a relative mouse delta, the way the game itself sees it.
+ *
+ * `page.mouse.move` does not work for mouse-look in this environment, and it
+ * fails silently rather than erroring. Measured: under pointer lock, 46
+ * synthesised moves reached the page and every one of them carried
+ * `movementX === 0 && movementY === 0`, so `input-manager.ts` — which
+ * accumulates exactly those two fields — correctly did nothing, and the camera
+ * sat at `pitch 0.000` while the suite reported a look bug that did not exist.
+ * Chromium is not computing pointer-lock deltas for CDP-injected mouse events
+ * here.
+ *
+ * What this bypasses is only that computation. The event still goes to
+ * `document`, still passes the `pointerLocked` gate, and still drives the
+ * game's own handler and everything downstream of it — the part the checks
+ * exist to cover. What is *not* covered any more is the browser's own delta
+ * maths, which is not ours and which we cannot exercise here either way.
+ *
+ * Several small steps rather than one large one, because the game clamps pitch
+ * per event and one big delta would be clipped where the same movement spread
+ * over a gesture is not.
+ */
+export async function lookBy(page, dx, dy, steps = 12) {
+  await page.evaluate(
+    ({ dx, dy, steps }) => {
+      for (let i = 0; i < steps; i++) {
+        document.dispatchEvent(
+          new MouseEvent("mousemove", {
+            movementX: dx / steps,
+            movementY: dy / steps,
+            bubbles: true,
+          }),
+        );
+      }
+    },
+    { dx, dy, steps },
+  );
+}
+
+/**
+ * Presses and releases mouse buttons without moving the pointer.
+ *
+ * `page.mouse.down()` moves before it presses, and under pointer lock that
+ * carries a delta the game reads as a look. Measured on a right-click with the
+ * camera set to yaw 0 and the player standing still at the origin:
+ *
+ *     before mousedown   yaw 0   aim (0, -5)
+ *     at mousedown       yaw 1   aim (-2.52, -1.62)
+ *     at mouseup         yaw 2   aim (-2.73, 1.25)
+ *
+ * The feet never moved. `worldToCell(-2.52, -1.62)` is cell (-3,-2), which is
+ * exactly where the piece landed — so the placement was correct for where the
+ * camera pointed *once the click had turned it*, and the check that read the
+ * aim beforehand was comparing against an angle that no longer existed by the
+ * time the click was handled. It read for a long time as a placement bug and
+ * was the gesture moving the camera it was aiming with. The same delta turns a
+ * held left button off whatever it was pointed at, which is why gathering and
+ * chopping stopped working too.
+ *
+ * Dispatching the button events directly leaves the camera alone; with this,
+ * the same placement lands at cell (0,-5) from an aim of (0,-5). The game's own
+ * listeners still run — mousedown on the canvas, mouseup on the window, which
+ * is why the two go to different targets.
+ */
+export async function pressDown(page, button = 0) {
+  await page.evaluate((b) => {
+    document.querySelector("#game-canvas").dispatchEvent(
+      new MouseEvent("mousedown", {
+        button: b,
+        buttons: b === 2 ? 2 : 1,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  }, button);
+}
+
+export async function pressUp(page, button = 0) {
+  await page.evaluate((b) => {
+    window.dispatchEvent(
+      new MouseEvent("mouseup", { button: b, buttons: 0, bubbles: true, cancelable: true }),
+    );
+  }, button);
+}
+
+/** Press and release in one go, for a click that is not a hold. */
+export async function pressButton(page, button = 2) {
+  await pressDown(page, button);
+  await pressUp(page, button);
+}
+
+/**
+ * Waits until the player is actually standing where they were sent.
+ *
+ * `teleportPlayer` sets the position, but everything downstream of it — the
+ * aim point, the map, the crosshair — is recomputed on the game's own frame,
+ * and a frame here can take most of a second. Reading straight after a fixed
+ * wait therefore returns the *previous* location, which is subtle: nothing
+ * errors, the numbers are all real, they just describe where the player used
+ * to be. It showed up as a placement landing at cell (undefined) from an aim
+ * a hundred units away from where the check thought it had put them.
+ *
+ * Returns whether it got there, so a caller can fail rather than carry on
+ * against a position that never happened.
+ */
+export async function waitForPlayerAt(page, x, z, tolerance = 0.5, timeoutMs = 30000) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < timeoutMs) {
+    const p = await page.evaluate(() => window.__gameDebug.getPlayerPosition());
+    if (Math.hypot(p.x - x, p.z - z) <= tolerance) return true;
+    await page.waitForTimeout(200);
+  }
+  return false;
+}

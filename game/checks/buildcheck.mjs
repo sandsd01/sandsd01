@@ -1,4 +1,4 @@
-import { chromium, LAUNCH, BASE_URL } from "./harness.mjs";
+import { chromium, LAUNCH, BASE_URL, pressDown, pressUp, pressButton } from "./harness.mjs";
 import { selectBuilding } from "./buildselect.mjs";
 
 // Can a base be edited, and does it actually stop anything?
@@ -19,6 +19,13 @@ const errors = [];
 page.on("pageerror", (e) => errors.push(String(e)));
 page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
 
+// Budgets here are generous on purpose. Every wait below polls and returns as
+// soon as its condition holds, so a large budget costs nothing when the case
+// passes — it is spent only when something is genuinely wrong. Tight budgets
+// are how this suite came to report failures on a slow day that it had passed
+// an hour earlier with no code change in between: with no GPU, the frame rate
+// here moves by a factor of two between runs, and a budget short enough to
+// fail on the slow end will fail on the fast end sooner or later too.
 const results = [];
 const ok = (name, pass, detail = "") => {
   results.push({ name, pass });
@@ -59,8 +66,7 @@ const mine = () =>
 async function place(name, id) {
   const before = (await mine()).length;
   if (!(await selectBuilding(page, waitFor, name, id))) return null;
-  await page.mouse.down({ button: "right" });
-  await page.mouse.up({ button: "right" });
+  await pressButton(page, 2);
   const landed = await waitFor((n) =>
     window.__gameDebug.getPlacedBuildings().filter((b) => !b.id.startsWith("poi-")).length > n,
     before, 20000);
@@ -157,8 +163,7 @@ await page.keyboard.press("KeyR");
 await page.waitForTimeout(250);
 const rot1 = await page.evaluate(() => window.__gameDebug.getBuildRotation());
 ok("R turns the piece being placed", rot0 === 0 && rot1 === 90, `${rot0} -> ${rot1}`);
-await page.mouse.down({ button: "right" });
-await page.mouse.up({ button: "right" });
+await pressButton(page, 2);
 await waitFor(() => window.__gameDebug.getPlacedBuildings().some((b) => b.rotation === 90));
 await page.keyboard.press("KeyQ");
 const turned = (await mine()).find((b) => b.rotation === 90);
@@ -267,7 +272,7 @@ await page.evaluate(() => {
 const sawWall = await waitFor(() => {
   const t = window.__gameDebug.getTarget();
   return t.kind === "building" || t.kind === "container";
-}, null, 12000);
+}, null, 45000);
 ok("aiming at it reports a building, not whatever is behind it", sawWall,
   JSON.stringify(await page.evaluate(() => window.__gameDebug.getTarget())));
 

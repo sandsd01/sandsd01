@@ -102,6 +102,7 @@ export class Hud {
   private readonly expFill: HTMLDivElement;
   private readonly pointsPip: HTMLSpanElement;
   private readonly armourChip: HTMLDivElement;
+  private readonly godChip: HTMLDivElement;
   private readonly staminaFill: HTMLDivElement;
   private readonly resourceRow: HTMLDivElement;
   private readonly prompt: HTMLDivElement;
@@ -112,7 +113,8 @@ export class Hud {
   private readonly raidLabel: HTMLSpanElement;
   private readonly timeIcon: HTMLSpanElement;
   private readonly timeLabel: HTMLSpanElement;
-  private readonly keybinds: HTMLDivElement;
+  private readonly keybindsHint: HTMLDivElement;
+  private readonly keybindsFull: HTMLDivElement;
   private timePhase: IconName = "sun";
   private toastTimeout = 0;
   private damageFlashTimeout = 0;
@@ -157,6 +159,18 @@ export class Hud {
     this.armourChip = el("div", "hud-armour");
     this.armourChip.hidden = true;
     healthWrap.appendChild(this.armourChip);
+
+    // Creative mode is a standing condition, not an event, so it gets a chip
+    // that stays up rather than a toast that goes away. Without it, a player
+    // who set it an hour ago and forgot has no way to tell why nothing can
+    // hurt them — and the first symptom of that confusion is thinking the
+    // combat is broken.
+    this.godChip = el("div", "hud-godmode", "GODMODE");
+    this.godChip.hidden = !state.godMode;
+    healthWrap.appendChild(this.godChip);
+    events.on("godmode-changed", ({ on }) => {
+      this.godChip.hidden = !on;
+    });
 
     const timeWrap = el("div", "hud-time");
     this.timeIcon = el("span", "hud-time-icon icon");
@@ -219,7 +233,10 @@ export class Hud {
     this.crosshair.appendChild(this.crosshairRing);
     const crosshair = this.crosshair;
 
-    this.keybinds = el("div", "hud-keybinds");
+    this.keybindsHint = el("div", "hud-keybinds-hint");
+    this.keybindsFull = el("div", "hud-keybinds");
+    // Shut to begin with. A player who wants it presses the key the hint names.
+    this.keybindsFull.hidden = true;
 
     this.toast = el("div", "hud-toast");
     this.damageFlash = el("div", "hud-damage-flash");
@@ -239,7 +256,8 @@ export class Hud {
       this.resourceRow,
       this.prompt,
       crosshair,
-      this.keybinds,
+      this.keybindsHint,
+      this.keybindsFull,
       this.toast,
       this.damageFlash,
       this.deathOverlay,
@@ -316,7 +334,12 @@ export class Hud {
   // than prose: the bindings are the thing being scanned for.
   setKeybinds(bindings: Bindings): void {
     const cap = (action: Action) => `<kbd>${keyLabel(bindings[action][0] ?? "")}</kbd>`;
-    this.keybinds.innerHTML =
+    // Seven rows of this used to sit on screen permanently, from the health
+    // bar down to a third of the way across the window, over the world, for
+    // the whole game. It is a reference sheet, and a reference sheet is
+    // something you consult rather than something you read continuously — so
+    // it collapses to one line and opens on a key.
+    this.keybindsFull.innerHTML =
       `<div>${cap("moveForward")}${cap("moveLeft")}${cap("moveBack")}${cap("moveRight")} move · ` +
       `${cap("sprint")} sprint · ${cap("jump")} jump</div>` +
       `<div>Mouse look (click to lock) · ${cap("toggleView")} view</div>` +
@@ -325,8 +348,26 @@ export class Hud {
       `${cap("repair")} repair</div>` +
       `<div>${cap("hotbar1")}–${cap("hotbar8")} or scroll to pick what you hold</div>` +
       `<div>${cap("building")} build menu · ${cap("cancelBuild")} cancel placement</div>` +
-      `<div>${cap("crafting")} craft · ${cap("building")} build · ` +
-      `${cap("inventory")} inventory · ${cap("options")} options</div>`;
+      `<div>${cap("crafting")} craft · ${cap("inventory")} inventory · ` +
+      `${cap("chat")} chat · ${cap("options")} options</div>`;
+    // The one line that stays. Movement and the two mouse buttons are what a
+    // new player actually needs in the first minute; everything else is one
+    // key away.
+    this.keybindsHint.innerHTML =
+      `${cap("moveForward")}${cap("moveLeft")}${cap("moveBack")}${cap("moveRight")} move · ` +
+      "<kbd>LMB</kbd> gather · " +
+      `${cap("help")} controls`;
+  }
+
+  /** Opens or closes the full reference. */
+  toggleKeybinds(): boolean {
+    const open = this.keybindsFull.hidden;
+    this.keybindsFull.hidden = !open;
+    return open;
+  }
+
+  keybindsOpen(): boolean {
+    return !this.keybindsFull.hidden;
   }
 
   private renderStamina(state: GameState): void {
@@ -339,27 +380,44 @@ export class Hud {
   }
 
   private renderResources(state: GameState): void {
+    // Only what is actually being carried. The row used to render all fourteen
+    // tracked items whether or not the player had any, so a fresh character
+    // looked at a wall of zeroes across the top of the screen — twelve chips
+    // saying nothing and two saying something. A count of zero is the absence
+    // of the thing, and the absence of a thing does not need a chip.
+    //
+    // Counts are recorded for every tracked item, not only the visible ones,
+    // and before the chips are built. Recording them inside the loop that
+    // renders would mean an item at zero was never written down, so the swing
+    // that took it from zero to one would find no previous value and skip the
+    // rise — losing the animation on exactly the pickup that matters most.
+    const shown: string[] = [];
+    const risen = new Set<string>();
+    for (const itemId of TRACKED_ITEMS) {
+      const qty = getQty(state, itemId);
+      const before = this.lastCounts.get(itemId);
+      if (before !== undefined && qty > before) risen.add(itemId);
+      this.lastCounts.set(itemId, qty);
+      if (qty > 0) shown.push(itemId);
+    }
+
     this.resourceRow.replaceChildren(
-      ...TRACKED_ITEMS.map((itemId) => {
+      ...shown.map((itemId) => {
         const chip = el("div", "hud-resource-chip");
         const glyph = icon(ITEM_ICONS[itemId]);
         glyph.style.color = colorToCss(ITEM_COLORS[itemId]);
-        const qty = getQty(state, itemId);
-        const count = el("span", undefined, String(qty));
-        chip.append(glyph, count);
-
-        // A count that just rose gets a brief lift. Gathering yields vary now,
-        // so "how much did that swing give me" is a real question — and the
-        // toast is a single self-overwriting element, so announcing every
-        // pickup there would bury crafting and recipe messages under a stream
-        // of resource spam. The number says it where the number already is.
-        const before = this.lastCounts.get(itemId);
-        if (before !== undefined && qty > before) chip.classList.add("gained");
-        this.lastCounts.set(itemId, qty);
+        chip.append(glyph, el("span", undefined, String(getQty(state, itemId))));
+        // A count that just rose gets a brief lift. Gathering yields vary, so
+        // "how much did that swing give me" is a real question — and the toast
+        // is a single self-overwriting element, so announcing every pickup
+        // there would bury crafting messages under resource spam. The number
+        // says it where the number already is.
+        if (risen.has(itemId)) chip.classList.add("gained");
         return chip;
       }),
     );
   }
+
 
   /**
    * The raid banner. Called every frame with the live figures, and kept

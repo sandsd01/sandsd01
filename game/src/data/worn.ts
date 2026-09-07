@@ -1,4 +1,5 @@
 import type { GameState } from "../state/game-state";
+import { GODMODE_FLIGHT_CEILING, isGodMode } from "../systems/godmode";
 
 /**
  * What can be worn, where, and what wearing it does.
@@ -215,7 +216,11 @@ export function lanternRadius(state: GameState): number {
  * depending on where you took off.
  */
 export function flightCeiling(state: GameState): number {
-  return defInSlot(state, "back")?.flightCeiling ?? 0;
+  // Creative mode flies without the wings, and higher than them. Taken as the
+  // max rather than as an override so that wearing the wings in creative mode
+  // never *lowers* the ceiling — an ability should not be a downgrade.
+  const worn = defInSlot(state, "back")?.flightCeiling ?? 0;
+  return isGodMode(state) ? Math.max(worn, GODMODE_FLIGHT_CEILING) : worn;
 }
 
 /** Whether the player can fly at all. */

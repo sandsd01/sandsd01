@@ -33,6 +33,10 @@ import sparkles from "lucide-static/icons/sparkles.svg?raw";
 import sprout from "lucide-static/icons/sprout.svg?raw";
 import squareStack from "lucide-static/icons/square-stack.svg?raw";
 import lamp from "lucide-static/icons/lamp.svg?raw";
+import smile from "lucide-static/icons/smile.svg?raw";
+import house from "lucide-static/icons/house.svg?raw";
+import doorOpen from "lucide-static/icons/door-open.svg?raw";
+import skull from "lucide-static/icons/skull.svg?raw";
 import sun from "lucide-static/icons/sun.svg?raw";
 import sunrise from "lucide-static/icons/sunrise.svg?raw";
 import sword from "lucide-static/icons/sword.svg?raw";
@@ -60,6 +64,8 @@ const SOURCES = {
   grape,
   landmark,
   heart,
+  doorOpen,
+  house,
   lamp,
   layers,
   moon,
@@ -75,6 +81,8 @@ const SOURCES = {
   squareStack,
   sun,
   sunrise,
+  skull,
+  smile,
   sword,
   swords,
   trees,

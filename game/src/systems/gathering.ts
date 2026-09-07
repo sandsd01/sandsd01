@@ -7,6 +7,7 @@ import { bonusYieldChance, gatherSpeedScale } from "../data/stats";
 import { gatherReach } from "../data/worn";
 import { indefinite } from "../utils/text";
 import { events } from "../utils/events";
+import { isGodMode } from "./godmode";
 
 // How long the primary button must be held to land one hit. Gathering used to
 // be instant per key press; a wind-up gives the progress ring something to
@@ -63,6 +64,10 @@ export function nearestNode(nodes: ResourceNode[], x: number, z: number): Resour
 // carrying. Better tools are the whole payoff of the iron tier, and the
 // progress ring reads the difference for free.
 export function gatherTimeFor(state: GameState, node: ResourceNode | null): number {
+  // Creative mode breaks instantly, as it does in the game this borrows from.
+  // Not zero: the swing still has to last a frame or the progress ring never
+  // renders and a held button reads as broken rather than as fast.
+  if (isGodMode(state)) return 1;
   // Craft applies to every node, tool or not: it is a fact about the person
   // swinging, and a stat that quietly did nothing at a berry bush would be a
   // stat the panel lies about.
