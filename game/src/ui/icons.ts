@@ -33,6 +33,7 @@ import sparkles from "lucide-static/icons/sparkles.svg?raw";
 import sprout from "lucide-static/icons/sprout.svg?raw";
 import squareStack from "lucide-static/icons/square-stack.svg?raw";
 import lamp from "lucide-static/icons/lamp.svg?raw";
+import x from "lucide-static/icons/x.svg?raw";
 import smile from "lucide-static/icons/smile.svg?raw";
 import house from "lucide-static/icons/house.svg?raw";
 import doorOpen from "lucide-static/icons/door-open.svg?raw";
@@ -88,6 +89,7 @@ const SOURCES = {
   trees,
   wheat,
   wind,
+  x,
 } as const;
 
 export type IconName = keyof typeof SOURCES;

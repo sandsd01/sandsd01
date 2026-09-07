@@ -16,6 +16,7 @@ import {
 import type { InputManager } from "../input/input-manager";
 import { el } from "./dom";
 import { clearSave } from "../systems/save-load";
+import { panelHeader } from "./panel-chrome";
 
 const NEW_GAME_LABEL = "Start a new game";
 const NEW_GAME_CONFIRM = "Erase this world? Click again";
@@ -48,7 +49,7 @@ export class SettingsPanel {
     private readonly onNewGame: () => void = () => {},
   ) {
     this.panel = el("div", "panel");
-    this.panel.appendChild(el("h2", undefined, "Options"));
+    this.panel.appendChild(panelHeader("Options", () => this.close()).header);
 
     this.panel.appendChild(this.sensitivityRow());
     this.panel.appendChild(this.invertRow());

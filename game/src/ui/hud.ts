@@ -11,7 +11,7 @@ import { expToNext } from "../data/levels";
 // The staples, plus the two things only the dead drop — a bar that never
 // showed loot would leave the player checking the inventory panel to find out
 // whether a fight paid.
-const TRACKED_ITEMS = [
+export const TRACKED_ITEMS = [
   "wood",
   "stone",
   "berry",
@@ -117,6 +117,8 @@ export class Hud {
   private readonly keybindsFull: HTMLDivElement;
   private timePhase: IconName = "sun";
   private toastTimeout = 0;
+  /** Set by `setKeybinds`, which runs after the constructor. */
+  private bindings: Bindings | null = null;
   private damageFlashTimeout = 0;
 
   constructor(root: HTMLElement, state: GameState) {
@@ -276,7 +278,17 @@ export class Hud {
     events.on("stats-changed", () => this.renderLevel(state));
     events.on("player-levelled-up", ({ level }) => {
       this.renderLevel(state);
-      this.showToast(`Level ${level}`);
+      // The `+N` pip that appears alongside this explains itself only through
+      // a `title` tooltip, and the player is in pointer lock whenever they are
+      // looking at the HUD — so that tooltip can never be read. The one moment
+      // the game has their attention is the level itself, so the key is named
+      // here instead.
+      const key = this.bindings ? keyLabel(this.bindings.character[0] ?? "") : "";
+      this.showToast(
+        state.statPoints > 0 && key
+          ? `Level ${level} — press ${key} to spend a point`
+          : `Level ${level}`,
+      );
     });
     events.on("inventory-changed", () => this.renderResources(state));
     events.on("notification", ({ message }) => this.showToast(message));
@@ -333,6 +345,11 @@ export class Hud {
   // help can never advertise a key that no longer does anything. Keycaps rather
   // than prose: the bindings are the thing being scanned for.
   setKeybinds(bindings: Bindings): void {
+    // Kept so the level-up toast can name the key that spends the point. Read
+    // from the live map rather than written into a string, for the reason the
+    // panels had to learn twice: a hardcoded letter is wrong the moment
+    // anybody rebinds it.
+    this.bindings = bindings;
     const cap = (action: Action) => `<kbd>${keyLabel(bindings[action][0] ?? "")}</kbd>`;
     // Seven rows of this used to sit on screen permanently, from the health
     // bar down to a third of the way across the window, over the world, for
@@ -349,7 +366,8 @@ export class Hud {
       `<div>${cap("hotbar1")}–${cap("hotbar8")} or scroll to pick what you hold</div>` +
       `<div>${cap("building")} build menu · ${cap("cancelBuild")} cancel placement</div>` +
       `<div>${cap("crafting")} craft · ${cap("inventory")} inventory · ` +
-      `${cap("chat")} chat · ${cap("options")} options</div>`;
+      `${cap("character")} character sheet · ${cap("chat")} chat · ` +
+      `${cap("options")} options</div>`;
     // The one line that stays. Movement and the two mouse buttons are what a
     // new player actually needs in the first minute; everything else is one
     // key away.

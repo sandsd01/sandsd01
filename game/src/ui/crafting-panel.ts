@@ -20,6 +20,7 @@ import { costLine } from "./cost-line";
 import { el } from "./dom";
 import { indefinite } from "../utils/text";
 import { icon, type IconName } from "./icons";
+import { panelHeader } from "./panel-chrome";
 
 // One glyph per category, so a row is identifiable before it is read. Every
 // name here already ships in ui/icons.ts — no new assets.
@@ -53,7 +54,7 @@ export class CraftingPanel {
     private readonly hasStation: StationCheck,
   ) {
     this.panel = el("div", "panel");
-    this.panel.appendChild(el("h2", undefined, "Crafting"));
+    this.panel.appendChild(panelHeader("Crafting", () => this.close()).header);
 
     // Filter chips rather than tabs: a chip row shows every category at once
     // with the active one marked, so switching costs one click and no reading.
@@ -83,7 +84,6 @@ export class CraftingPanel {
 
     this.list = el("div");
     this.panel.appendChild(this.list);
-    this.panel.appendChild(el("p", "panel-hint", "Press C to close."));
     root.appendChild(this.panel);
 
     this.buildChips();

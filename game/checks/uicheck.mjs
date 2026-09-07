@@ -54,6 +54,27 @@ ok("old swatches gone", icons.swatches === 0);
 ok("clock icon is svg", icons.clockSvg);
 ok("chip icon keeps its tint", icons.chipColor !== "rgb(244, 238, 226)", icons.chipColor);
 
+// Fill the row before counting. Zero-count chips are hidden now, so a fresh
+// character renders one or two — and a set that size cannot collide with
+// itself, which quietly turned the census below into a check that could not
+// fail. Granting one of every tracked item is what puts the assertion back.
+//
+// Read the ids off the HUD's own list rather than repeating it here: a
+// hardcoded copy would go stale the moment a tracked item is added, and the
+// census would silently shrink again.
+const tracked = await page.evaluate(() => window.__gameDebug.getTrackedItems());
+await page.evaluate((ids) => {
+  const grant = {};
+  for (const id of ids) grant[id] = 5;
+  window.__gameDebug.grantItems(grant);
+}, tracked);
+await page.waitForFunction(
+  (n) => document.querySelectorAll(".hud-resource-chip").length === n,
+  tracked.length,
+  { timeout: 30000 },
+);
+ok("the chip row shows every tracked item", true, `${tracked.length} chips`);
+
 // No two chips in the row may wear the same glyph. They sit side by side, so a
 // shared icon means the tint is the only thing telling them apart — and the
 // pairs that collided in practice (clay and hide; ancient stone and iron ore)
@@ -79,7 +100,12 @@ ok("no two resource chips share an icon", collisions.length === 0,
 const bar = await page.evaluate(() => {
   const slots = [...document.querySelectorAll(".hud-hotbar-slot")];
   const r = (el) => el.getBoundingClientRect();
-  const keybinds = r(document.querySelector(".hud-keybinds"));
+  // The one-line hint, not the full sheet. `.hud-keybinds` is `hidden` by
+  // default now and `[hidden]` really does set `display: none` on it, so its
+  // rect is all zeros — and an overlap test against a zero rect is false for
+  // any hotbar at all, whatever it does. This assertion had stopped being able
+  // to fail.
+  const keybinds = r(document.querySelector(".hud-keybinds-hint"));
   const hot = r(document.querySelector(".hud-hotbar"));
   return {
     count: slots.length,

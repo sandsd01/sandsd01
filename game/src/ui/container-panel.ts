@@ -3,6 +3,7 @@ import { CONTAINER_SLOTS, containerOf, deposit, withdraw } from "../systems/cont
 import type { GameState } from "../state/game-state";
 import { events } from "../utils/events";
 import { el } from "./dom";
+import { panelHeader } from "./panel-chrome";
 
 // Two lists side by side — your bag and the barrel — and a click moves a stack
 // across. Deliberately not drag-and-drop: a click is one gesture that works the
@@ -16,12 +17,13 @@ export class ContainerPanel {
 
   constructor(root: HTMLElement, private readonly state: GameState) {
     this.panel = el("div", "panel panel-wide");
-    this.title = el("h2", undefined, "Barrel");
-    this.panel.appendChild(this.title);
+    const head = panelHeader("Barrel", () => this.close());
+    this.title = head.title;
+    this.panel.appendChild(head.header);
     this.body = el("div", "container-columns");
     this.panel.appendChild(this.body);
     this.panel.appendChild(
-      el("p", "panel-hint", "Click to move a stack. Press Esc to close."),
+      el("p", "panel-hint", "Click to move a stack."),
     );
     root.appendChild(this.panel);
 

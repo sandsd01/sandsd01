@@ -102,7 +102,7 @@ import {
 import { loadSettings } from "./state/settings";
 import { keyLabel, loadBindings, saveBindings } from "./state/keybindings";
 
-import { Hud, type CrosshairState } from "./ui/hud";
+import { Hud, TRACKED_ITEMS, type CrosshairState } from "./ui/hud";
 import { InventoryPanel } from "./ui/inventory-panel";
 import { CharacterPanel } from "./ui/character-panel";
 import { LevelAura } from "./world/level-aura";
@@ -372,7 +372,6 @@ const inventoryPanel = new InventoryPanel(
     selectedSeedItemId = id;
   },
   () => selectedSeedItemId,
-  () => keyLabel(bindings.inventory[0] ?? "Tab"),
 );
 // Station checks run against wherever the player is standing. Movement is
 // blocked while a menu is open, so the answer can't go stale mid-panel.
@@ -396,9 +395,7 @@ const settingsPanel = new SettingsPanel(uiRoot, settings, bindings, input, () =>
   savingSuspended = true;
 });
 hud.setKeybinds(bindings);
-const characterPanel = new CharacterPanel(uiRoot, state, () =>
-  keyLabel(bindings.character[0] ?? "KeyK"),
-);
+const characterPanel = new CharacterPanel(uiRoot, state);
 const containerPanel = new ContainerPanel(uiRoot, state);
 const minimap = new Minimap(uiRoot);
 
@@ -1440,6 +1437,7 @@ declare global {
       getCharmReach: () => number;
       isFlying: () => boolean;
       getWingsVisible: () => boolean;
+      getTrackedItems: () => string[];
       getMinimapPins: () => Record<string, number>;
       getMinimapGeometry: () => { size: number; range: number; enemyRange: number };
       getMinimapCoords: () => string;
@@ -1885,6 +1883,9 @@ window.__gameDebug = {
   // Read off the mesh rather than off the slot, so "the wings are on the
   // character" is a different question from "the wings are in the save".
   getWingsVisible: () => player.areWingsVisible(),
+  // The chip row's own list, so a check can fill the row instead of keeping a
+  // hardcoded copy that would go stale the moment an item is tracked.
+  getTrackedItems: () => [...TRACKED_ITEMS],
   getMinimapPins: () => minimap.getDrawnCounts(),
   getMinimapGeometry: () => minimap.getGeometry(),
   getMinimapCoords: () => document.querySelector(".hud-minimap-coords")?.textContent ?? "",
