@@ -42,7 +42,8 @@ async function waitForPins(predicate, timeoutMs = 30000) {
   const t0 = Date.now();
   let last = null;
   while (Date.now() - t0 < timeoutMs) {
-    last = await page.evaluate(() => window.__gameDebug.getMinimapPins());
+    last = await probe(() => window.__gameDebug.getMinimapPins());
+    if (last?.__threw) return last;
     if (predicate(last)) return last;
     await page.waitForTimeout(250);
   }
@@ -83,10 +84,22 @@ await page.waitForTimeout(2500);
   );
 
   const canvas = await rect(".hud-minimap canvas");
+  // Equal width and height is not enough to call it square: a circular canvas
+  // has a perfectly square bounding box, because `border-radius` does not
+  // change an element's box. The first version of this case asserted only the
+  // dimensions and passed happily against the old round map, testing nothing.
+  // What actually makes it square is the corner radius being small relative to
+  // the box rather than half of it.
+  const radius = await page.evaluate(() => {
+    const n = document.querySelector(".hud-minimap canvas");
+    if (!n) return null;
+    const r = getComputedStyle(n).borderTopLeftRadius;
+    return r.endsWith("%") ? (parseFloat(r) / 100) * n.getBoundingClientRect().width : parseFloat(r);
+  });
   ok(
-    "and it is square",
-    !!canvas && canvas.w === canvas.h,
-    canvas ? `${canvas.w}x${canvas.h}` : "missing",
+    "and it is square, not a disc",
+    !!canvas && canvas.w === canvas.h && radius !== null && radius < canvas.w / 4,
+    canvas ? `${canvas.w}x${canvas.h}, corner radius ${radius}px` : "missing",
   );
 
   // Smaller than it was. 168 was the old edge; anything at or above that has
