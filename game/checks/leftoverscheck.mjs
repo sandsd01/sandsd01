@@ -4,7 +4,9 @@ import { chromium, LAUNCH, BASE_URL } from "./harness.mjs";
 // line to fix: a raid warning that computed how far away the raid was and
 // threw the number away, a clearSave() nothing had ever called, a planting
 // prompt that showed a raw item id, and an Inventory panel advertising a key
-// that was not the one bound to it.
+// that was not the one bound to it. That last one is now fixed a second time,
+// and differently: the panel names no closing key at all, because the header
+// carries a close button. Section 3 guards that it stays that way.
 const URL = BASE_URL;
 
 const browser = await chromium.launch({
@@ -73,15 +75,35 @@ ok("it names the seed rather than printing its id",
   typeof prompt.text === "string" && !prompt.text.includes("wheat_seed") && /Wheat Seed/i.test(prompt.text),
   JSON.stringify(prompt.text));
 
-// --- 3. the Inventory panel advertises the key that opens it --------------
+// --- 3. the Inventory panel does not claim a key it cannot vouch for ------
+//
+// This used to read `/Press Tab to close/`: the panel had advertised "Press I"
+// while the key on screen and in Options was Tab, and the fix was to build the
+// sentence from the live binding. The sentence is gone now — the header has a
+// close button instead — so the guarantee is stronger and this case guards the
+// stronger thing: the hint must not go back to naming a key at all. A key named
+// in prose is a key that can be rebound out from under it, which is how this
+// panel got it wrong the first time.
+//
+// The panel must be open before any of that is read, or "no key is named" also
+// holds for a panel that failed to open and says nothing at all.
 await page.keyboard.press("Tab");
-await page.waitForTimeout(500);
-const invHint = await page.evaluate(() =>
-  [...document.querySelectorAll(".panel.visible .panel-hint")].map((e) => e.textContent)[0] ?? "");
-ok("the Inventory hint names Tab, the key actually bound to it",
-  /Press Tab to close/.test(invHint), JSON.stringify(invHint));
+await page.waitForFunction(() => !!document.querySelector(".panel.visible"), null, { timeout: 30000 });
+const inv = await page.evaluate(() => {
+  const panel = document.querySelector(".panel.visible");
+  return {
+    title: panel.querySelector("h2")?.textContent ?? "",
+    hint: panel.querySelector(".panel-hint")?.textContent ?? "",
+    closes: panel.querySelectorAll(".panel-close").length,
+  };
+});
+ok("the Inventory panel is the one open", /Inventory/i.test(inv.title), JSON.stringify(inv.title));
+ok("its hint still says what the panel is for", /seed/i.test(inv.hint), JSON.stringify(inv.hint));
+ok("and it names no key to close with, so no rebind can make it a lie",
+  !/\bto close\b/i.test(inv.hint), JSON.stringify(inv.hint));
+ok("the way out is a button instead", inv.closes === 1, `${inv.closes} close buttons`);
 await page.keyboard.press("Tab");
-await page.waitForTimeout(300);
+await page.waitForFunction(() => !document.querySelector(".panel.visible"), null, { timeout: 30000 });
 
 // --- 4. a new game really starts a new game -------------------------------
 await page.evaluate(() => {
