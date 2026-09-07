@@ -5,6 +5,7 @@ import { SLOT_NAMES, isWearable, slotFor } from "../data/worn";
 import type { GameState } from "../state/game-state";
 import { events } from "../utils/events";
 import { el } from "./dom";
+import { itemIconEl } from "./item-icons";
 import { panelHeader } from "./panel-chrome";
 
 export class InventoryPanel {
@@ -63,10 +64,17 @@ export class InventoryPanel {
       ...this.state.inventory.map((slot) => {
         const def = getItem(slot.itemId);
         const row = el("div", "panel-row");
+        // Icon and text inside one `panel-row-main`, not appended loose: the
+        // row is `space-between`, so a bare icon child gets flung to the far
+        // edge away from the name it belongs to. `crafting-panel.ts` records
+        // the same mistake having been made there.
+        const main = el("div", "panel-row-main");
+        main.appendChild(itemIconEl(slot.itemId, "icon panel-row-icon"));
         const info = el("div", "panel-row-info");
         info.appendChild(el("span", "panel-row-title", def.name));
         info.appendChild(el("span", "panel-row-sub", `x${slot.qty}`));
-        row.appendChild(info);
+        main.appendChild(info);
+        row.appendChild(main);
 
         // Anything with `heals` can be eaten from here — the only place the
         // player can spend food, and what finally gives wheat somewhere to go.

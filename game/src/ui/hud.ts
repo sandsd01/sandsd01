@@ -3,9 +3,10 @@ import { getQty } from "../systems/inventory";
 import { getItem } from "../data/items";
 import { WORN, wornInSlot } from "../data/worn";
 import { events } from "../utils/events";
-import { colorToCss, el } from "./dom";
+import { el } from "./dom";
 import { keyLabel, type Action, type Bindings } from "../state/keybindings";
-import { icon, iconSvg, type IconName } from "./icons";
+import { iconSvg, type IconName } from "./icons";
+import { itemIconEl } from "./item-icons";
 import { expToNext } from "../data/levels";
 
 // The staples, plus the two things only the dead drop — a bar that never
@@ -35,50 +36,6 @@ export const TRACKED_ITEMS = [
 ];
 // Each tracked resource gets a glyph as well as a colour: the icon says what
 // it is, the tint only reinforces it.
-const ITEM_ICONS: Record<string, IconName> = {
-  wood: "trees",
-  stone: "mountain",
-  berry: "grape",
-  clay: "layers",
-  iron_ore: "gem",
-  plank: "squareStack",
-  wheat_seed: "sprout",
-  wheat: "wheat",
-  bone: "bone",
-  // Not "layers" — clay already has it, and clay and hide are both brown, so
-  // the row was showing two chips a player could not tell apart at all. Found
-  // by a check that no two chips in the row share a glyph, added after the
-  // same mistake was made twice.
-  hide: "footprints",
-  arrow: "navigation",
-  // NOT "gem" — that is iron ore's, and two materials sharing one glyph is
-  // the same as neither having one. The columned-ruin shape also says where
-  // this came from: the frontier, not a vein near the door.
-  ancient_stone: "landmark",
-  // Not "gem" (iron ore) and not "flame" (broth in the hotbar) — the check
-  // that no two chips share a glyph is there because this mistake has now been
-  // made three times.
-  glow_crystal: "sparkles",
-  // Not "gem", "sparkles" or "mountain" — all taken. The check that no two
-  // chips share a glyph exists because this has been got wrong three times.
-  cloud_iron: "cloud",
-};
-const ITEM_COLORS: Record<string, number> = {
-  wood: 0x8b5a2b,
-  stone: 0x8a8a8a,
-  berry: 0x9a2a4a,
-  clay: 0x8a5a42,
-  iron_ore: 0x6a5a52,
-  plank: 0xc19a6b,
-  wheat_seed: 0xd4c26a,
-  wheat: 0xe8c840,
-  bone: 0xe6e0cc,
-  hide: 0x7a5238,
-  arrow: 0xcfc3a8,
-  ancient_stone: 0x8d88a0,
-  glow_crystal: 0x63d9ff,
-  cloud_iron: 0xbcd8e8,
-};
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const RING_RADIUS = 15;
@@ -422,8 +379,7 @@ export class Hud {
     this.resourceRow.replaceChildren(
       ...shown.map((itemId) => {
         const chip = el("div", "hud-resource-chip");
-        const glyph = icon(ITEM_ICONS[itemId]);
-        glyph.style.color = colorToCss(ITEM_COLORS[itemId]);
+        const glyph = itemIconEl(itemId);
         chip.append(glyph, el("span", undefined, String(getQty(state, itemId))));
         // A count that just rose gets a brief lift. Gathering yields vary, so
         // "how much did that swing give me" is a real question — and the toast
@@ -435,7 +391,6 @@ export class Hud {
       }),
     );
   }
-
 
   /**
    * The raid banner. Called every frame with the live figures, and kept

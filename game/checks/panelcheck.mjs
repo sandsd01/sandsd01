@@ -228,12 +228,19 @@ const PANELS = [
 {
   // A row can carry Eat + Wear · Trinket + Hold at once. A button that wraps
   // to two lines does not throw and does not look obviously wrong in a diff.
-  await probe(() =>
-    window.__gameDebug.grantItems({
-      bread: 3, berry: 9, wheat_seed: 4, hide_armour: 1, iron_armour: 1,
-      gatherers_charm: 1, sword: 1, axe: 1,
-    }),
-  );
+  //
+  // Every item in the game, not a chosen handful: the bag is the one screen
+  // that shows them all at once, so it is where a missing glyph or a row that
+  // has grown too wide for its buttons is actually visible. The list comes
+  // from the game rather than from here, so the next item added is covered
+  // without anyone remembering to add it.
+  const granted = await probe(() => {
+    const ids = window.__gameDebug.getAllItemIds();
+    const grant = {};
+    for (const id of ids) grant[id] = 2;
+    window.__gameDebug.grantItems(grant);
+    return ids.length;
+  });
   await page.waitForTimeout(800);
   await page.keyboard.press("Tab");
   await waitForPanels(1);
@@ -246,14 +253,45 @@ const PANELS = [
       tallButtons: list.flatMap((r) =>
         [...r.querySelectorAll("button")].filter((b) => b.offsetHeight >= 40).map((b) => b.textContent),
       ),
+      withoutIcon: list
+        .filter((r) => !r.querySelector(".panel-row-icon"))
+        .map((r) => r.querySelector(".panel-row-title")?.textContent ?? "?"),
+      // An icon appended straight onto `.panel-row` rather than into the
+      // `panel-row-main` wrapper still counts as present, but the row is
+      // `space-between` and would fling it to the far edge — so the check is
+      // that it sits inside the wrapper, not merely that it exists.
+      iconsOutsideMain: list
+        .filter((r) => r.querySelector(":scope > .panel-row-icon"))
+        .map((r) => r.querySelector(".panel-row-title")?.textContent ?? "?"),
     };
   });
+  const noIcon = await probe(() => window.__gameDebug.getItemsWithoutIcon());
   ok("the inventory has rows to measure", !rows.__threw && rows.count > 0, `${rows.count} rows`);
   ok("no inventory row overflows its width", rows.overflowing === 0, `${rows.overflowing} of ${rows.count}`);
   ok(
     "and no button has wrapped to a second line",
     Array.isArray(rows.tallButtons) && rows.tallButtons.length === 0,
     JSON.stringify(rows.tallButtons),
+  );
+  ok("the bag was filled with every item in the game", granted > 30, `${granted} ids`);
+  ok(
+    "every inventory row draws an icon",
+    Array.isArray(rows.withoutIcon) && rows.withoutIcon.length === 0,
+    JSON.stringify(rows.withoutIcon),
+  );
+  ok(
+    "and each one sits inside panel-row-main, not loose in the row",
+    Array.isArray(rows.iconsOutsideMain) && rows.iconsOutsideMain.length === 0,
+    JSON.stringify(rows.iconsOutsideMain),
+  );
+  // The eight worn items had no glyph in either of the two old tables and fell
+  // through to a crate, which looked like a deliberate choice — which is how it
+  // survived. The fallback is a question mark now so it cannot, and this is the
+  // case that says so.
+  ok(
+    "no item falls through to the fallback glyph",
+    Array.isArray(noIcon) && noIcon.length === 0,
+    JSON.stringify(noIcon),
   );
   await page.keyboard.press("Escape");
   await waitForPanels(0);

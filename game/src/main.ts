@@ -46,7 +46,7 @@ import {
 import { Targeting, type Target } from "./systems/targeting";
 import { TargetOutline } from "./world/target-outline";
 import { addItem, consumeItem, hasQty, removeItem } from "./systems/inventory";
-import { getItem } from "./data/items";
+import { getItem, ITEMS } from "./data/items";
 import { BUILDINGS, getBuilding } from "./data/buildings";
 import { RECIPES } from "./data/recipes";
 import {
@@ -103,6 +103,7 @@ import { loadSettings } from "./state/settings";
 import { keyLabel, loadBindings, saveBindings } from "./state/keybindings";
 
 import { Hud, TRACKED_ITEMS, type CrosshairState } from "./ui/hud";
+import { ITEM_ICON_FALLBACK, itemIcon } from "./ui/item-icons";
 import { InventoryPanel } from "./ui/inventory-panel";
 import { CharacterPanel } from "./ui/character-panel";
 import { LevelAura } from "./world/level-aura";
@@ -1438,6 +1439,8 @@ declare global {
       isFlying: () => boolean;
       getWingsVisible: () => boolean;
       getTrackedItems: () => string[];
+      getAllItemIds: () => string[];
+      getItemsWithoutIcon: () => string[];
       getMinimapPins: () => Record<string, number>;
       getMinimapGeometry: () => { size: number; range: number; enemyRange: number };
       getMinimapCoords: () => string;
@@ -1886,6 +1889,15 @@ window.__gameDebug = {
   // The chip row's own list, so a check can fill the row instead of keeping a
   // hardcoded copy that would go stale the moment an item is tracked.
   getTrackedItems: () => [...TRACKED_ITEMS],
+  // Every item in the game, for the same reason: a check that hardcoded these
+  // would stop covering the next item added, which is exactly how eight
+  // wearables ended up with no icon and nothing noticed.
+  getAllItemIds: () => Object.keys(ITEMS),
+  // The ones that fall through to the question-mark glyph. Should always be
+  // empty; a check asserts it, and it is the reason the fallback is a question
+  // mark rather than a crate that looks deliberate.
+  getItemsWithoutIcon: () =>
+    Object.keys(ITEMS).filter((id) => itemIcon(id) === ITEM_ICON_FALLBACK),
   getMinimapPins: () => minimap.getDrawnCounts(),
   getMinimapGeometry: () => minimap.getGeometry(),
   getMinimapCoords: () => document.querySelector(".hud-minimap-coords")?.textContent ?? "",
