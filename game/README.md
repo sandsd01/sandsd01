@@ -67,7 +67,7 @@ npm run preview   # preview the production build
 
 ## Checking it
 
-There is no unit-test suite here. What there is instead is `checks/` — 28
+There is no unit-test suite here. What there is instead is `checks/` — 32
 suites that drive the real game in a real browser and assert on what actually
 happened: enemies losing the right amount of health, a save surviving a
 reload, the ceiling a pair of wings stops you at.
@@ -76,7 +76,7 @@ reload, the ceiling a pair of wings stops you at.
 cd game/checks
 npm install                     # playwright
 npx playwright install chromium # the browser it drives
-npm run checks                  # all 28, about 45 minutes
+npm run checks                  # all 32, about 50 minutes
 npm run checks flightcheck      # or just one
 ```
 
@@ -599,6 +599,24 @@ nothing you could craft has ever answered it. Braziers are capped at eight live
 compiled against); past that the flame still draws, so the piece never silently
 changes appearance.
 
+Crystal buys a second thing, and the cave needed it. Measured, one trip down
+yields **198 glow crystals**; a brazier costs two. Ninety-nine braziers from a
+single visit, for a base that wants a handful — so the cave was a place you
+cleared once and never had a reason to enter again, and the only region whose
+material bought nothing you could *wear*. The **Crystal Lantern** (6 crystals
+and an iron ingot, at a forge) is a trinket that carries the brazier's light
+with you: reach 14 against the brazier's 22, because a light you carry should
+not beat one you built and defended.
+
+Measured at midnight, standing in the same spot: the ground reads luma 10.3
+unlit and 41.6 with the lamp — four times brighter, and still well under noon's
+108, so night is still night. Its `PointLight` is near-white (`0xdcecff`) even
+though the crystal itself is cyan, for the reason the brazier already had to
+learn: cyan light falling on grass comes back green. The first build of the
+lantern ignored that note and measured green at 2.24x red — a radioactive
+spill that every brightness check passed, because luma cannot see a colour
+cast. `lanterncheck` now measures the ratio.
+
 Three things in here were found in screenshots and by nothing else:
 
 - The chase camera collides only with the ground, so an arrival point directly
@@ -749,9 +767,12 @@ Fortune — the stat that was meant to "pay in content" rather than in numbers �
 shipped with nothing to find: it multiplied a drop table of bone, hide and iron
 ore, which are crafting materials. These four pieces are what it looks for.
 
-**They cannot be crafted at any price.** There is no recipe for any of them
-anywhere, which is the whole point: the forge covers the tiers you can plan
-for, and this is the tier you go looking for.
+**They cannot be crafted at any price.** There is no recipe for any of the five
+below, which is the whole point: the forge covers the tiers you can plan for,
+and this is the tier you go looking for. (The Crystal Lantern, added later, is
+a *crafted* trinket and deliberately not part of this tier — see the cave
+section above. It exists because a player the loot table never favoured
+otherwise had an empty trinket slot for an entire run with no way to fill it.)
 
 | Piece | Slot | What it does | Where it attaches |
 | --- | --- | --- | --- |
@@ -761,8 +782,10 @@ for, and this is the tier you go looking for.
 | **Gatherer's Charm** | trinket | One swing works every node of that kind within 4.5 units | `systems/gathering.ts#neighboursFor` |
 | **Divine Wings** | back | Flight. Double-tap jump to start; jump rises, sprint sinks | `player-controller.ts#updateFlight` |
 
-Two trinkets and one slot is a choice, not an oversight — the bow build and the
-gathering build want different things, and having to pick is the point.
+Three trinkets and one slot is a choice, not an oversight — the bow build, the
+gathering build and the night build want different things, and having to pick
+is the point. Putting the lantern on costs you the charm outright, which
+`lanterncheck` asserts by watching the gather reach fall from 4.5 back to 0.
 
 The wings and the cloak share the back slot for the same reason: reflecting what
 hits you is worth most to someone standing in the middle of a raid, and flight

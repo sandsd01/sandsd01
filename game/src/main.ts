@@ -94,6 +94,7 @@ import {
   canFly,
   flightCeiling,
   gatherReach,
+  lanternRadius,
   thornsFraction,
   wornInSlot,
   type WornSlot,
@@ -408,6 +409,15 @@ function syncWings(): void {
 }
 events.on("worn-changed", syncWings);
 syncWings();
+
+// And the lamp follows the trinket slot, for the same reason and by the same
+// route: the slot is the only source of truth, and reading it on the event is
+// what keeps the mesh from disagreeing with the save.
+function syncLantern(): void {
+  player.setLanternRadius(lanternRadius(state));
+}
+events.on("worn-changed", syncLantern);
+syncLantern();
 
 events.on("equipped-changed", syncHeldItem);
 events.on("inventory-changed", syncHeldItem);
@@ -1378,6 +1388,8 @@ declare global {
       getCharmReach: () => number;
       isFlying: () => boolean;
       getWingsVisible: () => boolean;
+      getLanternRadius: () => number;
+      isLanternLit: () => boolean;
       getFlightCeiling: () => number;
       getHeightAboveGround: () => number;
       getCleaveReach: () => { range: number; arcDegrees: number } | null;
@@ -1811,6 +1823,11 @@ window.__gameDebug = {
   // Read off the mesh rather than off the slot, so "the wings are on the
   // character" is a different question from "the wings are in the save".
   getWingsVisible: () => player.areWingsVisible(),
+  // Read off the mesh, not off the slot, for the reason the wings hook records:
+  // "the lamp is lit on the character" and "the lantern is in the save" are
+  // different questions, and only the first one is what the player sees.
+  getLanternRadius: () => player.getLanternRadius(),
+  isLanternLit: () => player.isLanternLit(),
   getFlightCeiling: () => flightCeiling(state),
   // The number the ceiling, the portal trigger and the pickup radius all
   // actually test against, so a check reads the game's own answer rather than

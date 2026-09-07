@@ -32,6 +32,7 @@ import shovel from "lucide-static/icons/shovel.svg?raw";
 import sparkles from "lucide-static/icons/sparkles.svg?raw";
 import sprout from "lucide-static/icons/sprout.svg?raw";
 import squareStack from "lucide-static/icons/square-stack.svg?raw";
+import lamp from "lucide-static/icons/lamp.svg?raw";
 import sun from "lucide-static/icons/sun.svg?raw";
 import sunrise from "lucide-static/icons/sunrise.svg?raw";
 import sword from "lucide-static/icons/sword.svg?raw";
@@ -59,6 +60,7 @@ const SOURCES = {
   grape,
   landmark,
   heart,
+  lamp,
   layers,
   moon,
   mountain,

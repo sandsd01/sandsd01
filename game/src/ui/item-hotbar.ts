@@ -60,6 +60,7 @@ const ITEM_ICONS: Record<string, IconName> = {
   // And the tier convention the tools already follow — an iron sword and a
   // wooden one wear the same sword.
   skysteel_sword: "sword",
+  crystal_lantern: "lamp",
 };
 
 // The eight quick slots, holding what the player carries rather than what they
