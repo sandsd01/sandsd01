@@ -54,6 +54,16 @@ export interface WornDef {
    * that flew half as high would be a row here rather than a second code path.
    */
   flightCeiling?: number;
+  /**
+   * How far the wearer's own light reaches, in world units. 0 or absent means
+   * no light at all.
+   *
+   * A radius rather than a brightness because the radius is what the player
+   * experiences — "I can see about that far" — and because the brazier this
+   * borrows from is already tuned in those terms. The intensity is derived
+   * from it at the point of use, so the two cannot drift apart.
+   */
+  lightRadius?: number;
   /** One line for the character sheet. Says what it does, not what it is. */
   blurb: string;
 }
@@ -88,6 +98,26 @@ export const WORN: Record<string, WornDef> = {
     slot: "back",
     flightCeiling: 40,
     blurb: "Double-tap jump to fly. Space up, Shift down",
+  },
+
+  /**
+   * The cave's piece, and the first trinket that is crafted rather than found.
+   *
+   * Both halves of that matter. The cave was the one region whose material
+   * bought nothing you wear: a trip down yields 198 crystals and the brazier,
+   * its only other use, costs two — ninety-nine braziers from one visit, for a
+   * base that wants a handful. And every other trinket in the game is a rare
+   * drop, so a player the loot table never smiled on had an empty trinket slot
+   * for the whole run with no way to fill it.
+   *
+   * Deliberately smaller than a brazier's twenty-two. A light you carry should
+   * not be better than a light you built and defended — the lantern is what
+   * gets you *to* the base at night, not what replaces it.
+   */
+  crystal_lantern: {
+    slot: "trinket",
+    lightRadius: 14,
+    blurb: "Carries its own light. Night stops being blind",
   },
 };
 
@@ -163,6 +193,17 @@ export function drawScale(state: GameState): number {
  */
 export function gatherReach(state: GameState): number {
   return defInSlot(state, "trinket")?.gatherReach ?? 0;
+}
+
+/**
+ * How far the wearer's own light reaches. 0 when nothing lit is worn.
+ *
+ * Same shape as `gatherReach`, and in the same slot: wearing the lantern is
+ * giving up the ring or the charm, which is the whole trade. A player who
+ * wants to see at night is choosing that over drawing a bow quickly.
+ */
+export function lanternRadius(state: GameState): number {
+  return defInSlot(state, "trinket")?.lightRadius ?? 0;
 }
 
 /**

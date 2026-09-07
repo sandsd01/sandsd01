@@ -196,6 +196,30 @@ export const RECIPES: RecipeDef[] = [
     requiresStation: "forge",
   },
   {
+    /**
+     * Six crystals and an ingot, at the forge.
+     *
+     * The number is small on purpose and is not a grind gate: one trip down
+     * brings back a measured 198 crystals, so the cost is paid by *having gone*
+     * rather than by going repeatedly. What the recipe is for is giving the
+     * cave a thread into the character, which it did not have — the crystal
+     * bought a brazier and nothing else, and the brazier stays where you put
+     * it.
+     *
+     * At the forge rather than the anvil because it is a lamp, not a blade:
+     * the anvil holds the weapon and armour ladder and the lantern is neither.
+     */
+    id: "crystal_lantern",
+    name: "Crystal Lantern",
+    inputs: [
+      { itemId: "glow_crystal", qty: 6 },
+      { itemId: "iron_ingot", qty: 1 },
+    ],
+    output: { itemId: "crystal_lantern", qty: 1 },
+    category: "tools",
+    requiresStation: "forge",
+  },
+  {
     id: "skysteel_sword",
     name: "Skysteel Sword",
     inputs: [

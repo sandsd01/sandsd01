@@ -9,6 +9,7 @@ import { events } from "../utils/events";
 import { buildFigureGeometry, createFigureMaterial } from "../world/figures";
 import { HeldItem } from "../world/held-item";
 import { Wings } from "../world/wings";
+import { Lantern } from "../world/lantern";
 import { merge, paint, placed } from "../world/geometry";
 import { instantiate, type ModelLibrary } from "../world/models";
 import { speedScale, staminaRegenScale } from "../data/stats";
@@ -125,6 +126,7 @@ export class PlayerController {
   private lastKnownNowMs = 0;
   private readonly heldItem = new HeldItem();
   private readonly wings = new Wings();
+  private readonly lantern = new Lantern();
 
   constructor(
     private readonly state: GameState,
@@ -138,6 +140,7 @@ export class PlayerController {
     // no hand. See world/held-item.ts for why that turned out to matter.
     this.heldItem.attachTo(this.object);
     this.wings.attachTo(this.object);
+    this.lantern.attachTo(this.object);
 
     const character = models["character-archer"];
     if (character) {
@@ -194,6 +197,26 @@ export class PlayerController {
   /** Whether the wings are actually on the mesh, for tests. */
   areWingsVisible(): boolean {
     return this.wings.isVisible();
+  }
+
+  /**
+   * Sets how far the worn lamp reaches. Zero takes it off.
+   *
+   * Mirrors `setWingsVisible`: the back slot decides whether wings are on the
+   * character, and the trinket slot decides whether the lamp is.
+   */
+  setLanternRadius(radius: number): void {
+    this.lantern.setRadius(radius);
+  }
+
+  /** What the lamp on the mesh actually reaches, for tests. 0 when unlit. */
+  getLanternRadius(): number {
+    return this.lantern.getRadius();
+  }
+
+  /** Whether the lamp is really on the character, not merely in the save. */
+  isLanternLit(): boolean {
+    return this.lantern.isLit();
   }
 
   setHeldItem(itemId: string | null): void {
@@ -430,6 +453,7 @@ export class PlayerController {
     this.updateBob(dt, isMoving && this.grounded);
     this.updateSwing(nowMs);
     this.wings.update(nowMs, this.flying);
+    this.lantern.update(nowMs);
     this.updateAnimation(dt, nowMs, isMoving);
   }
 

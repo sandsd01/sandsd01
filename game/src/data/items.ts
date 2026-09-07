@@ -182,6 +182,14 @@ export const ITEMS: Record<string, ItemDef> = {
     stackSize: 99,
     color: 0xbcd8e8,
   },
+  // What the cave finally buys you for yourself rather than for the ground.
+  crystal_lantern: {
+    id: "crystal_lantern",
+    name: "Crystal Lantern",
+    category: "tool",
+    stackSize: 1,
+    color: 0x9fe8ff,
+  },
   bone_club: { id: "bone_club", name: "Bone Club", category: "tool", stackSize: 1, color: 0xdcd3b8 },
   broth: { id: "broth", name: "Broth", category: "crop", stackSize: 99, color: 0xb5793c, heals: 25 },
 };
