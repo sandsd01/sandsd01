@@ -50,6 +50,9 @@ function backfillDefaults(state: GameState): void {
 
   // Top-level arrays added later. Anything that iterates them would throw on
   // an older save, so they have to exist before anything else touches state.
+  // Not a number, so the loop above skips it: an old save has no game mode
+  // recorded, and "not recorded" means the normal one.
+  if (typeof state.godMode !== "boolean") state.godMode = false;
   if (!Array.isArray(state.placedBuildings)) state.placedBuildings = [];
   if (!Array.isArray(state.plots)) state.plots = [];
   if (!Array.isArray(state.unseenRecipes)) state.unseenRecipes = [];

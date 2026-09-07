@@ -116,6 +116,8 @@ import { AudioHooks } from "./systems/audio-hooks";
 import { events } from "./utils/events";
 import { sound } from "./utils/audio";
 import { resolveCollisions, type Collidable } from "./utils/collision";
+import { Chat } from "./ui/chat";
+import { isGodMode } from "./systems/godmode";
 
 const canvas = document.getElementById("game-canvas") as HTMLCanvasElement;
 const uiRoot = document.getElementById("ui-root") as HTMLElement;
@@ -336,6 +338,10 @@ events.on("player-levelled-up", () => levelAura.trigger(currentNowMs));
 let target: Target = targeting.getTarget();
 
 const hud = new Hud(uiRoot, state);
+// The chat box sits in the same UI layer as the HUD rather than among the
+// panels: it is not a screen you open instead of playing, it is a corner of
+// the screen that sometimes takes the keyboard.
+const chat = new Chat(uiRoot, state, input);
 new AudioHooks();
 
 // Discovery rides on the inventory rather than on gathering specifically, so a
@@ -443,6 +449,39 @@ const panels: TogglablePanel[] = [
 function anyPanelOpen(): boolean {
   return panels.some((panel) => panel.isVisible());
 }
+
+/**
+ * Clicking off a panel shuts it, the way every window in every other program
+ * behaves.
+ *
+ * Bound on the window, not on the UI layer. `#ui-root` is `pointer-events:
+ * none` so that the HUD never eats clicks meant for the world — which also
+ * means a pointerdown on the empty space around a panel goes straight past it
+ * to the canvas and never reaches a listener on the layer itself. The first
+ * version of this was bound there and did nothing at all; the panel stayed
+ * open and only a click-through test showed it.
+ *
+ * The `closest(".panel")` test is what separates "clicked the background" from
+ * "clicked a button inside the panel" — without it, the first click on any
+ * control would close the thing it belongs to.
+ *
+ * Capture phase, so this decision is made before a control inside the panel
+ * handles its own click and possibly re-renders the node out from under the
+ * check.
+ */
+window.addEventListener(
+  "pointerdown",
+  (e) => {
+    if (!anyPanelOpen()) return;
+    const target = e.target as HTMLElement | null;
+    if (target?.closest(".panel")) return;
+    // The chat box lives in the same layer and is not a panel; clicking it
+    // should not be read as clicking the background.
+    if (target?.closest(".chat")) return;
+    for (const panel of panels) panel.close();
+  },
+  true,
+);
 
 function togglePanel(target: TogglablePanel): void {
   const wasOpen = target.isVisible();
@@ -1202,6 +1241,13 @@ const loop = new GameLoop((dt) => {
   if (input.wasActionPressed("farm") && canAct) {
     farmingSystem.tryInteract(keyPlot, selectedSeedItemId, currentNowMs);
   }
+  if (input.wasActionPressed("help")) hud.toggleKeybinds();
+  // Chat first: it takes the keyboard, so anything below would otherwise fire
+  // on the same keystroke that opened the box.
+  if (!chat.isOpen() && !anyPanelOpen()) {
+    if (input.wasActionPressed("chat")) chat.openWith();
+    else if (input.wasActionPressed("command")) chat.openWith("/");
+  }
   if (input.wasActionPressed("crafting")) togglePanel(craftingPanel);
   if (input.wasActionPressed("building")) togglePanel(buildingPanel);
   if (input.wasActionPressed("inventory")) togglePanel(inventoryPanel);
@@ -1388,6 +1434,13 @@ declare global {
       getCharmReach: () => number;
       isFlying: () => boolean;
       getWingsVisible: () => boolean;
+      isChatOpen: () => boolean;
+      openChat: (prefill?: string) => void;
+      closeChat: () => void;
+      sendChat: (line: string) => void;
+      getChatLines: () => { text: string; kind: string }[];
+      isGodMode: () => boolean;
+      isTextEntry: () => boolean;
       getLanternRadius: () => number;
       isLanternLit: () => boolean;
       getFlightCeiling: () => number;
@@ -1823,6 +1876,21 @@ window.__gameDebug = {
   // Read off the mesh rather than off the slot, so "the wings are on the
   // character" is a different question from "the wings are in the save".
   getWingsVisible: () => player.areWingsVisible(),
+  isChatOpen: () => chat.isOpen(),
+  openChat: (prefill = "") => chat.openWith(prefill),
+  closeChat: () => chat.close(),
+  // Goes through the same submit path a typed line does, so a check cannot
+  // pass against a shortcut the keyboard never reaches.
+  sendChat: (line) => chat.submitLine(line),
+  getChatLines: () =>
+    [...document.querySelectorAll(".chat-log .chat-line")].map((node) => ({
+      text: node.textContent ?? "",
+      kind: node.className.replace("chat-line ", "").replace("chat-", "").replace(" faded", ""),
+    })),
+  isGodMode: () => isGodMode(state),
+  // Whether the game is deaf to the keyboard. The single most important thing
+  // to be able to assert about a text box in a game that moves on WASD.
+  isTextEntry: () => input.isTextEntry(),
   // Read off the mesh, not off the slot, for the reason the wings hook records:
   // "the lamp is lit on the character" and "the lantern is in the save" are
   // different questions, and only the first one is what the player sees.

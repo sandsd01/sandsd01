@@ -2,6 +2,7 @@ import type { GameState } from "../state/game-state";
 import { events } from "../utils/events";
 import { reductionFor } from "../data/worn";
 import { vigourReduction } from "../data/stats";
+import { isGodMode } from "../systems/godmode";
 
 /**
  * The only way the player loses health, which is why armour is applied here
@@ -10,6 +11,11 @@ import { vigourReduction } from "../data/stats";
  */
 export function damagePlayer(state: GameState, amount: number): void {
   if (state.player.health <= 0) return;
+  // Creative mode takes nothing at all — not a reduction, an exemption. It is
+  // checked before armour so no amount of stacking can make the number
+  // reappear, and it emits nothing: a red flash for damage that was not taken
+  // would be the screen lying.
+  if (isGodMode(state)) return;
   // Armour and Vigour stack multiplicatively rather than by adding their
   // percentages: added, a good suit plus a heavy Vigour build reaches zero
   // damage, and a game with no level cap would get there eventually. Multiplied,

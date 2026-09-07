@@ -620,6 +620,13 @@ body {
 /* --- Panels --- */
 
 .panel {
+  /* `#ui-root` is `pointer-events: none` so the HUD never eats clicks meant
+     for the world, and a panel inside it inherits that — which made every
+     part of a panel that is not a button click-through. It was invisible
+     until clicking a panel's own background started closing it: the
+     pointerdown was landing on the canvas, so the "was this click inside a
+     panel?" test could never say yes. A window should catch its own clicks. */
+  pointer-events: auto;
   position: absolute;
   top: 50%;
   left: 50%;
@@ -1418,4 +1425,155 @@ body {
 .panel-row.unaffordable .panel-row-title,
 .panel-row.unaffordable .panel-row-icon {
   opacity: 0.62;
+}
+
+/* --- Chat --- */
+
+/* Bottom-left, because every other corner is taken: vitals top-left,
+   resources top-right, hotbar bottom-centre, minimap bottom-right. It is also
+   where anyone who has typed in a survival game will look for it. */
+.chat {
+  position: absolute;
+  left: 16px;
+  /* Above the hotbar, not beside it. Measured rather than guessed: the hotbar
+     runs from y=583 to y=684 in a 700px viewport, so the bottom 117px of the
+     screen is already spoken for. At the 16px this first used, the input field
+     sat across the first two hotbar slots and the reply line was clipped by
+     the bottom edge of the window — both visible only in a screenshot, since
+     nothing about the CSS says the hotbar is 101px tall. */
+  bottom: 128px;
+  width: min(46vw, 520px);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  /* Closed, the log is decoration over the world and must not eat clicks
+     meant for the game. `.open` puts them back for the field. */
+  pointer-events: none;
+  z-index: 5;
+}
+
+.chat-log {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 30vh;
+  overflow-y: auto;
+  /* No scrollbar until it is actually open and readable. */
+  scrollbar-width: thin;
+}
+
+.chat-line {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink);
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--slate);
+  /* Wraps rather than clipping: a long /help row is still readable. */
+  overflow-wrap: anywhere;
+  /* Own line width, not the container's, so short lines get short plates. */
+  align-self: flex-start;
+  max-width: 100%;
+  transition: opacity 240ms ease;
+}
+
+/* Aged out, or simply old while the box is shut. Kept in the DOM rather than
+   removed so opening the box brings the history straight back. */
+.chat-line.faded {
+  opacity: 0;
+}
+
+/* Colour is never the only carrier here: a system line is what the game said
+   and an error starts with "Unknown", so both read without it. */
+.chat-system {
+  color: var(--gold);
+}
+
+.chat-error {
+  color: var(--danger);
+  background: rgba(60, 18, 14, 0.72);
+}
+
+.chat-field {
+  display: none;
+  font-family: var(--font-ui);
+  font-size: 14px;
+  color: var(--ink);
+  background: var(--slate-solid);
+  border: 1px solid var(--edge-strong);
+  border-radius: 8px;
+  /* 44px of target, per the counter-operated rule the rest of the UI follows. */
+  min-height: 44px;
+  padding: 10px 12px;
+  outline: none;
+}
+
+.chat.open {
+  pointer-events: auto;
+}
+
+.chat.open .chat-log {
+  overflow-y: auto;
+}
+
+.chat.open .chat-field {
+  display: block;
+}
+
+.chat-field:focus {
+  border-color: var(--gold);
+}
+
+/* --- Godmode chip --- */
+
+/* A standing condition rather than an event, so it stays up instead of
+   toasting. Gold on a plate, like the other status chips. */
+.hud-godmode {
+  margin-top: 7px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--gold);
+  border: 1px solid var(--edge-strong);
+  border-radius: 6px;
+  padding: 2px 7px;
+  align-self: flex-start;
+  background: var(--slate);
+}
+
+/* --- Controls hint --- */
+
+/* The one line that replaces the seven-row reference sheet. Same corner, same
+   plate, a fraction of the height: it sits under the vitals and gets out of
+   the way of the world, which is the thing the player is actually looking at.
+   The full sheet is one key away and opens over the top of this. */
+.hud-keybinds-hint {
+  position: absolute;
+  top: 96px;
+  left: 16px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+  background: var(--slate);
+  border: 1px solid var(--edge);
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  pointer-events: none;
+}
+
+/* The full sheet, when open, drops below the hint rather than covering it —
+   so the line that told you which key you pressed is still on screen. */
+.hud-keybinds {
+  top: 130px;
+}
+
+/* `.hud-keybinds` sets `display: grid`, which beats the browser's own
+   `[hidden] { display: none }` — so setting `.hidden = true` in JS left the
+   whole sheet on screen while every readout said it was closed. `.hud-raid`
+   has a comment recording the identical trap; this is the third time it has
+   been hit in this file. Only a screenshot catches it: the DOM property is
+   true and the pixels disagree. */
+.hud-keybinds[hidden] {
+  display: none;
 }

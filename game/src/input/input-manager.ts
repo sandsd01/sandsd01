@@ -22,11 +22,21 @@ export class InputManager {
   // player forward on the way past.
   private captureHandler: ((code: string) => void) | null = null;
 
+  /** True while a text field (the chat box) owns the keyboard. */
+  private textEntry = false;
+
   constructor(
     canvas: HTMLCanvasElement,
     private bindings: Bindings,
   ) {
     window.addEventListener("keydown", (e) => {
+      // While the chat box has the keyboard, the game gets none of it — and
+      // this has to come first, before the preventDefault below. That line
+      // swallows Space because Space jumps, which would mean no spaces could
+      // ever be typed into a chat message. Returning here also stops the
+      // keystroke being recorded, so holding W to type "wall" does not walk
+      // the player into one.
+      if (this.textEntry) return;
       // Tab would walk focus off the canvas and Space scrolls the page in some
       // browsers; both are bound to gameplay, so neither should do its default.
       if (e.code === "Tab" || e.code === "Space") e.preventDefault();
@@ -107,6 +117,30 @@ export class InputManager {
   // Called after a rebind so the change takes effect without a reload.
   setBindings(bindings: Bindings): void {
     this.bindings = bindings;
+  }
+
+  /**
+   * Hands the keyboard to a text field, or takes it back.
+   *
+   * Clears every held key on the way in, not just future ones. A player who
+   * opens chat while running is still holding W, and no keyup is coming that
+   * the game will see — without this they would keep walking for as long as
+   * the box was open, which is the single most obvious way this feature could
+   * be broken.
+   */
+  setTextEntry(on: boolean): void {
+    this.textEntry = on;
+    if (!on) return;
+    this.keys.clear();
+    this.justPressed.clear();
+    this.mouseDown.clear();
+    this.mouseJustPressed.clear();
+    this.mouseDeltaX = 0;
+    this.mouseDeltaY = 0;
+  }
+
+  isTextEntry(): boolean {
+    return this.textEntry;
   }
 
   captureNextKey(handler: (code: string) => void): void {

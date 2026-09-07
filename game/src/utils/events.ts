@@ -40,6 +40,10 @@ export interface GameEvents {
   "enemy-killed": { id: string; enemyId: string; x: number; z: number };
   "player-exp-changed": { level: number; exp: number; toNext: number };
   "player-levelled-up": { level: number; points: number };
+  /** Creative mode went on or off. The HUD badge and the chat line both read it. */
+  "godmode-changed": { on: boolean };
+  /** A line for the chat log. `own` marks what the player themselves typed. */
+  "chat-line": { text: string; kind: "say" | "system" | "error" };
   "stats-changed": { id: string; points: number };
   "item-crafted": { itemId: string; qty: number };
   "item-picked-up": { itemId: string; qty: number };

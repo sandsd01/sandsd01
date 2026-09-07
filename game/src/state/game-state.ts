@@ -145,6 +145,18 @@ export interface GameState {
    * to its *starting* value on every old save, which for an unspent balance is
    * exactly wrong. It gets its own guard instead.
    */
+  /**
+   * Creative mode, set by `/godmode` in the chat box.
+   *
+   * Saved rather than reset on load, the way Minecraft remembers a world's
+   * game mode. A flag that quietly turned itself off on reload would be
+   * indistinguishable, to the person who set it, from one that never worked —
+   * and they would find out by dying.
+   *
+   * Boolean, so it sits outside the numeric backfill and gets its own guard in
+   * `save-load.ts`.
+   */
+  godMode: boolean;
   statPoints: number;
   /** Where those points went. See `data/stats.ts`. */
   stats: Record<StatId, number>;
@@ -256,6 +268,7 @@ export function createInitialState(seedInput: string | number = "romestead"): Ga
     discovered: [],
     worn: initialWorn(),
     raid: { nextRaidAtMs: raidStartAfter(elapsedMs), active: false, wave: 0, endsAtMs: 0, count: 0 },
+    godMode: false,
     statPoints: 0,
     stats: initialStats(),
     region: "surface",

@@ -19,6 +19,9 @@ export type Action =
   | "character"
   | "options"
   | "toggleView"
+  | "chat"
+  | "command"
+  | "help"
   | "hotbar1"
   | "hotbar2"
   | "hotbar3"
@@ -43,6 +46,9 @@ export const ACTIONS: Action[] = [
   "rotateBuild",
   "repair",
   "toggleView",
+  "chat",
+  "command",
+  "help",
   "hotbar1",
   "hotbar2",
   "hotbar3",
@@ -71,6 +77,9 @@ export const ACTION_LABELS: Record<Action, string> = {
   rotateBuild: "Rotate piece",
   repair: "Repair building",
   toggleView: "First / third person",
+  chat: "Chat",
+  command: "Command",
+  help: "Controls",
   crafting: "Crafting menu",
   building: "Build menu",
   inventory: "Inventory",
@@ -108,6 +117,10 @@ export const DEFAULT_BINDINGS: Bindings = {
   // F5 is the view-toggle key players arrive with from Minecraft; V is the
   // second slot for keyboards where F5 is claimed by the browser.
   toggleView: ["F5", "KeyV"],
+  // T to talk and slash to command, as in the game this borrows the box from.
+  chat: ["KeyT"],
+  command: ["Slash"],
+  help: ["F1"],
   crafting: ["KeyC"],
   building: ["KeyB"],
   // K, the character-sheet key this genre settles on, with P as the second
