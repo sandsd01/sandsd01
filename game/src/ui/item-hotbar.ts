@@ -3,7 +3,7 @@ import { HOTBAR_SIZE, selectSlot } from "../systems/equipment";
 import type { GameState } from "../state/game-state";
 import { events } from "../utils/events";
 import { el } from "./dom";
-import { icon, type IconName } from "./icons";
+import { itemIconEl } from "./item-icons";
 import { keyLabel, type Bindings } from "../state/keybindings";
 
 // Actions bound to the slots. The action names are unchanged from when these
@@ -19,49 +19,6 @@ export const HOTBAR_ACTIONS = [
   "hotbar7",
   "hotbar8",
 ] as const;
-
-const ITEM_ICONS: Record<string, IconName> = {
-  wood: "trees",
-  stone: "mountain",
-  plank: "layers",
-  brick: "brickWall",
-  clay: "layers",
-  iron_ore: "gem",
-  iron_ingot: "gem",
-  axe: "axe",
-  iron_axe: "axe",
-  pickaxe: "pickaxe",
-  iron_pickaxe: "pickaxe",
-  sword: "sword",
-  iron_sword: "sword",
-  wheat: "wheat",
-  wheat_seed: "sprout",
-  berry: "grape",
-  bread: "wheat",
-  // These four had no entry and fell through to the generic stack glyph, so a
-  // bow and a quiver of arrows sat side by side in the bar wearing the same
-  // icon — which is the same as having no icon at all.
-  bone: "bone",
-  hide: "footprints",
-  bone_club: "hammer",
-  broth: "flame",
-  bow: "crosshair",
-  arrow: "navigation",
-  // Iron ore and iron ingot already share "gem" between them, which is fair —
-  // they are the same metal at two stages. Ancient stone is a different
-  // material and gets a different glyph, or the bar shows two identical icons
-  // side by side and tells the player nothing.
-  ancient_stone: "landmark",
-  glow_crystal: "sparkles",
-  cloud_iron: "cloud",
-  // Same glyph as the ore it is smelted from, the way iron ore and iron ingot
-  // already share one: a material at two stages, not two materials.
-  skysteel_ingot: "cloud",
-  // And the tier convention the tools already follow — an iron sword and a
-  // wooden one wear the same sword.
-  skysteel_sword: "sword",
-  crystal_lantern: "lamp",
-};
 
 // The eight quick slots, holding what the player carries rather than what they
 // can build. Crafting a sword used to change nothing on screen; now it lands
@@ -141,7 +98,7 @@ export class ItemHotbar {
         return;
       }
       const def = getItem(itemId);
-      iconHost.appendChild(icon(ITEM_ICONS[itemId] ?? "squareStack"));
+      iconHost.appendChild(itemIconEl(itemId));
       name.textContent = def.name;
       // Tools come one to a stack, so a "1" under every one of them is noise.
       count.textContent = def.stackSize > 1 ? String(qty) : "";

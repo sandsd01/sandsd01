@@ -3,6 +3,7 @@ import { CONTAINER_SLOTS, containerOf, deposit, withdraw } from "../systems/cont
 import type { GameState } from "../state/game-state";
 import { events } from "../utils/events";
 import { el } from "./dom";
+import { itemIconEl } from "./item-icons";
 import { panelHeader } from "./panel-chrome";
 
 // Two lists side by side — your bag and the barrel — and a click moves a stack
@@ -93,10 +94,16 @@ export class ContainerPanel {
 
   private row(itemId: string, qty: number, label: string, act: () => void): HTMLDivElement {
     const row = el("div", "panel-row");
+    // One `panel-row-main` around the glyph and the words: the row is
+    // `space-between`, and a loose icon child would be pushed to the opposite
+    // edge from the name it labels.
+    const main = el("div", "panel-row-main");
+    main.appendChild(itemIconEl(itemId, "icon panel-row-icon"));
     const info = el("div", "panel-row-info");
     info.appendChild(el("span", "panel-row-title", getItem(itemId).name));
     info.appendChild(el("span", "panel-row-sub", `x${qty}`));
-    row.appendChild(info);
+    main.appendChild(info);
+    row.appendChild(main);
     const button = el("button", undefined, label);
     button.addEventListener("click", act);
     row.appendChild(button);
