@@ -36,3 +36,42 @@ export const LAUNCH = {
   executablePath: process.env.CHECK_CHROMIUM || undefined,
   args: ["--use-gl=swiftshader", "--enable-unsafe-swiftshader", "--no-sandbox"],
 };
+
+/**
+ * Turns the camera by a relative mouse delta, the way the game itself sees it.
+ *
+ * `page.mouse.move` does not work for mouse-look in this environment, and it
+ * fails silently rather than erroring. Measured: under pointer lock, 46
+ * synthesised moves reached the page and every one of them carried
+ * `movementX === 0 && movementY === 0`, so `input-manager.ts` — which
+ * accumulates exactly those two fields — correctly did nothing, and the camera
+ * sat at `pitch 0.000` while the suite reported a look bug that did not exist.
+ * Chromium is not computing pointer-lock deltas for CDP-injected mouse events
+ * here.
+ *
+ * What this bypasses is only that computation. The event still goes to
+ * `document`, still passes the `pointerLocked` gate, and still drives the
+ * game's own handler and everything downstream of it — the part the checks
+ * exist to cover. What is *not* covered any more is the browser's own delta
+ * maths, which is not ours and which we cannot exercise here either way.
+ *
+ * Several small steps rather than one large one, because the game clamps pitch
+ * per event and one big delta would be clipped where the same movement spread
+ * over a gesture is not.
+ */
+export async function lookBy(page, dx, dy, steps = 12) {
+  await page.evaluate(
+    ({ dx, dy, steps }) => {
+      for (let i = 0; i < steps; i++) {
+        document.dispatchEvent(
+          new MouseEvent("mousemove", {
+            movementX: dx / steps,
+            movementY: dy / steps,
+            bubbles: true,
+          }),
+        );
+      }
+    },
+    { dx, dy, steps },
+  );
+}

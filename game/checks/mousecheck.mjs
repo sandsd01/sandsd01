@@ -1,4 +1,4 @@
-import { chromium, LAUNCH, BASE_URL } from "./harness.mjs";
+import { chromium, LAUNCH, BASE_URL, lookBy } from "./harness.mjs";
 import { selectBuilding } from "./buildselect.mjs";
 
 // Mouse-driven interaction: crosshair targeting, hold-to-gather, right-click
@@ -32,12 +32,36 @@ async function waitFor(fn, arg, timeoutMs = 40000) {
   return false;
 }
 
+/**
+ * Turns the camera and reports where the crosshair now points.
+ *
+ * The aim point is recomputed on the animation frame, so setting the yaw and
+ * then reading after a fixed wait can return the aim from *before* the turn —
+ * and the right-click that follows places at the real, current aim instead.
+ * That is what the two placement cases used to fail on, and the numbers said
+ * so plainly: the check reported `aim=(0,-3)` while the piece landed at
+ * `cell=(-3,-2)`, which is not a placement bug but two reads of two different
+ * frames. Under software rendering a frame can outlast the 600ms wait on its
+ * own, so this waits for the value to stop moving instead of guessing.
+ */
+async function turnAndSettleAim(yaw) {
+  await page.evaluate((y) => window.__gameDebug.setCameraYaw(y), yaw);
+  let last = null;
+  for (let i = 0; i < 60; i++) {
+    const now = await page.evaluate(() => window.__gameDebug.getAimPoint());
+    if (last && Math.abs(now.x - last.x) < 1e-3 && Math.abs(now.z - last.z) < 1e-3) return now;
+    last = now;
+    await page.waitForTimeout(150);
+  }
+  return last;
+}
+
 // Turn the camera until the crosshair is on the given kind of thing, by
 // stepping the yaw with relative mouse movement the way a player would.
 async function aimUntil(kind, steps = 40) {
   for (let i = 0; i < steps; i++) {
     if (await page.evaluate((k) => window.__gameDebug.getTarget().kind === k, kind)) return true;
-    await page.mouse.move(cx + 18, cy);
+    await lookBy(page, 18, 0, 3);
     await page.waitForTimeout(120);
   }
   return await page.evaluate((k) => window.__gameDebug.getTarget().kind === k, kind);
@@ -83,10 +107,14 @@ ok("target outline is drawn around it", outline.visible && outline.size[1] > 0.5
 const wood0 = await page.evaluate(
   () => (window.__gameDebug.getInventory().find((s) => s.itemId === "wood") || { qty: 0 }).qty);
 await page.mouse.down();
-const ringGrew = await waitFor(() => window.__gameDebug.getActionProgress() > 0, null, 8000);
+// Condition-based already, but the budgets were the fixed part: 8s and 15s
+// are only a handful of frames when the renderer is managing two a second,
+// and a chop that needs several swings ran out of them. Generous now — a
+// timeout here costs wall-clock only when the case is genuinely failing.
+const ringGrew = await waitFor(() => window.__gameDebug.getActionProgress() > 0, null, 30000);
 const gotWood = await waitFor(
   (w0) => (window.__gameDebug.getInventory().find((s) => s.itemId === "wood") || { qty: 0 }).qty > w0,
-  wood0, 15000);
+  wood0, 60000);
 await page.mouse.up();
 ok("holding left click gathers", gotWood);
 ok("a progress ring fills while gathering", ringGrew);
@@ -156,9 +184,7 @@ await page.waitForTimeout(800);
 await selectBuilding(page, waitFor, "Farm Plot", "farm_plot");
 
 // Face a known direction so the expected cell is unambiguous.
-await page.evaluate(() => window.__gameDebug.setCameraYaw(0));
-await page.waitForTimeout(600);
-const aimPoint = await page.evaluate(() => window.__gameDebug.getAimPoint());
+const aimPoint = await turnAndSettleAim(0);
 // The world now seeds POI barrels of its own, so "any placed building" is no
 // longer proof this click placed one — count only the pieces under test.
 await page.mouse.down({ button: "right" });
@@ -177,9 +203,7 @@ ok("it lands in the cell under the crosshair", cellOk,
 
 // And aiming elsewhere puts the next piece somewhere else — the whole point,
 // versus the old fixed distance straight ahead.
-await page.evaluate(() => window.__gameDebug.setCameraYaw(Math.PI / 2));
-await page.waitForTimeout(600);
-const aim2 = await page.evaluate(() => window.__gameDebug.getAimPoint());
+const aim2 = await turnAndSettleAim(Math.PI / 2);
 await page.mouse.down({ button: "right" });
 await page.mouse.up({ button: "right" });
 const placedTwo = await waitFor(

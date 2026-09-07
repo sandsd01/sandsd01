@@ -1,4 +1,4 @@
-import { chromium, LAUNCH, BASE_URL } from "./harness.mjs";
+import { chromium, LAUNCH, BASE_URL, lookBy } from "./harness.mjs";
 
 const results = [];
 const ok = (n, p, d = "") => results.push([p, n, d]);
@@ -72,16 +72,56 @@ ok("gravity returns the player to the ground", true);
 await page.click("#game-canvas");
 await page.waitForFunction(() => window.__gameDebug.isPointerLocked(), null, { timeout: 20000 });
 
+/**
+ * Moves the mouse down and reports how far the camera pitched.
+ *
+ * Waits for the pitch to actually *move* rather than for a fixed 400ms. The
+ * fixed wait is what this helper used to do, and it made the two look cases
+ * the most fragile in the whole battery: the game applies mouse deltas on its
+ * animation frame, and under software rendering with no GPU a frame can take
+ * longer than 400ms on its own — so the second read happened before the first
+ * frame that would have moved anything, and both cases reported a flat
+ * `pitch 0.000`. Nothing was wrong with the game; the check was reading too
+ * early. Measured on this sandbox, `mousecheck` and `stdcheck` scored
+ * identically on `main` and on a feature branch (10/12, `pitch 0.000` both
+ * times) while the same suite had passed an hour earlier at roughly half the
+ * wall-clock time.
+ *
+ * A timeout here still fails the case rather than throwing: `null` says the
+ * camera never moved at all, which is a genuine failure and is what the
+ * caller reports.
+ */
 async function pitchDeltaForMouseDown() {
   const start = await page.evaluate(() => window.__gameDebug.getCameraPitch());
-  for (let i = 0; i < 12; i++) await page.mouse.move(640, 360 + i * 8);
-  await page.waitForTimeout(400);
-  const end = await page.evaluate(() => window.__gameDebug.getCameraPitch());
-  return end - start;
+  await lookBy(page, 0, 96);
+  try {
+    await page.waitForFunction(
+      (from) => Math.abs(window.__gameDebug.getCameraPitch() - from) > 1e-4,
+      start,
+      { timeout: 20000 },
+    );
+  } catch {
+    return null;
+  }
+  // Waiting only proves it started moving. Let the rest of the gesture land
+  // before reading, so the number is the whole movement rather than the first
+  // frame of it — settled by watching the value stop changing.
+  let last = null;
+  for (let i = 0; i < 40; i++) {
+    const now = await page.evaluate(() => window.__gameDebug.getCameraPitch());
+    if (last !== null && Math.abs(now - last) < 1e-4) break;
+    last = now;
+    await page.waitForTimeout(100);
+  }
+  return last - start;
 }
 
 const normal = await pitchDeltaForMouseDown();
-ok("default look is not inverted", normal > 0, `pitch ${normal.toFixed(3)}`);
+ok(
+  "default look is not inverted",
+  normal !== null && normal > 0,
+  normal === null ? "the camera never moved" : `pitch ${normal.toFixed(3)}`,
+);
 
 await page.keyboard.press("Escape");
 await page.waitForFunction(() => document.querySelector(".panel.visible h2")?.textContent === "Options", null, { timeout: 20000 });
@@ -94,7 +134,11 @@ await page.waitForFunction(() => document.querySelectorAll(".panel.visible").len
 await page.click("#game-canvas");
 await page.waitForFunction(() => window.__gameDebug.isPointerLocked(), null, { timeout: 20000 });
 const inverted = await pitchDeltaForMouseDown();
-ok("invert Y flips the vertical axis", inverted < 0, `pitch ${inverted.toFixed(3)}`);
+ok(
+  "invert Y flips the vertical axis",
+  inverted !== null && inverted < 0,
+  inverted === null ? "the camera never moved" : `pitch ${inverted.toFixed(3)}`,
+);
 
 // Sensitivity is stored and clamped.
 await page.evaluate(() => {
