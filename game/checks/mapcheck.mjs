@@ -27,6 +27,28 @@ async function probe(fn, arg) {
   }
 }
 
+/**
+ * Waits for the map to redraw into a state, rather than reading straight after
+ * changing the world.
+ *
+ * `getMinimapPins` reports what the *last* redraw drew, and the map redraws at
+ * most every 120ms — which on this renderer can be less often than once a
+ * second. Clearing every enemy and reading immediately therefore returns the
+ * previous frame's count, which is what the first version of the case below
+ * did: it reported one enemy pin on a world with no enemies in it and looked
+ * like a map bug rather than a stale read.
+ */
+async function waitForPins(predicate, timeoutMs = 30000) {
+  const t0 = Date.now();
+  let last = null;
+  while (Date.now() - t0 < timeoutMs) {
+    last = await page.evaluate(() => window.__gameDebug.getMinimapPins());
+    if (predicate(last)) return last;
+    await page.waitForTimeout(250);
+  }
+  return last;
+}
+
 const rect = (sel) =>
   page.evaluate((s) => {
     const n = document.querySelector(s);
@@ -118,9 +140,8 @@ await page.waitForTimeout(2500);
   );
 
   await probe(() => window.__gameDebug.clearEnemies());
-  await page.waitForTimeout(800);
-  const none = await probe(() => window.__gameDebug.getMinimapPins());
-  ok("with no enemies alive the map draws none", none.enemy === 0, JSON.stringify(none));
+  const none = await waitForPins((p) => p.enemy === 0);
+  ok("with no enemies alive the map draws none", none?.enemy === 0, JSON.stringify(none));
 
   // One close, one far but still well inside the map's own range. Both are
   // alive and both are on the map's ground — only the near one may be drawn.
@@ -135,9 +156,8 @@ await page.waitForTimeout(2500);
     },
     { near, far },
   );
-  await page.waitForTimeout(1600);
   const alive = await probe(() => window.__gameDebug.getEnemyPositions().length);
-  const pins = await probe(() => window.__gameDebug.getMinimapPins());
+  const pins = await waitForPins((p) => p.enemy > 0);
   ok(
     "both enemies exist and are inside the map's range",
     alive === 2 && far < geo.range,
@@ -162,8 +182,7 @@ await page.waitForTimeout(2500);
   await page.waitForTimeout(1000);
   const before = await probe(() => window.__gameDebug.getMinimapPins());
   await probe(() => window.__gameDebug.placeBuildingAt("wall", 3, 1, 0));
-  await page.waitForTimeout(1400);
-  const after = await probe(() => window.__gameDebug.getMinimapPins());
+  const after = await waitForPins((p) => p.building > before.building);
   ok(
     "a wall the player placed appears on the map",
     after.building === before.building + 1,
