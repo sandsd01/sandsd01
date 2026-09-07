@@ -1,4 +1,4 @@
-import { chromium, LAUNCH, BASE_URL } from "./harness.mjs";
+import { chromium, LAUNCH, BASE_URL, settlePlayer } from "./harness.mjs";
 import { editSaveOffline } from "./legacysave.mjs";
 
 // The held item: does what you carry in your hand actually decide anything?
@@ -132,6 +132,10 @@ ok("and the prompt says to hold an axe, not that you need one",
 
 // Same tree, same spot, axe in hand: it must chop.
 ok("the axe can be taken back in hand", await hold("axe"));
+// Stand still before aiming, and stay still while chopping: a player who is
+// still settling drifts off the trunk part-way through the hold, and the swing
+// lands on nothing for reasons that have nothing to do with the axe.
+await settlePlayer(page);
 const aimedWithAxe = await aimAtTree();
 const woodPre = await page.evaluate(
   () => (window.__gameDebug.getInventory().find((s) => s.itemId === "wood") ?? { qty: 0 }).qty);

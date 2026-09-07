@@ -1,4 +1,4 @@
-import { chromium, LAUNCH, BASE_URL } from "./harness.mjs";
+import { chromium, LAUNCH, BASE_URL, settlePlayer } from "./harness.mjs";
 import { selectBuilding } from "./buildselect.mjs";
 
 // Can a base be edited, and does it actually stop anything?
@@ -271,6 +271,10 @@ await page.evaluate(() => {
   window.__gameDebug.teleportPlayer(0, -1);
   window.__gameDebug.setCameraYaw(Math.PI);
 });
+// A teleport drops the player where it is told, not where they can stand, so
+// they slide for a moment afterwards. Polling the target while that happens
+// asks what is under a crosshair that is still on its way somewhere.
+await settlePlayer(page);
 const sawWall = await waitFor(() => {
   const t = window.__gameDebug.getTarget();
   return t.kind === "building" || t.kind === "container";
