@@ -1,4 +1,4 @@
-import { chromium, LAUNCH, BASE_URL, lookBy, settlePlayer } from "./harness.mjs";
+import { chromium, LAUNCH, BASE_URL, lookBy } from "./harness.mjs";
 import { selectBuilding } from "./buildselect.mjs";
 
 // Mouse-driven interaction: crosshair targeting, hold-to-gather, right-click
@@ -45,14 +45,17 @@ async function waitFor(fn, arg, timeoutMs = 40000) {
  * own, so this waits for the value to stop moving instead of guessing.
  */
 /**
- * Turns the camera, waits for the player to be still, and reports the aim.
+ * Turns the camera and reports where the crosshair points.
  *
- * `getForward()` is computed straight from the yaw, so the turn itself needs
- * no frame to take effect — it is only the feet that have to settle.
+ * NOTE: the two placement cases below still fail, and this helper is not the
+ * reason. `getForward()` is computed straight from the yaw, so the turn needs
+ * no frame to take effect, and the aim it returns is correct for the yaw and
+ * the feet at the moment it is read. What is unexplained is that the piece
+ * lands somewhere else — see the comment on those cases.
  */
 async function turnAndSettleAim(yaw) {
   await page.evaluate((y) => window.__gameDebug.setCameraYaw(y), yaw);
-  await settlePlayer(page);
+  await page.waitForTimeout(600);
   return page.evaluate(() => window.__gameDebug.getAimPoint());
 }
 
@@ -176,6 +179,30 @@ const farTarget = await page.evaluate(() => window.__gameDebug.getTarget());
 ok("a tree beyond reach is not a target", farTarget.kind !== "node", JSON.stringify(farTarget));
 
 // --- 4. right click places at the crosshair, not a fixed distance ------
+//
+// UNRESOLVED, and measured rather than guessed at. Four hypotheses were tried
+// and three of them were wrong:
+//
+//   * a stale aim read           — no: the numbers are identical across runs
+//   * a frame not yet run        — no: getForward() is pure from the yaw
+//   * the player still sliding   — no: waiting for the position to hold still
+//                                  changed nothing at all
+//   * budgets too tight          — no: raising them changed nothing here
+//                                  (it did fix flightcheck, which is why the
+//                                  wider budgets stayed)
+//
+// What is known: getAimPoint is feet + forward * reach, anchorCellFor is a
+// plain worldToCell of that, and tryPlace neither snaps nor searches. The aim
+// reads (0,-3) with the camera facing -z from the origin, which is correct,
+// and the piece lands at cell (-3,-2). Working backwards, that cell needs a
+// forward of about (-0.83,-0.55), i.e. a yaw near 0.99 rad rather than the 0
+// that was set and read back. A standalone probe saw the same cell (-3,-2)
+// from a *different* aim of (0,-5), so the landing spot does not follow the
+// aim being read at all.
+//
+// The next step is to read the camera yaw immediately after the click rather
+// than before it. Do that before touching this again.
+
 await page.evaluate(() => {
   window.__gameDebug.grantItems({ wood: 40, stone: 40, plank: 20, clay: 20 });
   window.__gameDebug.teleportPlayer(0, 0);
