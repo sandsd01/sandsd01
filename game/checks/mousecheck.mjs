@@ -44,16 +44,52 @@ async function waitFor(fn, arg, timeoutMs = 40000) {
  * frames. Under software rendering a frame can outlast the 600ms wait on its
  * own, so this waits for the value to stop moving instead of guessing.
  */
-async function turnAndSettleAim(yaw) {
-  await page.evaluate((y) => window.__gameDebug.setCameraYaw(y), yaw);
+/**
+ * Waits until the player has actually stopped moving.
+ *
+ * These placement cases assumed a standing player and never checked. They are
+ * not vague about it either — the arithmetic gives the whole story. The aim
+ * point is `feet + forward * reach`, and the cell is a plain `worldToCell` of
+ * that with no snapping and no search, so a piece reported at cell (-3,-2)
+ * with the camera facing -z means the feet were near (-3, 3) when the click
+ * was handled. The check had read them at (0, 0) a moment earlier: the player
+ * was still sliding down from where the teleport dropped them.
+ *
+ * That gap matters here in a way it would not at full speed, because the click
+ * is acted on inside the update loop rather than in the event handler, and a
+ * frame is most of a second on this machine. Read, drift, click: three
+ * different positions.
+ */
+async function settlePlayer() {
   let last = null;
-  for (let i = 0; i < 60; i++) {
-    const now = await page.evaluate(() => window.__gameDebug.getAimPoint());
-    if (last && Math.abs(now.x - last.x) < 1e-3 && Math.abs(now.z - last.z) < 1e-3) return now;
+  let still = 0;
+  for (let i = 0; i < 80; i++) {
+    const now = await page.evaluate(() => window.__gameDebug.getPlayerPosition());
+    if (last && Math.abs(now.x - last.x) < 1e-3 && Math.abs(now.z - last.z) < 1e-3 &&
+        Math.abs(now.y - last.y) < 1e-3) {
+      // Three agreeing reads rather than two: at this frame rate two polls can
+      // land inside one frame and agree because nothing has been simulated
+      // yet, not because the player has come to rest.
+      if (++still >= 3) return now;
+    } else {
+      still = 0;
+    }
     last = now;
-    await page.waitForTimeout(150);
+    await page.waitForTimeout(250);
   }
   return last;
+}
+
+/**
+ * Turns the camera, waits for the player to be still, and reports the aim.
+ *
+ * `getForward()` is computed straight from the yaw, so the turn itself needs
+ * no frame to take effect — it is only the feet that have to settle.
+ */
+async function turnAndSettleAim(yaw) {
+  await page.evaluate((y) => window.__gameDebug.setCameraYaw(y), yaw);
+  await settlePlayer();
+  return page.evaluate(() => window.__gameDebug.getAimPoint());
 }
 
 // Turn the camera until the crosshair is on the given kind of thing, by
