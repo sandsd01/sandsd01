@@ -10,6 +10,7 @@ import { events } from "../utils/events";
 import { canAfford, costLine } from "./cost-line";
 import { el } from "./dom";
 import { icon, type IconName } from "./icons";
+import { panelHeader } from "./panel-chrome";
 
 type Filter = "all" | BuildingCategory;
 
@@ -35,7 +36,7 @@ export class BuildingPanel {
     private readonly state: GameState,
   ) {
     this.panel = el("div", "panel");
-    this.panel.appendChild(el("h2", undefined, "Build"));
+    this.panel.appendChild(panelHeader("Build", () => this.close()).header);
     this.chips = el("div", "panel-chips");
     this.panel.appendChild(this.chips);
     this.buildChips();
@@ -45,7 +46,7 @@ export class BuildingPanel {
       el(
         "p",
         "panel-hint",
-        "Select a piece, aim where you want it, right-click to place. R rotates, Q cancels. Press B to close.",
+        "Select a piece, aim where you want it, right-click to place. R rotates, Q cancels.",
       ),
     );
     root.appendChild(this.panel);

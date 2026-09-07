@@ -5,6 +5,11 @@
   --ink-dim: rgba(244, 238, 226, 0.62);
   --slate: rgba(26, 23, 19, 0.72);
   --slate-solid: rgba(24, 21, 17, 0.94);
+  /* Fully opaque, for the one place translucency is a bug rather than a look:
+     a sticky panel header. At 0.94 the rows scrolling underneath show through
+     by 6%, which is invisible while reading the CSS and obvious in a
+     screenshot of a scrolled Options panel. */
+  --slate-opaque: #181511;
   --edge: rgba(255, 226, 176, 0.16);
   --edge-strong: rgba(255, 226, 176, 0.3);
   --gold: #d8b45a;
@@ -665,6 +670,74 @@ body {
 
 .container-column {
   min-width: 0;
+}
+
+/* The header bar: title on the left, close on the right.
+
+   Sticky rather than in normal flow, because `.panel` scrolls at
+   `max-height: 72vh` and Options is twenty-odd rows long — an in-flow header
+   scrolls away exactly on the panel where the way out is least obvious. The
+   negative margins bleed it over the panel's 18px padding so the rows do not
+   slide past beside it, and its own padding puts the content back. */
+.panel-header {
+  position: sticky;
+  top: -18px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  /* Tight on purpose. The character sheet already ran past the bottom of its
+     own panel at 1024x640 before this header existed (measured: 31px over),
+     and a header is pure overhead against that. At 12/10/14 it cost 19px more;
+     trimmed to this it costs about 8, and the sticky behaviour above is what
+     makes the overflow survivable — the way out now stays on screen while you
+     scroll, where before there was no button at all and the title scrolled
+     away with everything else. */
+  margin: -18px -18px 10px;
+  padding: 3px 14px 2px;
+  background: var(--slate-opaque);
+  border-bottom: 1px solid var(--edge);
+}
+
+/* The h2 keeps its type but gives up the spacing and rule, which now belong to
+   the bar around it. `.panel h2` is left otherwise intact because
+   `settings-panel.ts` builds a second h2 as a subheading that still wants it.
+
+   Doubled up on `.panel` deliberately: `.panel h2` below is the same
+   specificity and comes later in the file, so the plain `.panel-header h2`
+   this used to be lost every declaration to source order — the title kept its
+   14px bottom margin and, inside a centred flex row, hung 7px above the close
+   button it is supposed to sit level with. */
+.panel .panel-header h2 {
+  margin: 0;
+  padding: 0;
+  border-bottom: none;
+}
+
+/* Transparent, not green. `.panel button` paints every button the primary
+   green, and CLAUDE.md's rule is that the primary action is the *largest*
+   thing on the screen — a close button is the opposite of that, and a green X
+   reads as the thing to press. The selector is doubled up to beat it. */
+.panel .panel-close {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--ink-dim);
+}
+
+.panel .panel-close:hover,
+.panel .panel-close:focus-visible {
+  background: transparent;
+  border-color: var(--edge-strong);
+  color: var(--ink);
 }
 
 .panel h2 {

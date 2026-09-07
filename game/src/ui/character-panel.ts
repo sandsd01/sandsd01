@@ -19,6 +19,7 @@ import {
 import { events } from "../utils/events";
 import { clear, el } from "./dom";
 import { icon, type IconName } from "./icons";
+import { panelHeader } from "./panel-chrome";
 
 // One glyph each, and none of them shared with the resource chips or the
 // crafting categories. A panel where two rows draw the same picture is a panel
@@ -86,13 +87,11 @@ export class CharacterPanel {
   private readonly pointsLabel: HTMLDivElement;
   private readonly list: HTMLDivElement;
   private readonly worn: HTMLDivElement;
-  private readonly hint: HTMLParagraphElement;
   private visible = false;
 
   constructor(
     root: HTMLElement,
     private readonly state: GameState,
-    private readonly closeKeyLabel: () => string,
   ) {
     // Wide, and two columns. Three worn slots stacked on top of five stat rows
     // does not fit a 720p screen — measured, not guessed: the last stat row
@@ -100,7 +99,7 @@ export class CharacterPanel {
     // and `panel-wide` is the width the barrel already established for a panel
     // that needs two lists.
     this.panel = el("div", "panel panel-wide");
-    this.panel.appendChild(el("h2", undefined, "Character"));
+    this.panel.appendChild(panelHeader("Character", () => this.close()).header);
 
     // Level and the bar span both columns: it is the one line about the whole
     // character rather than about either half of it.
@@ -129,8 +128,6 @@ export class CharacterPanel {
     columns.append(gear, stats);
     this.panel.appendChild(columns);
 
-    this.hint = el("p", "panel-hint", "");
-    this.panel.appendChild(this.hint);
     root.appendChild(this.panel);
 
     // Rebuilt on anything that can move a number on this screen, so a level
@@ -253,7 +250,5 @@ export class CharacterPanel {
       row.append(glyph, text, add);
       this.list.appendChild(row);
     }
-
-    this.hint.textContent = `Press ${this.closeKeyLabel()} to close.`;
   }
 }

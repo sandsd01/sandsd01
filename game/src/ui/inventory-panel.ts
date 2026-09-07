@@ -5,6 +5,7 @@ import { SLOT_NAMES, isWearable, slotFor } from "../data/worn";
 import type { GameState } from "../state/game-state";
 import { events } from "../utils/events";
 import { el } from "./dom";
+import { panelHeader } from "./panel-chrome";
 
 export class InventoryPanel {
   private readonly panel: HTMLDivElement;
@@ -17,15 +18,13 @@ export class InventoryPanel {
     private readonly state: GameState,
     private readonly onSelectSeed: (itemId: string) => void,
     private getSelectedSeed: () => string | null,
-    private readonly closeKeyLabel: () => string = () => "Tab",
   ) {
     this.panel = el("div", "panel");
-    this.panel.appendChild(el("h2", undefined, "Inventory"));
+    this.panel.appendChild(panelHeader("Inventory", () => this.close()).header);
     this.list = el("div");
     this.panel.appendChild(this.list);
-    // Read from the live binding rather than written into the string: this
-    // line said "Press I to close" while the key on screen and in the Options
-    // list was Tab, and a rebind would have made it wrong all over again.
+    // No close key in here any more: the header carries a button, so there is
+    // nothing left to keep in step with a rebind.
     this.hint = el("p", "panel-hint", "");
     this.panel.appendChild(this.hint);
     root.appendChild(this.panel);
@@ -54,7 +53,7 @@ export class InventoryPanel {
   }
 
   private render(): void {
-    this.hint.textContent = `Click a seed to select it for planting, or eat food to heal. Press ${this.closeKeyLabel()} to close.`;
+    this.hint.textContent = "Click a seed to select it for planting, or eat food to heal.";
     const selected = this.getSelectedSeed();
     // No worn row here any more. What is on the body lives on the character
     // sheet, next to the levels and the stats it sits beside conceptually —
