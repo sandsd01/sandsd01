@@ -1,4 +1,4 @@
-import { chromium, LAUNCH, BASE_URL, lookBy } from "./harness.mjs";
+import { chromium, LAUNCH, BASE_URL, lookBy, pressDown, pressUp, pressButton } from "./harness.mjs";
 import { selectBuilding } from "./buildselect.mjs";
 
 // Mouse-driven interaction: crosshair targeting, hold-to-gather, right-click
@@ -109,7 +109,7 @@ ok("target outline is drawn around it", outline.visible && outline.size[1] > 0.5
 
 const wood0 = await page.evaluate(
   () => (window.__gameDebug.getInventory().find((s) => s.itemId === "wood") || { qty: 0 }).qty);
-await page.mouse.down();
+await pressDown(page, 0);
 // Condition-based already, but the budgets were the fixed part: 8s and 15s
 // are only a handful of frames when the renderer is managing two a second,
 // and a chop that needs several swings ran out of them. Generous now — a
@@ -118,7 +118,7 @@ const ringGrew = await waitFor(() => window.__gameDebug.getActionProgress() > 0,
 const gotWood = await waitFor(
   (w0) => (window.__gameDebug.getInventory().find((s) => s.itemId === "wood") || { qty: 0 }).qty > w0,
   wood0, 60000);
-await page.mouse.up();
+await pressUp(page, 0);
 ok("holding left click gathers", gotWood);
 ok("a progress ring fills while gathering", ringGrew);
 
@@ -154,7 +154,7 @@ const distanceToTree = await page.evaluate((t) => {
   const p = window.__gameDebug.getPlayerPosition();
   return Math.hypot(p.x - t.x, p.z - t.z);
 }, tree2);
-await page.mouse.down();
+await pressDown(page, 0);
 // Sample throughout: the assertion is that no node is ever targeted while the
 // button is held, not just at the moment it went down.
 let stayedClear = true;
@@ -162,7 +162,7 @@ for (let i = 0; i < 12; i++) {
   await page.waitForTimeout(250);
   if (await page.evaluate(() => window.__gameDebug.getTarget().kind === "node")) stayedClear = false;
 }
-await page.mouse.up();
+await pressUp(page, 0);
 const woodAfter = await page.evaluate(
   () => (window.__gameDebug.getInventory().find((s) => s.itemId === "wood") || { qty: 0 }).qty);
 ok("standing next to a tree but facing away gathers nothing",
@@ -214,8 +214,7 @@ await selectBuilding(page, waitFor, "Farm Plot", "farm_plot");
 const aimPoint = await turnAndSettleAim(0);
 // The world now seeds POI barrels of its own, so "any placed building" is no
 // longer proof this click placed one — count only the pieces under test.
-await page.mouse.down({ button: "right" });
-await page.mouse.up({ button: "right" });
+await pressButton(page, 2);
 const didPlace = await waitFor(
   () => window.__gameDebug.getPlacedBuildings().filter((b) => b.buildingId === "farm_plot").length > 0);
 const placedAt = await page.evaluate(
@@ -231,8 +230,7 @@ ok("it lands in the cell under the crosshair", cellOk,
 // And aiming elsewhere puts the next piece somewhere else — the whole point,
 // versus the old fixed distance straight ahead.
 const aim2 = await turnAndSettleAim(Math.PI / 2);
-await page.mouse.down({ button: "right" });
-await page.mouse.up({ button: "right" });
+await pressButton(page, 2);
 const placedTwo = await waitFor(
   () => window.__gameDebug.getPlacedBuildings().filter((b) => b.buildingId === "farm_plot").length > 1);
 const second = await page.evaluate(

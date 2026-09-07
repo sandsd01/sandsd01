@@ -75,3 +75,55 @@ export async function lookBy(page, dx, dy, steps = 12) {
     { dx, dy, steps },
   );
 }
+
+/**
+ * Presses and releases mouse buttons without moving the pointer.
+ *
+ * `page.mouse.down()` moves before it presses, and under pointer lock that
+ * carries a delta the game reads as a look. Measured on a right-click with the
+ * camera set to yaw 0 and the player standing still at the origin:
+ *
+ *     before mousedown   yaw 0   aim (0, -5)
+ *     at mousedown       yaw 1   aim (-2.52, -1.62)
+ *     at mouseup         yaw 2   aim (-2.73, 1.25)
+ *
+ * The feet never moved. `worldToCell(-2.52, -1.62)` is cell (-3,-2), which is
+ * exactly where the piece landed — so the placement was correct for where the
+ * camera pointed *once the click had turned it*, and the check that read the
+ * aim beforehand was comparing against an angle that no longer existed by the
+ * time the click was handled. It read for a long time as a placement bug and
+ * was the gesture moving the camera it was aiming with. The same delta turns a
+ * held left button off whatever it was pointed at, which is why gathering and
+ * chopping stopped working too.
+ *
+ * Dispatching the button events directly leaves the camera alone; with this,
+ * the same placement lands at cell (0,-5) from an aim of (0,-5). The game's own
+ * listeners still run — mousedown on the canvas, mouseup on the window, which
+ * is why the two go to different targets.
+ */
+export async function pressDown(page, button = 0) {
+  await page.evaluate((b) => {
+    document.querySelector("#game-canvas").dispatchEvent(
+      new MouseEvent("mousedown", {
+        button: b,
+        buttons: b === 2 ? 2 : 1,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  }, button);
+}
+
+export async function pressUp(page, button = 0) {
+  await page.evaluate((b) => {
+    window.dispatchEvent(
+      new MouseEvent("mouseup", { button: b, buttons: 0, bubbles: true, cancelable: true }),
+    );
+  }, button);
+}
+
+/** Press and release in one go, for a click that is not a hold. */
+export async function pressButton(page, button = 2) {
+  await pressDown(page, button);
+  await pressUp(page, button);
+}

@@ -1,4 +1,4 @@
-import { chromium, LAUNCH, BASE_URL } from "./harness.mjs";
+import { chromium, LAUNCH, BASE_URL, pressDown, pressUp } from "./harness.mjs";
 import { editSaveOffline } from "./legacysave.mjs";
 
 // The held item: does what you carry in your hand actually decide anything?
@@ -114,7 +114,7 @@ const woodBefore = await page.evaluate(
   () => (window.__gameDebug.getInventory().find((s) => s.itemId === "wood") ?? { qty: 0 }).qty);
 const swordPrompt = await page.evaluate(() => document.querySelector(".hud-prompt")?.textContent ?? "");
 
-await page.mouse.down();
+await pressDown(page, 0);
 let choppedWithSword = false;
 for (let i = 0; i < 16; i++) {
   await page.waitForTimeout(250);
@@ -122,7 +122,7 @@ for (let i = 0; i < 16; i++) {
     () => (window.__gameDebug.getInventory().find((s) => s.itemId === "wood") ?? { qty: 0 }).qty);
   if (now > woodBefore) { choppedWithSword = true; break; }
 }
-await page.mouse.up();
+await pressUp(page, 0);
 
 ok("aimed at a tree while holding the sword", aimedWithSword);
 ok("holding a sword does NOT chop, even with an axe in the bag", !choppedWithSword,
@@ -135,11 +135,11 @@ ok("the axe can be taken back in hand", await hold("axe"));
 const aimedWithAxe = await aimAtTree();
 const woodPre = await page.evaluate(
   () => (window.__gameDebug.getInventory().find((s) => s.itemId === "wood") ?? { qty: 0 }).qty);
-await page.mouse.down();
+await pressDown(page, 0);
 const choppedWithAxe = await waitFor(
   (w) => (window.__gameDebug.getInventory().find((s) => s.itemId === "wood") ?? { qty: 0 }).qty > w,
   woodPre, 60000);
-await page.mouse.up();
+await pressUp(page, 0);
 ok("aimed at a tree while holding the axe", aimedWithAxe);
 ok("holding the axe chops the very same tree", choppedWithAxe);
 
@@ -204,7 +204,7 @@ ok("an empty slot leaves the hand empty",
 await hold("axe");
 await page.waitForTimeout(600);
 const restAxis = await page.evaluate(() => window.__gameDebug.getHeldItemMesh().axis);
-await page.mouse.down();
+await pressDown(page, 0);
 let swungAxis = restAxis;
 for (let i = 0; i < 12; i++) {
   await page.waitForTimeout(60);
@@ -212,7 +212,7 @@ for (let i = 0; i < 12; i++) {
   const moved = Math.hypot(a[0] - restAxis[0], a[1] - restAxis[1], a[2] - restAxis[2]);
   if (moved > 0.15) { swungAxis = a; break; }
 }
-await page.mouse.up();
+await pressUp(page, 0);
 const swingDelta = Math.hypot(
   swungAxis[0] - restAxis[0], swungAxis[1] - restAxis[1], swungAxis[2] - restAxis[2]);
 ok("swinging actually moves the item", swingDelta > 0.15,
