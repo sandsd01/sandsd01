@@ -19,6 +19,13 @@ const errors = [];
 page.on("pageerror", (e) => errors.push(String(e)));
 page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
 
+// Budgets here are generous on purpose. Every wait below polls and returns as
+// soon as its condition holds, so a large budget costs nothing when the case
+// passes — it is spent only when something is genuinely wrong. Tight budgets
+// are how this suite came to report failures on a slow day that it had passed
+// an hour earlier with no code change in between: with no GPU, the frame rate
+// here moves by a factor of two between runs, and a budget short enough to
+// fail on the slow end will fail on the fast end sooner or later too.
 const results = [];
 const ok = (name, pass, detail = "") => {
   results.push({ name, pass });
@@ -267,7 +274,7 @@ await page.evaluate(() => {
 const sawWall = await waitFor(() => {
   const t = window.__gameDebug.getTarget();
   return t.kind === "building" || t.kind === "container";
-}, null, 12000);
+}, null, 45000);
 ok("aiming at it reports a building, not whatever is behind it", sawWall,
   JSON.stringify(await page.evaluate(() => window.__gameDebug.getTarget())));
 
