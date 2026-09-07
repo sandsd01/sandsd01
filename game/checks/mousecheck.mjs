@@ -180,36 +180,11 @@ ok("a tree beyond reach is not a target", farTarget.kind !== "node", JSON.string
 
 // --- 4. right click places at the crosshair, not a fixed distance ------
 //
-// UNRESOLVED, and measured rather than guessed at. Four hypotheses were tried
-// and three of them were wrong:
-//
-//   * a stale aim read           — no: the numbers are identical across runs
-//   * a frame not yet run        — no: getForward() is pure from the yaw
-//   * the player still sliding   — no: waiting for the position to hold still
-//                                  changed nothing at all
-//   * budgets too tight          — no: raising them changed nothing here
-//                                  (it did fix flightcheck, which is why the
-//                                  wider budgets stayed)
-//
-// What is known: getAimPoint is feet + forward * reach, anchorCellFor is a
-// plain worldToCell of that, and tryPlace neither snaps nor searches. The aim
-// reads (0,-3) with the camera facing -z from the origin, which is correct,
-// and the piece lands at cell (-3,-2). Working backwards, that cell needs a
-// forward of about (-0.83,-0.55), i.e. a yaw near 0.99 rad rather than the 0
-// that was set and read back. A standalone probe saw the same cell (-3,-2)
-// from a *different* aim of (0,-5), so the landing spot does not follow the
-// aim being read at all.
-//
-// The next step is to read the camera yaw immediately after the click rather
-// than before it. Do that before touching this again.
-
-await page.evaluate(() => {
-  window.__gameDebug.grantItems({ wood: 40, stone: 40, plank: 20, clay: 20 });
-  window.__gameDebug.teleportPlayer(0, 0);
-});
-await page.waitForTimeout(800);
-await selectBuilding(page, waitFor, "Farm Plot", "farm_plot");
-
+// These two were the last of the five red suites to give up their cause, and
+// it was not a placement bug at all: the click gesture was turning the camera
+// it aimed with. See pressButton in harness.mjs for the measurements. Aim is
+// read before the click and the piece must land there, which is only a fair
+// assertion now that pressing a button no longer moves the mouse.
 // Face a known direction so the expected cell is unambiguous.
 const aimPoint = await turnAndSettleAim(0);
 // The world now seeds POI barrels of its own, so "any placed building" is no
