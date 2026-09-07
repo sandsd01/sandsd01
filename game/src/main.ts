@@ -1298,6 +1298,12 @@ const loop = new GameLoop((dt) => {
     enemyManager.getEnemies(),
     (id) => buildingSystem.getMesh(id),
     onSurface ? landmarks : [],
+    // Only the surface's own ways down. Inside a region the way back is the
+    // one portal standing behind the player, and the overworld's mouths are
+    // somewhere else entirely.
+    onSurface
+      ? portalSites.map((site) => ({ x: site.portal.object.position.x, z: site.portal.object.position.z }))
+      : [],
     regions.active.mapGround,
   );
 
@@ -1434,6 +1440,9 @@ declare global {
       getCharmReach: () => number;
       isFlying: () => boolean;
       getWingsVisible: () => boolean;
+      getMinimapPins: () => Record<string, number>;
+      getMinimapGeometry: () => { size: number; range: number; enemyRange: number };
+      getMinimapCoords: () => string;
       isChatOpen: () => boolean;
       openChat: (prefill?: string) => void;
       closeChat: () => void;
@@ -1876,6 +1885,9 @@ window.__gameDebug = {
   // Read off the mesh rather than off the slot, so "the wings are on the
   // character" is a different question from "the wings are in the save".
   getWingsVisible: () => player.areWingsVisible(),
+  getMinimapPins: () => minimap.getDrawnCounts(),
+  getMinimapGeometry: () => minimap.getGeometry(),
+  getMinimapCoords: () => document.querySelector(".hud-minimap-coords")?.textContent ?? "",
   isChatOpen: () => chat.isOpen(),
   openChat: (prefill = "") => chat.openWith(prefill),
   closeChat: () => chat.close(),

@@ -1,4 +1,5 @@
-import { chromium, LAUNCH, BASE_URL } from "./harness.mjs";
+import { chromium, LAUNCH, BASE_URL, pressButton } from "./harness.mjs";
+import { selectBuilding } from "./buildselect.mjs";
 
 // The chat box, and the /godmode command it exists to carry.
 //
@@ -117,6 +118,14 @@ await page.waitForTimeout(600);
 
   // And the keystrokes still reach the field — including the space, which the
   // game's own keydown handler preventDefaults because it is bound to jump.
+  //
+  // Cleared first: holding W above put a "w" in the field, which is correct —
+  // the field has focus and that is what a held letter key does — and left the
+  // value reading "wwasd wasd".
+  await page.evaluate(() => {
+    const field = document.querySelector(".chat-field");
+    if (field) field.value = "";
+  });
   await page.keyboard.type("wasd wasd", { delay: 30 });
   await page.waitForTimeout(600);
   const typed = await probe(() => document.querySelector(".chat-field")?.value ?? "");
@@ -258,33 +267,53 @@ await page.waitForTimeout(600);
     ceilingOn.__threw ?? JSON.stringify(ceilingOn),
   );
 
-  // Free building, both ways round: empty-handed with godmode on must place,
-  // and empty-handed with it off must not.
-  const freeBuild = await probe(() => {
+  // Free building, both ways round, through the real path.
+  //
+  // Not through `placeBuildingAt`: that debug hook calls `placeAt`, which
+  // never checks or charges materials at all, so it cannot tell godmode from
+  // a normal player and a case built on it proves nothing about cost. The
+  // right-click below is the path a player actually uses, and `tryPlace` is
+  // where the bill is waived.
+  const wallCount = () =>
+    page.evaluate(() =>
+      window.__gameDebug.getPlacedBuildings().filter((b) => b.buildingId === "wall").length);
+
+  await probe(() => {
     const d = window.__gameDebug;
-    d.teleportPlayer(0, 40);
-    const before = d.getPlacedBuildings().length;
-    const placed = d.placeBuildingAt("wall", 0, 40, 0);
-    return { placed, before, after: d.getPlacedBuildings().length };
+    if (!d.isGodMode()) d.sendChat("/godmode");
+    d.teleportPlayer(0, 0);
+    d.setCameraYaw(0);
   });
+  await page.waitForTimeout(1200);
+  await selectBuilding(page, (fn, arg) => page.evaluate(fn, arg), "Wall", "wall");
+  const beforeFree = await wallCount();
+  await pressButton(page, 2);
+  await page.waitForTimeout(2500);
+  const afterFree = await wallCount();
+  const plank = await probe(() =>
+    (window.__gameDebug.getInventory().find((s) => s.itemId === "plank") ?? { qty: 0 }).qty);
   ok(
-    "godmode builds with an empty inventory",
-    !freeBuild.__threw && freeBuild.placed && freeBuild.after === freeBuild.before + 1,
-    freeBuild.__threw ?? JSON.stringify(freeBuild),
+    "godmode builds with no materials at all",
+    afterFree === beforeFree + 1 && plank === 0,
+    `walls ${beforeFree} -> ${afterFree}, planks held ${plank}`,
   );
 
-  const paidBuild = await probe(() => {
+  await probe(() => {
     const d = window.__gameDebug;
-    d.sendChat("/godmode");
-    const before = d.getPlacedBuildings().length;
-    const placed = d.placeBuildingAt("wall", 2, 40, 0);
-    return { on: d.isGodMode(), placed, before, after: d.getPlacedBuildings().length };
+    if (d.isGodMode()) d.sendChat("/godmode");
   });
+  await page.waitForTimeout(800);
+  await selectBuilding(page, (fn, arg) => page.evaluate(fn, arg), "Wall", "wall");
+  await probe(() => window.__gameDebug.setCameraYaw(Math.PI / 2));
+  await page.waitForTimeout(1200);
+  const beforePaid = await wallCount();
+  await pressButton(page, 2);
+  await page.waitForTimeout(2500);
+  const afterPaid = await wallCount();
   ok(
     "and with godmode off the same empty inventory cannot",
-    !paidBuild.__threw && paidBuild.on === false && !paidBuild.placed &&
-      paidBuild.after === paidBuild.before,
-    paidBuild.__threw ?? JSON.stringify(paidBuild),
+    afterPaid === beforePaid,
+    `walls ${beforePaid} -> ${afterPaid} with 0 planks`,
   );
 }
 

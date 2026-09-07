@@ -341,7 +341,10 @@ body {
 
 .hud-resources {
   position: absolute;
-  top: 16px;
+  /* Below the minimap, which took the top-right corner. 132px of map, 6px of
+     padding each side, the coordinate line and the gap — measured rather than
+     guessed, and re-measured in a screenshot after moving it. */
+  top: 190px;
   right: 16px;
   display: flex;
   /* Wraps rather than growing left into the clock. The row gained two chips
@@ -1294,12 +1297,15 @@ body {
    Bottom-right: the only free corner, and diagonally opposite the keybind card
    so the two never crowd each other. */
 
+/* Top-right and square. A circle throws away its corners, and the round mask
+   also meant a marker near the edge was clipped in half by the rim rather than
+   sitting on the map. Square keeps the whole of the ground it draws. */
 .hud-minimap {
   position: absolute;
   right: 16px;
-  bottom: 16px;
+  top: 16px;
   padding: 6px;
-  border-radius: 50%;
+  border-radius: var(--radius);
   background: var(--slate);
   border: 1px solid var(--edge);
   box-shadow: var(--shadow);
@@ -1309,7 +1315,20 @@ body {
 
 .hud-minimap canvas {
   display: block;
-  border-radius: 50%;
+  border-radius: 4px;
+}
+
+/* Where you are, tucked under the map on the same plate. Tabular figures so
+   the numbers do not jitter sideways as they count. */
+.hud-minimap-coords {
+  margin-top: 5px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  line-height: 1.3;
+  text-align: center;
+  letter-spacing: 0.06em;
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
 }
 
 /* --- Options: controls list --- */
